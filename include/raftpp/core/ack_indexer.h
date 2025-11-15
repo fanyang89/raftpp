@@ -1,0 +1,31 @@
+#pragma once
+
+#include <optional>
+
+#include "primitives.h"
+
+namespace raftpp {
+
+enum class VoteResult : int {
+    Pending,
+    Lost,
+    Won,
+};
+
+struct Index {
+    uint64_t index;
+    uint64_t group_id;
+};
+
+class AckedIndexer {
+  public:
+    virtual ~AckedIndexer() = default;
+    virtual std::optional<Index> AckedIndex(uint64_t voter) const = 0;
+};
+
+class AckIndexer final : public AckedIndexer, Map<uint64_t, Index> {
+  public:
+    std::optional<Index> AckedIndex(uint64_t voter) const override;
+};
+
+}  // namespace raftpp

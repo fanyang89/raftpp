@@ -2,12 +2,38 @@
   "version": 3,
   "configurePresets": [
     {
-      "name": "debug",
+      "name": "dev",
       "binaryDir": "${sourceDir}/build",
       "generator": "Ninja",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "CPM_SOURCE_CACHE": "${sourceDir}/.cache/CPM"
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++",
+        "CMAKE_CXX_SCAN_FOR_MODULES": "OFF",
+        "RAFTPP_SANITIZE": "address"
+      }
+    },
+    {
+      "name": "clang",
+      "binaryDir": "${sourceDir}/build-clang",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++",
+        "CMAKE_CXX_SCAN_FOR_MODULES": "OFF"
+      }
+    },
+    {
+      "name": "coverage",
+      "binaryDir": "${sourceDir}/build-coverage",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++",
+        "CMAKE_CXX_SCAN_FOR_MODULES": "OFF",
+        "RAFTPP_COVERAGE": "ON"
       }
     }
   ]
