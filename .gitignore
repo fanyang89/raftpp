@@ -1,0 +1,6 @@
+/.cache
+/build
+/cmake-build-*
+/.idea
+/.vscode
+/.env

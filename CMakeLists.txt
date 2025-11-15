@@ -1,0 +1,45 @@
+cmake_minimum_required(VERSION 3.30)
+
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+project(raftpp VERSION 0.1.0 DESCRIPTION "C++ RAFT" LANGUAGES CXX)
+
+option(RAFTPP_BUILD_STATIC "Build static library" ON)
+option(RAFTPP_BUILD_TESTING "Build unit tests" ON)
+option(RAFTPP_WITH_CCACHE "Build with ccache" ON)
+option(RAFTPP_WITH_LLD "Build with lld" OFF)
+option(RAFTPP_SANITIZE "Build with address sanitizer" OFF)
+option(RAFTPP_ENABLE_UBSAN "Build with undefined sanitizer when address sanitizer is enabled" ON)
+
+if (RAFTPP_WITH_LLD)
+  find_program(LLD_FOUND lld)
+  if (LLD_FOUND)
+    add_link_options(-fuse-ld=lld)
+  else ()
+    message(WARNING "lld not found but RAFTPP_WITH_LLD is enabled")
+  endif ()
+endif ()
+
+if (RAFTPP_BUILD_STATIC)
+  set (BUILD_SHARED_LIBS OFF CACHE BOOL "Build shared library")
+endif ()
+
+if (RAFTPP_SANITIZE)
+  add_compile_options(-fsanitize=${RAFTPP_SANITIZE})
+  add_link_options(-fsanitize=${RAFTPP_SANITIZE})
+  if (RAFTPP_SANITIZE STREQUAL "address" AND RAFTPP_ENABLE_UBSAN)
+    add_compile_options(-fsanitize=undefined)
+    add_link_options(-fsanitize=undefined)
+  endif ()
+endif ()
+
+include(cmake/CPM.cmake)
+add_subdirectory(third_party)
+add_subdirectory(lib)
+add_subdirectory(proto)
+
+if (RAFTPP_BUILD_TESTING)
+  add_subdirectory(tests)
+endif ()
