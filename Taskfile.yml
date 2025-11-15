@@ -1,0 +1,23 @@
+# https://taskfile.dev
+
+version: '3'
+
+dotenv:
+  - .env
+
+vars:
+  PROTOBUF_DIR: _deps/grpc-build/third_party/protobuf
+
+tasks:
+  proto:
+    cmds:
+      - platform: [windows]
+        cmd: >
+          $BUILD_DIR/{{.PROTOBUF_DIR}}/protoc.exe
+          -I proto
+          --cpp_out=proto/generated/raftpp
+          raftpp.proto
+  vs:
+    platform: [windows]
+    cmds:
+      - cmake -S . -B vs -G "Visual Studio 17 2022"
