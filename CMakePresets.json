@@ -2,12 +2,21 @@
   "version": 3,
   "configurePresets": [
     {
-      "name": "debug",
+      "name": "dev",
       "binaryDir": "${sourceDir}/build",
       "generator": "Ninja",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "CPM_SOURCE_CACHE": "${sourceDir}/.cache/CPM"
+        "CMAKE_POLICY_VERSION_MINIMUM": "3.5"
+      }
+    },
+    {
+      "name": "msbuild",
+      "binaryDir": "${sourceDir}/build-msbuild",
+      "generator": "Visual Studio 17 2022",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_POLICY_VERSION_MINIMUM": "3.5"
       }
     }
   ]

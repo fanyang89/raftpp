@@ -1,0 +1,12 @@
+#include "raftpp/quorum.h"
+
+namespace raftpp {
+
+std::optional<Index> AckIndexer::AckedIndex(const uint64_t voter) {
+    if (const auto it = find(voter); it != end()) {
+        return it->second;
+    }
+    return std::nullopt;
+}
+
+}

@@ -4,7 +4,7 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-project(raftpp VERSION 0.1.0 DESCRIPTION "C++ RAFT" LANGUAGES CXX)
+project(raftpp VERSION 0.1.0 DESCRIPTION "C++ RAFT" LANGUAGES C CXX)
 
 option(RAFTPP_BUILD_STATIC "Build static library" ON)
 option(RAFTPP_BUILD_TESTING "Build unit tests" ON)
@@ -33,6 +33,12 @@ if (RAFTPP_SANITIZE)
     add_compile_options(-fsanitize=undefined)
     add_link_options(-fsanitize=undefined)
   endif ()
+endif ()
+
+if (MSVC)
+  add_compile_options(/Zc:preprocessor)
+  add_compile_options(/utf-8)
+  add_compile_options(/MP)
 endif ()
 
 include(cmake/CPM.cmake)
