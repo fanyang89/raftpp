@@ -16,3 +16,8 @@ RaftError::RaftError(const InvalidConfigError& ec) :
     type_(ErrorCodeType::InvalidConfig), ec_({.config_ec = ec}) {}
 
 }
+
+fmt::context::iterator fmt::formatter<raftpp::InvalidConfigError>::format(
+    const raftpp::InvalidConfigError& value, const format_context& ctx) {
+    return fmt::format_to(ctx.out(), "{}", value.message);
+}

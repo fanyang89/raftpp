@@ -38,6 +38,8 @@ struct UncommittedState {
 
 class RaftCore {
 public:
+    RaftCore(const Config& config, std::unique_ptr<Storage> store);
+
     uint64_t term() const;
     RaftLog& raft_log();
 
@@ -85,15 +87,15 @@ private:
 
 class Raft : public RaftCore {
 public:
-    Raft();
+    Raft(const Config& config, std::unique_ptr<Storage> store);
 
     ProgressTracker& progress_tracker();
 
 private:
     ProgressTracker progress_tracker_;
     std::vector<Message> messages_;
+    Config config_;
 };
 
-Result<Raft> NewRaft(Config config, std::unique_ptr<Storage> store);
 
 }

@@ -6,17 +6,23 @@
       "binaryDir": "${sourceDir}/build",
       "generator": "Ninja",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_POLICY_VERSION_MINIMUM": "3.5"
+        "CMAKE_BUILD_TYPE": "Debug"
       }
     },
     {
-      "name": "msbuild",
-      "binaryDir": "${sourceDir}/build-msbuild",
+      "name": "msvc",
+      "binaryDir": "${sourceDir}/build-msvc",
       "generator": "Visual Studio 17 2022",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_POLICY_VERSION_MINIMUM": "3.5"
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "release",
+      "binaryDir": "${sourceDir}/build",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
       }
     }
   ]

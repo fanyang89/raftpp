@@ -13,6 +13,7 @@ add_library(raftpp
   progress.cc
   readonly.cc
   config.cc
+  raw_node.cc
 )
 
 target_include_directories(raftpp PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../include)

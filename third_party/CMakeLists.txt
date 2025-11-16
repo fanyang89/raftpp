@@ -1,7 +1,6 @@
 set(FETCHCONTENT_QUIET OFF)
 
 CPMAddPackage("https://github.com/Neargye/magic_enum.git@0.9.7")
-CPMAddPackage("https://github.com/bombela/backward-cpp.git@1.6")
 CPMAddPackage("https://github.com/gabime/spdlog.git@1.16.0")
 CPMAddPackage("https://github.com/jeremy-rifkin/libassert.git@2.2.1")
 CPMAddPackage(URI "https://github.com/nlohmann/json.git@3.12.0" OPTIONS "JSON_Install off")
@@ -18,7 +17,8 @@ CPMAddPackage(URI "https://github.com/boostorg/type_traits.git" GIT_TAG "boost-1
 CPMAddPackage(URI "https://github.com/boostorg/preprocessor.git" GIT_TAG "boost-1.89.0")
 
 CPMAddPackage(
-  URI "https://github.com/grpc/grpc.git@1.76.0"
+  NAME grpc
+  URL "https://media.githubusercontent.com/media/fanyang89/grpc-archive/refs/heads/main/grpc-v1.76.0-1-g719498daab.tar.gz"
   OPTIONS
   "protobuf_INSTALL OFF"
   "utf8_range_ENABLE_INSTALL OFF"

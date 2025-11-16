@@ -18,7 +18,7 @@ size_t Config::MaxElectionTick() const {
     return max_election_tick;
 }
 
-Result<void> Config::Validate() {
+Result<void> Config::Validate() const {
     if (id == INVALID_ID) {
         return InvalidConfigError("invalid node id").ToError();
     }

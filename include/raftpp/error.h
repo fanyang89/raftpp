@@ -3,6 +3,7 @@
 #include <expected>
 
 #include <libassert/assert.hpp>
+#include <spdlog/fmt/fmt.h>
 
 namespace raftpp {
 
@@ -95,3 +96,8 @@ constexpr T UnwrapOr(std::expected<T, E> ex, T value) {
 }
 
 }
+
+template <>
+struct fmt::formatter<raftpp::InvalidConfigError> {
+    format_context::iterator format(const raftpp::InvalidConfigError& value, const format_context& ctx);
+};
