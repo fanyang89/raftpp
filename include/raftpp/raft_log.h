@@ -1,8 +1,8 @@
 #pragma once
 
-#include "raftpp/config.h"
-#include "raftpp/log_unstable.h"
+#include "raftpp/raft_config.h"
 #include "raftpp/storage.h"
+#include "raftpp/unstable_log.h"
 
 namespace raftpp {
 

@@ -4,7 +4,7 @@
 #include <span>
 
 #include "progress.h"
-#include "raftpp/config.h"
+#include "raftpp/raft_config.h"
 #include "raftpp/raft_log.h"
 #include "raftpp/raftpp.pb.h"
 #include "raftpp/storage.h"

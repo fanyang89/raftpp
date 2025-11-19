@@ -1,8 +1,7 @@
-#include "raftpp/log_unstable.h"
-
 #include <libassert/assert.hpp>
 #include <spdlog/spdlog.h>
 
+#include "raftpp/unstable_log.h"
 #include "raftpp/util.h"
 
 namespace raftpp {

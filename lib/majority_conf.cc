@@ -1,9 +1,9 @@
-#include "raftpp/majority.h"
-
 #include <algorithm>
 
 #include <libassert/assert.hpp>
 #include <nlohmann/json.hpp>
+
+#include "raftpp/majority_conf.h"
 
 namespace raftpp {
 

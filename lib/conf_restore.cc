@@ -51,7 +51,7 @@ Result<void> Restore(ProgressTracker& tracker, uint64_t next_idx, const ConfStat
 
     if (outgoing.empty()) {
         for (const ConfChangeSingle& i : incoming) {
-            if (const auto r = Changer(tracker).Simple(i)) {
+            if (const auto r = ConfChanger(tracker).Simple(i)) {
                 tracker.ApplyConf(r->first, r->second, next_idx);
             } else {
                 return r.error();
@@ -59,7 +59,7 @@ Result<void> Restore(ProgressTracker& tracker, uint64_t next_idx, const ConfStat
         }
     } else {
         for (const ConfChangeSingle& cc : outgoing) {
-            if (const auto r = Changer(tracker).Simple(cc)) {
+            if (const auto r = ConfChanger(tracker).Simple(cc)) {
                 const TrackerConfiguration& cfg = r->first;
                 const MapChange& changes = r->second;
                 tracker.ApplyConf(cfg, changes, next_idx);
@@ -68,7 +68,7 @@ Result<void> Restore(ProgressTracker& tracker, uint64_t next_idx, const ConfStat
             }
         }
 
-        if (const auto r = Changer(tracker).EnterJoint(cs.auto_leave(), incoming)) {
+        if (const auto r = ConfChanger(tracker).EnterJoint(cs.auto_leave(), incoming)) {
             const TrackerConfiguration& cfg = r->first;
             const MapChange& changes = r->second;
             tracker.ApplyConf(cfg, changes, next_idx);

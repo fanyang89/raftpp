@@ -1,8 +1,8 @@
 #pragma once
 
 #include "raftpp/error.h"
+#include "raftpp/progress_tracker.h"
 #include "raftpp/raftpp.pb.h"
-#include "raftpp/tracker.h"
 #include "raftpp/tracker_conf.h"
 
 namespace raftpp {
@@ -22,9 +22,9 @@ class IncrChangeMap {
     ProgressMap& base_;
 };
 
-class Changer {
+class ConfChanger {
   public:
-    explicit Changer(ProgressTracker& tracker);
+    explicit ConfChanger(ProgressTracker& tracker);
 
     Result<std::pair<TrackerConfiguration, MapChange>> EnterJoint(bool auto_leave, std::span<const ConfChangeSingle>);
     Result<std::pair<TrackerConfiguration, MapChange>> Simple(const ConfChangeSingle& ccs) const;

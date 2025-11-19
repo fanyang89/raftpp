@@ -1,4 +1,4 @@
-#include "raftpp/quorum.h"
+#include "raftpp/ack_indexer.h"
 
 namespace raftpp {
 

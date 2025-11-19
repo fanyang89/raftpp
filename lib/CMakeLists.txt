@@ -1,9 +1,8 @@
 add_library(raftpp
-  config.cc
+  raft_config.cc
   error.cc
   joint.cc
   log_unstable.cc
-  logging.cc
   majority.cc
   progress.cc
   quorum.cc

@@ -2,7 +2,7 @@
 
 #include <spdlog/fmt/fmt.h>
 
-#include "raftpp/majority.h"
+#include "raftpp/majority_conf.h"
 
 namespace raftpp {
 

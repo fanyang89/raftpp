@@ -1,4 +1,4 @@
-#include "raftpp/joint.h"
+#include "raftpp/joint_conf.h"
 
 namespace raftpp {
 

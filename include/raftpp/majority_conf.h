@@ -5,8 +5,8 @@
 #include <nlohmann/json.hpp>
 #include <spdlog/fmt/fmt.h>
 
+#include "raftpp/ack_indexer.h"
 #include "raftpp/primitives.h"
-#include "raftpp/quorum.h"
 
 namespace raftpp {
 

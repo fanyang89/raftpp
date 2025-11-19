@@ -1,6 +1,6 @@
 #pragma once
 
-#include "raftpp/joint.h"
+#include "raftpp/joint_conf.h"
 #include "raftpp/primitives.h"
 #include "raftpp/raftpp.pb.h"
 

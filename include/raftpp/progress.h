@@ -5,8 +5,8 @@
 #include <boost/circular_buffer.hpp>
 #include <magic_enum/magic_enum.hpp>
 
+#include "raftpp/ack_indexer.h"
 #include "raftpp/primitives.h"
-#include "raftpp/quorum.h"
 
 namespace raftpp {
 

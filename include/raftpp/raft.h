@@ -1,10 +1,10 @@
 #pragma once
 
-#include "raftpp/config.h"
+#include "raftpp/progress_tracker.h"
+#include "raftpp/raft_config.h"
 #include "raftpp/raft_core.h"
 #include "raftpp/raftpp.pb.h"
-#include "raftpp/readonly.h"
-#include "raftpp/tracker.h"
+#include "raftpp/read_only.h"
 
 namespace raftpp {
 

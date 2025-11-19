@@ -1,11 +1,10 @@
-#include "raftpp/log_unstable.h"
-
 #include <vector>
 
 #include <gtest/gtest.h>
 #include <spdlog/fmt/fmt.h>
 
 #include "raftpp/raftpp.pb.h"
+#include "raftpp/unstable_log.h"
 #include "raftpp/util.h"
 
 using namespace raftpp;

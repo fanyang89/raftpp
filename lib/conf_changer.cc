@@ -80,9 +80,9 @@ bool Joint(const TrackerConfiguration& cfg) {
     return !cfg.voters.outgoing().empty();
 }
 
-Changer::Changer(ProgressTracker& tracker) : tracker_(tracker) {}
+ConfChanger::ConfChanger(ProgressTracker& tracker) : tracker_(tracker) {}
 
-Result<std::pair<TrackerConfiguration, MapChange>> Changer::EnterJoint(
+Result<std::pair<TrackerConfiguration, MapChange>> ConfChanger::EnterJoint(
     const bool auto_leave, const std::span<const ConfChangeSingle> ccs
 ) {
     if (Joint(tracker_.conf())) {
@@ -111,7 +111,7 @@ Result<std::pair<TrackerConfiguration, MapChange>> Changer::EnterJoint(
     }
 }
 
-Result<void> Changer::Apply(
+Result<void> ConfChanger::Apply(
     TrackerConfiguration& cfg, IncrChangeMap& prs, const std::span<const ConfChangeSingle> ccs
 ) {
     for (const auto& cc : ccs) {
@@ -139,13 +139,13 @@ Result<void> Changer::Apply(
     return {};
 }
 
-Result<std::pair<TrackerConfiguration, MapChange>> Changer::Simple(const ConfChangeSingle& ccs) const {
+Result<std::pair<TrackerConfiguration, MapChange>> ConfChanger::Simple(const ConfChangeSingle& ccs) const {
     std::vector<ConfChangeSingle> v;
     v.emplace_back(ccs);
     return Simple(std::span{v.begin(), v.end()});
 }
 
-Result<std::pair<TrackerConfiguration, MapChange>> Changer::Simple(const std::span<const ConfChangeSingle> ccs) const {
+Result<std::pair<TrackerConfiguration, MapChange>> ConfChanger::Simple(const std::span<const ConfChangeSingle> ccs) const {
     if (Joint(tracker_.conf())) {
         return RaftError(ConfChangeError("can't apply simple config change in joint config"));
     }
@@ -175,7 +175,7 @@ Result<std::pair<TrackerConfiguration, MapChange>> Changer::Simple(const std::sp
     }
 }
 
-Result<std::pair<TrackerConfiguration, IncrChangeMap>> Changer::CheckAndCopy() const {
+Result<std::pair<TrackerConfiguration, IncrChangeMap>> ConfChanger::CheckAndCopy() const {
     IncrChangeMap prs(tracker_.progress_map());
     if (auto r = CheckInvariants(tracker_.conf(), prs); !r) {
         return r.error();
@@ -183,7 +183,7 @@ Result<std::pair<TrackerConfiguration, IncrChangeMap>> Changer::CheckAndCopy() c
     return std::make_pair(TrackerConfiguration(tracker_.conf()), prs);
 }
 
-void Changer::InitProgress(TrackerConfiguration& cfg, IncrChangeMap& prs, uint64_t id, const bool is_learner) {
+void ConfChanger::InitProgress(TrackerConfiguration& cfg, IncrChangeMap& prs, uint64_t id, const bool is_learner) {
     if (!is_learner) {
         cfg.voters.incoming().insert(id);
     } else {
@@ -192,7 +192,7 @@ void Changer::InitProgress(TrackerConfiguration& cfg, IncrChangeMap& prs, uint64
     prs.changes().emplace_back(id, MapChangeType::Add);
 }
 
-void Changer::MakeVoter(TrackerConfiguration& cfg, IncrChangeMap& prs, uint64_t id) {
+void ConfChanger::MakeVoter(TrackerConfiguration& cfg, IncrChangeMap& prs, uint64_t id) {
     if (!prs.Contains(id)) {
         InitProgress(cfg, prs, id, false);
         return;
@@ -203,7 +203,7 @@ void Changer::MakeVoter(TrackerConfiguration& cfg, IncrChangeMap& prs, uint64_t 
     cfg.learners_next.erase(id);
 }
 
-void Changer::MakeLearner(TrackerConfiguration& cfg, IncrChangeMap& prs, const uint64_t id) {
+void ConfChanger::MakeLearner(TrackerConfiguration& cfg, IncrChangeMap& prs, const uint64_t id) {
     if (!prs.Contains(id)) {
         InitProgress(cfg, prs, id, true);
         return;
@@ -224,7 +224,7 @@ void Changer::MakeLearner(TrackerConfiguration& cfg, IncrChangeMap& prs, const u
     }
 }
 
-void Changer::Remove(TrackerConfiguration& cfg, IncrChangeMap& prs, uint64_t id) {
+void ConfChanger::Remove(TrackerConfiguration& cfg, IncrChangeMap& prs, uint64_t id) {
     if (!prs.Contains(id)) {
         return;
     }

@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 #include <spdlog/spdlog.h>
 
-#include "raftpp/majority.h"
+#include "raftpp/majority_conf.h"
 #include "raftpp/primitives.h"
 
 using namespace raftpp;

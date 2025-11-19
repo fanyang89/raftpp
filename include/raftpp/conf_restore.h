@@ -1,8 +1,8 @@
 #pragma once
 
 #include "raftpp/error.h"
+#include "raftpp/progress_tracker.h"
 #include "raftpp/raftpp.pb.h"
-#include "raftpp/tracker.h"
 
 namespace raftpp {
 
