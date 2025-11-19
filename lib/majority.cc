@@ -100,7 +100,7 @@ void from_json(const nlohmann::json& j, MajorityConfig& p) {
 }  // namespace raftpp
 
 fmt::context::iterator fmt::formatter<raftpp::MajorityConfig>::format(
-    const raftpp::MajorityConfig& value, format_context& ctx
+    const raftpp::MajorityConfig& value, const format_context& ctx
 ) {
     const nlohmann::json j = value;
     return fmt::format_to(ctx.out(), "{}", j.dump());
