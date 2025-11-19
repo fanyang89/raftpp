@@ -7,5 +7,4 @@ add_executable(raftpp-tests
 
 target_link_libraries(raftpp-tests PRIVATE raftpp)
 target_link_libraries(raftpp-tests PRIVATE raftpp-proto)
-target_link_libraries(raftpp-tests PRIVATE doctest::doctest)
-target_link_libraries(raftpp-tests PRIVATE nlohmann_json::nlohmann_json)
+target_link_libraries(raftpp-tests PRIVATE gtest gmock)

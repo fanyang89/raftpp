@@ -2,14 +2,13 @@
 
 #include <vector>
 
-#include <doctest/doctest.h>
+#include <gtest/gtest.h>
+#include <spdlog/fmt/fmt.h>
 
 #include "raftpp/raftpp.pb.h"
 #include "raftpp/util.h"
 
 using namespace raftpp;
-
-TEST_SUITE_BEGIN("log unstable");
 
 std::optional<Entry> NewEntry(const uint64_t index, const uint64_t term) {
     Entry ent;
@@ -25,43 +24,50 @@ Snapshot NewSnapshot(const uint64_t index, const uint64_t term) {
     return snap;
 }
 
-TEST_CASE("Maybe first index") {
-    std::tuple<std::optional<Entry>, uint64_t, std::optional<Snapshot>, bool, uint64_t> test;
-    // no snapshot
-    SUBCASE("") {
-        test = {NewEntry(5, 1), 5, {}, false, 0};
-    }
-    SUBCASE("") {
-        test = {{}, 0, {}, false, 0};
-    }
-    // has snapshot
-    SUBCASE("") {
-        test = {NewEntry(5, 1), 5, NewSnapshot(4, 1), true, 5};
-    }
-    SUBCASE("") {
-        test = {{}, 5, NewSnapshot(4, 1), true, 5};
-    }
-
-    std::optional<Entry> e;
+struct LogUnstableTestParams {
+    std::optional<Entry> ent;
     uint64_t offset;
     std::optional<Snapshot> snapshot;
-    bool wOk;
-    uint64_t wIndex;
-    std::tie(e, offset, snapshot, wOk, wIndex) = test;
+    bool w_ok;
+    uint64_t w_index;
+
+    friend std::ostream& operator<<(std::ostream& os, const LogUnstableTestParams& param) {
+        return os << (param.snapshot.has_value() ? "has entry" : "don't have entry");
+    }
+};
+
+class LogUnstableTest : public testing::TestWithParam<LogUnstableTestParams> {};
+
+TEST_P(LogUnstableTest, MaybeFirstIndex) {
+    const auto& [ent, offset, snapshot, w_ok, w_index] = GetParam();
 
     size_t entries_size = 0;
     std::vector<Entry> entries;
-    if (e) {
-        entries.emplace_back(*e);
-        entries_size += EntryApproximateSize(*e);
+    if (ent) {
+        entries.emplace_back(*ent);
+        entries_size += EntryApproximateSize(*ent);
     }
 
-    Unstable u(entries, entries_size, offset, snapshot);
-    if (auto index = u.MaybeFirstIndex(); index) {
-        CHECK_EQ(wIndex, index);
+    const Unstable u(entries, entries_size, offset, snapshot);
+    if (const auto index = u.MaybeFirstIndex(); index) {
+        EXPECT_EQ(w_index, index);
     } else {
-        CHECK(!wOk);
+        EXPECT_FALSE(w_ok);
     }
 }
 
-TEST_SUITE_END();
+INSTANTIATE_TEST_SUITE_P(
+    NoSnapshot, LogUnstableTest,
+    ::testing::ValuesIn<LogUnstableTestParams>({
+        {NewEntry(5, 1), 5, {}, false, 0},
+        {{}, 0, {}, false, 0},
+    })
+);
+
+INSTANTIATE_TEST_SUITE_P(
+    HasSnapshot, LogUnstableTest,
+    ::testing::ValuesIn<LogUnstableTestParams>({
+        {NewEntry(5, 1), 5, NewSnapshot(4, 1), true, 5},
+        {{}, 5, NewSnapshot(4, 1), true, 5},
+    })
+);

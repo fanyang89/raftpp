@@ -25,7 +25,7 @@ CPMAddPackage(
 )
 
 if (RAFTPP_BUILD_TESTING)
-  CPMAddPackage("https://github.com/doctest/doctest.git@2.4.12")
+  CPMAddPackage(URL "https://github.com/google/googletest/releases/download/v1.17.0/googletest-1.17.0.tar.gz")
 endif ()
 
 add_library(sqlite3 sqlite3/sqlite3.c)

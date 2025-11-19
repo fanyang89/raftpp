@@ -1,15 +1,6 @@
-#define DOCTEST_CONFIG_IMPLEMENT
-#include "doctest/doctest.h"
-#include "raftpp/logging.h"
+#include <gtest/gtest.h>
 
-int main(const int argc, char** argv) {
-    raftpp::RegisterLogSink();
-
-    doctest::Context context;
-    context.applyCommandLine(argc, argv);
-    const int rc = context.run();
-    if (context.shouldExit()) {
-        return rc;
-    }
-    return rc;
+int main(int argc, char** argv) {
+    testing::InitGoogleTest(&argc, argv);
+    return RUN_ALL_TESTS();
 }
