@@ -28,9 +28,9 @@ TEST(JSONTest, Map) {
 
 TEST(JSONTest, MajorityConfig) {
     MajorityConfig c;
-    c.mutable_voters().emplace(1);
-    c.mutable_voters().emplace(2);
-    c.mutable_voters().emplace(3);
+    c.emplace(1);
+    c.emplace(2);
+    c.emplace(3);
     const nlohmann::json j = c;
     const Set<uint64_t> s = j["voters"];
     Set<uint64_t> s2{1, 2, 3};

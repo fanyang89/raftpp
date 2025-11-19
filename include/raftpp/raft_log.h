@@ -1,14 +1,14 @@
 #pragma once
 
-#include "log_unstable.h"
 #include "raftpp/config.h"
+#include "raftpp/log_unstable.h"
 #include "raftpp/storage.h"
 
 namespace raftpp {
 
 class RaftLog {
   public:
-    RaftLog(std::unique_ptr<Storage> store, const Config& cfg);
+    RaftLog(const Config& config, std::unique_ptr<Storage> store);
 
     uint64_t LastTerm() const;
     Result<uint64_t> Term(uint64_t idx) const;

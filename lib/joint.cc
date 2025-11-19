@@ -31,12 +31,34 @@ VoteResult JointConfiguration::GetVoteResult(const std::function<std::optional<b
 }
 
 void JointConfiguration::Clear() {
-    incoming_.Clear();
-    outgoing_.Clear();
+    incoming_.clear();
+    outgoing_.clear();
 }
 
 bool JointConfiguration::Contains(const uint64_t id) const {
-    return incoming_.Contains(id) || outgoing_.Contains(id);
+    return incoming_.contains(id) || outgoing_.contains(id);
+}
+
+Set<uint64_t> JointConfiguration::IDs() const {
+    Set<uint64_t> ids(incoming());
+    ids.insert(outgoing_.begin(), outgoing_.end());
+    return ids;
+}
+
+MajorityConfig& JointConfiguration::outgoing() {
+    return outgoing_;
+}
+
+const MajorityConfig& JointConfiguration::outgoing() const {
+    return outgoing_;
+}
+
+MajorityConfig& JointConfiguration::incoming() {
+    return incoming_;
+}
+
+const MajorityConfig& JointConfiguration::incoming() const {
+    return incoming_;
 }
 
 }  // namespace raftpp

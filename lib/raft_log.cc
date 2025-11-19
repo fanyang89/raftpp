@@ -5,14 +5,14 @@
 
 namespace raftpp {
 
-RaftLog::RaftLog(std::unique_ptr<Storage> store, const Config& cfg)
+RaftLog::RaftLog(const Config& config, std::unique_ptr<Storage> store)
     : store_(std::move(store)), unstable_(Unwrap(store_->LastIndex()) + 1) {
     const uint64_t first_index = Unwrap(store_->FirstIndex());
     const uint64_t last_index = Unwrap(store_->LastIndex());
     committed_ = first_index - 1;
     persisted_ = last_index;
     applied_ = first_index - 1;
-    max_apply_unpersisted_log_limit_ = cfg.max_apply_unpersisted_log_limit;
+    max_apply_unpersisted_log_limit_ = config.max_apply_unpersisted_log_limit;
 }
 
 uint64_t RaftLog::LastTerm() const {

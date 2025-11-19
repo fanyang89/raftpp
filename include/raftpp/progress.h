@@ -12,7 +12,7 @@ namespace raftpp {
 
 class Inflights {
   public:
-    explicit Inflights(size_t capacity = 256);
+    explicit Inflights(size_t capacity);
 
     void Add(uint64_t last);
     bool Full() const;
@@ -39,7 +39,7 @@ class ProgressDebug;
 
 class Progress {
   public:
-    explicit Progress(uint64_t next_idx);
+    explicit Progress(uint64_t next_idx, size_t max_inflight = 256);
 
     void Reset(uint64_t next_idx);
 
@@ -58,6 +58,9 @@ class Progress {
 
     uint64_t Matched() const;
     uint64_t CommitGroupID() const;
+
+    bool& recent_active();
+    bool recent_active() const;
 
   protected:
     friend class ProgressDebug;

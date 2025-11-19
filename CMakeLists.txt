@@ -23,7 +23,7 @@ if (RAFTPP_WITH_LLD)
 endif ()
 
 if (RAFTPP_BUILD_STATIC)
-  set (BUILD_SHARED_LIBS OFF CACHE BOOL "Build shared library")
+  set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build shared library")
 endif ()
 
 if (RAFTPP_SANITIZE)

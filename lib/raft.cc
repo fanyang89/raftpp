@@ -47,14 +47,6 @@ bool UncommittedState::MaybeReduceUncommittedSize(std::span<const Entry> entries
     return true;
 }
 
-uint64_t RaftCore::term() const {
-    return term_;
-}
-
-RaftLog& RaftCore::raft_log() {
-    return raft_log_;
-}
-
 Raft::Raft(const Config& config, std::unique_ptr<Storage> store)
     : RaftCore(config, std::move(store)), progress_tracker_(config.max_inflight_messages), config_(config) {
     if (const auto r = config.Validate(); !r) {
@@ -71,6 +63,10 @@ Raft::Raft(const Config& config, std::unique_ptr<Storage> store)
 }
 
 ProgressTracker& Raft::progress_tracker() {
+    return progress_tracker_;
+}
+
+const ProgressTracker& Raft::progress_tracker() const {
     return progress_tracker_;
 }
 

@@ -1,21 +1,16 @@
 #pragma once
 
-#include "raftpp/joint.h"
 #include "raftpp/progress.h"
+#include "raftpp/tracker_conf.h"
 
 namespace raftpp {
 
-struct TrackerConfiguration {
-    TrackerConfiguration();
-    TrackerConfiguration(const Set<uint64_t>& voters, const Set<uint64_t>& learners);
-
-    void Clear();
-
-    JointConfiguration voters;
-    Set<uint64_t> learners;
-    Set<uint64_t> learners_next;
-    bool auto_leave;
+enum class MapChangeType : uint8_t {
+    Add,
+    Remove,
 };
+
+using MapChange = std::vector<std::pair<uint64_t, MapChangeType>>;
 
 class ProgressTracker {
   public:
@@ -29,8 +24,12 @@ class ProgressTracker {
 
     VoteResult GetVoteResult(const Map<uint64_t, bool>& votes) const;
     CountVoteResult CountVote();
+    void ApplyConf(const TrackerConfiguration& conf, const MapChange& changes, uint64_t next_idx);
 
     TrackerConfiguration& conf();
+    const TrackerConfiguration& conf() const;
+    ProgressMap& progress();
+    const ProgressMap& progress() const;
 
   private:
     ProgressMap progress_;

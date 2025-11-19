@@ -20,7 +20,7 @@ bool Inflights::Full() const {
     return buffer_.full();
 }
 
-Progress::Progress(const uint64_t next_idx)
+Progress::Progress(const uint64_t next_idx, const size_t max_inflight)
     : matched_(0),
       next_idx_(next_idx),
       state_(ProgressState::Probe),
@@ -28,6 +28,7 @@ Progress::Progress(const uint64_t next_idx)
       pending_snapshot_(0),
       pending_request_snapshot_(0),
       recent_active_(false),
+      inflights_(max_inflight),
       commit_group_id_(0),
       committed_index_(0) {}
 
@@ -157,6 +158,14 @@ uint64_t Progress::Matched() const {
 
 uint64_t Progress::CommitGroupID() const {
     return commit_group_id_;
+}
+
+bool& Progress::recent_active() {
+    return recent_active_;
+}
+
+bool Progress::recent_active() const {
+    return recent_active_;
 }
 
 void Progress::ResetState(const ProgressState state) {

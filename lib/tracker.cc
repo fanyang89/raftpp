@@ -1,18 +1,8 @@
 #include "raftpp/tracker.h"
 
+#include <libassert/assert.hpp>
+
 namespace raftpp {
-
-TrackerConfiguration::TrackerConfiguration() = default;
-
-TrackerConfiguration::TrackerConfiguration(const Set<uint64_t>& voters, const Set<uint64_t>& learners)
-    : voters(voters), auto_leave(false) {}
-
-void TrackerConfiguration::Clear() {
-    voters.Clear();
-    learners.clear();
-    learners_next.clear();
-    auto_leave = false;
-}
 
 ProgressTracker::ProgressTracker(const size_t max_inflight) : max_inflight_(max_inflight), group_commit_(false) {}
 
@@ -38,8 +28,38 @@ ProgressTracker::CountVoteResult ProgressTracker::CountVote() {
     return {granted, rejected, r};
 }
 
+void ProgressTracker::ApplyConf(const TrackerConfiguration& conf, const MapChange& changes, const uint64_t next_idx) {
+    conf_ = conf;
+
+    for (const auto& change : changes) {
+        const uint64_t id = change.first;
+        const MapChangeType change_type = change.second;
+        if (change_type == MapChangeType::Add) {
+            Progress pr(next_idx, max_inflight_);
+            pr.recent_active() = true;
+            progress_.emplace(id, pr);
+        } else if (change_type == MapChangeType::Remove) {
+            progress_.erase(id);
+        } else {
+            PANIC("invalid change type");
+        }
+    }
+}
+
 TrackerConfiguration& ProgressTracker::conf() {
     return conf_;
+}
+
+const TrackerConfiguration& ProgressTracker::conf() const {
+    return conf_;
+}
+
+ProgressMap& ProgressTracker::progress() {
+    return progress_;
+}
+
+const ProgressMap& ProgressTracker::progress() const {
+    return progress_;
 }
 
 }  // namespace raftpp

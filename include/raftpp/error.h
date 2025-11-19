@@ -1,6 +1,7 @@
 #pragma once
 
 #include <expected>
+#include <variant>
 
 #include <libassert/assert.hpp>
 #include <spdlog/fmt/fmt.h>
@@ -38,6 +39,11 @@ struct InvalidConfigError {
     [[nodiscard]] RaftError ToError() const;
 };
 
+struct ConfChangeError {
+    std::string message;
+    [[nodiscard]] RaftError ToError() const;
+};
+
 // ReSharper disable CppNonExplicitConvertingConstructor,CppNonExplicitConversionOperator
 
 // RaftError is the universal error type in this lib
@@ -46,26 +52,13 @@ class RaftError {
     RaftError(StorageErrorCode ec);
     RaftError(RaftErrorCode ec);
     RaftError(const InvalidConfigError& ec);
+    RaftError(const ConfChangeError& ec);
 
     template <typename T>
     operator std::expected<T, RaftError>() const;
 
   private:
-    enum class ErrorCodeType : uint8_t {
-        Storage,
-        Raft,
-        InvalidConfig,
-    };
-
-    ErrorCodeType type_;
-
-    struct ErrorCode {
-        StorageErrorCode storage_ec;
-        RaftErrorCode raft_ec;
-        InvalidConfigError config_ec;
-    };
-
-    ErrorCode ec_;
+    std::variant<StorageErrorCode, RaftErrorCode, InvalidConfigError, ConfChangeError> err_;
 };
 
 // ReSharper restore CppNonExplicitConvertingConstructor,CppNonExplicitConversionOperator
@@ -98,5 +91,5 @@ constexpr T UnwrapOr(std::expected<T, E> ex, T value) {
 
 template <>
 struct fmt::formatter<raftpp::InvalidConfigError> {
-    format_context::iterator format(const raftpp::InvalidConfigError& value, const format_context& ctx);
+    static format_context::iterator format(const raftpp::InvalidConfigError& value, const format_context& ctx);
 };

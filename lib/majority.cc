@@ -13,16 +13,18 @@ size_t majority(const size_t total) {
 
 MajorityConfig::MajorityConfig() = default;
 
-MajorityConfig::MajorityConfig(const Set<uint64_t>& voters) : voters_(voters) {}
+MajorityConfig::MajorityConfig(const Set<uint64_t>& voters) {
+    insert(voters.begin(), voters.end());
+}
 
 std::pair<uint64_t, bool> MajorityConfig::CommittedIndex(const bool use_group_commit, AckedIndexer& l) const {
-    if (voters_.empty()) {
+    if (empty()) {
         return std::make_pair(std::numeric_limits<uint64_t>::max(), true);
     }
 
     std::vector<Index> matched;
-    matched.reserve(voters_.size());
-    for (const auto voter : voters_) {
+    matched.reserve(size());
+    for (const auto voter : *this) {
         auto x = l.AckedIndex(voter);
         ASSERT(x.has_value());
         matched.emplace_back(*x);
@@ -60,14 +62,14 @@ std::pair<uint64_t, bool> MajorityConfig::CommittedIndex(const bool use_group_co
 }
 
 VoteResult MajorityConfig::GetVoteResult(const std::function<std::optional<bool>(uint64_t)>& check) const {
-    if (voters_.empty()) {
+    if (empty()) {
         return VoteResult::Won;
     }
 
     size_t yes = 0;
     size_t missing = 0;
 
-    for (const uint64_t voter : voters_) {
+    for (const uint64_t voter : *this) {
         if (auto r = check(voter); r.has_value()) {
             if (r.value()) {
                 yes++;
@@ -77,7 +79,7 @@ VoteResult MajorityConfig::GetVoteResult(const std::function<std::optional<bool>
         }
     }
 
-    const size_t q = majority(voters_.size());
+    const size_t q = majority(size());
     if (yes >= q) {
         return VoteResult::Won;
     }
@@ -87,35 +89,19 @@ VoteResult MajorityConfig::GetVoteResult(const std::function<std::optional<bool>
     return VoteResult::Lost;
 }
 
-void MajorityConfig::Clear() {
-    voters_.clear();
-}
-
-bool MajorityConfig::Contains(const uint64_t id) const {
-    return voters_.contains(id);
-}
-
-Set<uint64_t>& MajorityConfig::mutable_voters() {
-    return voters_;
-}
-
-const Set<uint64_t>& MajorityConfig::voters() const {
-    return voters_;
-}
-
 void to_json(nlohmann::json& j, const MajorityConfig& p) {
-    j["voters"] = p.voters();
+    j["voters"] = p;
 }
 
 void from_json(const nlohmann::json& j, MajorityConfig& p) {
-    j.at("voters").get_to(p.mutable_voters());
+    j.at("voters").get_to(p);
 }
 
 }  // namespace raftpp
 
 fmt::context::iterator fmt::formatter<raftpp::MajorityConfig>::format(
     const raftpp::MajorityConfig& value, format_context& ctx
-) const {
+) {
     const nlohmann::json j = value;
     return fmt::format_to(ctx.out(), "{}", j.dump());
 }
