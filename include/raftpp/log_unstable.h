@@ -23,6 +23,11 @@ class Unstable {
     void TruncateAndAppend(std::span<const Entry> ents);
     void MustCheckOutOfBounds(uint64_t lo, uint64_t hi);
 
+    std::optional<Snapshot>& snapshot();
+    std::optional<Snapshot> snapshot() const;
+    uint64_t offset() const;
+    std::span<const Entry> Slice(uint64_t lo, uint64_t hi);
+
   private:
     std::optional<Snapshot> snapshot_;
     std::vector<Entry> entries_;

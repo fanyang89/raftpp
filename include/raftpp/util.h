@@ -39,4 +39,6 @@ void LimitSize(std::vector<M>& entries, const std::optional<uint64_t> max) {
     entries.erase(entries.begin(), entries.begin() + limit);
 }
 
+bool IsContinuousEntries(const Message& message, const std::vector<Entry>& entries);
+
 }  // namespace raftpp

@@ -12,7 +12,7 @@ class JointConfiguration {
     explicit JointConfiguration(const Set<uint64_t>& voters);
     JointConfiguration(const Set<uint64_t>& incoming, const Set<uint64_t>& outgoing);
 
-    std::pair<uint64_t, bool> CommittedIndex(bool use_group_commit, AckedIndexer& l) const;
+    std::pair<uint64_t, bool> CommittedIndex(bool use_group_commit, const AckedIndexer& l) const;
     VoteResult GetVoteResult(const std::function<std::optional<bool>(uint64_t)>& check) const;
     void Clear();
     bool Contains(uint64_t id) const;

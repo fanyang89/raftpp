@@ -26,11 +26,13 @@ class ProgressTracker {
     CountVoteResult CountVote();
     void ApplyConf(const TrackerConfiguration& conf, const MapChange& changes, uint64_t next_idx);
     void ResetVotes();
+    std::pair<uint64_t, bool> MaxCommittedIndex() const;
+
+    Progress& at(uint64_t id);
+    const Progress& at(uint64_t id) const;
 
     TrackerConfiguration& conf();
     const TrackerConfiguration& conf() const;
-    ProgressMap& progress();
-    const ProgressMap& progress() const;
     const ProgressMap& progress_map() const;
     ProgressMap& progress_map();
 

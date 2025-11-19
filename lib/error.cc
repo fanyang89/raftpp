@@ -1,18 +1,13 @@
 #include "raftpp/error.h"
 
+#include <libassert/assert.hpp>
+
 namespace raftpp {
-
-RaftError::RaftError(const StorageErrorCode ec) : err_(ec) {}
-
-RaftError::RaftError(const RaftErrorCode ec) : err_(ec) {}
-
-RaftError::RaftError(const InvalidConfigError& ec) : err_(ec) {}
-
-RaftError::RaftError(const ConfChangeError& ec) : err_(ec) {}
 
 RaftError InvalidConfigError::ToError() const {
     return {*this};
 }
+
 
 }  // namespace raftpp
 

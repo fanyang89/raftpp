@@ -44,28 +44,40 @@ struct ConfChangeError {
     [[nodiscard]] RaftError ToError() const;
 };
 
-// ReSharper disable CppNonExplicitConvertingConstructor,CppNonExplicitConversionOperator
+using RaftErrorInner = std::variant<StorageErrorCode, RaftErrorCode, InvalidConfigError, ConfChangeError>;
 
 // RaftError is the universal error type in this lib
-class RaftError {
+class RaftError : public RaftErrorInner {
   public:
-    RaftError(StorageErrorCode ec);
-    RaftError(RaftErrorCode ec);
-    RaftError(const InvalidConfigError& ec);
-    RaftError(const ConfChangeError& ec);
-
     template <typename T>
     operator std::expected<T, RaftError>() const;
 
-  private:
-    std::variant<StorageErrorCode, RaftErrorCode, InvalidConfigError, ConfChangeError> err_;
-};
+    template <typename T>
+    bool Is(const T& ec) const;
 
-// ReSharper restore CppNonExplicitConvertingConstructor,CppNonExplicitConversionOperator
+    bool IsStorageError() const;
+    StorageErrorCode AsStorageError() const;
+};
 
 template <typename T>
 RaftError::operator std::expected<T, RaftError>() const {
     return std::unexpected(*this);
+}
+
+template <typename T>
+bool RaftError::Is(const T& ec) const {
+    if constexpr (std::is_same_v<T, StorageErrorCode>) {
+        return std::get<StorageErrorCode>(*this) == ec;
+    } else if constexpr (std::is_same_v<T, RaftErrorCode>) {
+        return std::get<RaftErrorCode>(*this) == ec;
+    } else if constexpr (std::is_same_v<T, InvalidConfigError>) {
+        return std::get<InvalidConfigError>(*this) == ec;
+    } else if constexpr (std::is_same_v<T, ConfChangeError>) {
+        return std::get<ConfChangeError>(*this) == ec;
+    } else {
+        static_assert(!std::is_same_v<T, T>, "unexpected type");
+        return false;
+    }
 }
 
 template <typename R, typename E = RaftError>

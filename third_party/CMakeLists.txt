@@ -1,5 +1,3 @@
-set(FETCHCONTENT_QUIET OFF)
-
 CPMAddPackage("https://github.com/Neargye/magic_enum.git@0.9.7")
 CPMAddPackage("https://github.com/gabime/spdlog.git@1.16.0")
 CPMAddPackage("https://github.com/jeremy-rifkin/libassert.git@2.2.1")
@@ -18,14 +16,17 @@ CPMAddPackage(URI "https://github.com/boostorg/preprocessor.git" GIT_TAG "boost-
 
 CPMAddPackage(
   NAME grpc
-  URL "https://media.githubusercontent.com/media/fanyang89/grpc-archive/refs/heads/main/grpc-v1.76.0-1-g719498daab.tar.gz"
+  URL "file://${CMAKE_CURRENT_SOURCE_DIR}/grpc-v1.76.0-1-g719498daab.tar.gz"
   OPTIONS
   "protobuf_INSTALL OFF"
   "utf8_range_ENABLE_INSTALL OFF"
 )
 
 if (RAFTPP_BUILD_TESTING)
-  CPMAddPackage(URL "https://github.com/google/googletest/releases/download/v1.17.0/googletest-1.17.0.tar.gz")
+  CPMAddPackage(
+    NAME googletest
+    URL "file://${CMAKE_CURRENT_SOURCE_DIR}/googletest-1.17.0.tar.gz"
+  )
 endif ()
 
 add_library(sqlite3 sqlite3/sqlite3.c)

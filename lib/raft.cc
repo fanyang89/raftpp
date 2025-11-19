@@ -92,6 +92,71 @@ Raft::Raft(const Config& config, std::unique_ptr<Storage> store)
     );
 }
 
+bool Raft::MaybeIncreaseUncommittedSize(const std::span<const Entry> entries) {
+    return uncommitted_state_.MaybeIncreaseUncommittedSize(entries);
+}
+
+bool Raft::AppendEntry(std::span<Entry> entries) {
+    if (!MaybeIncreaseUncommittedSize(entries)) {
+        return false;
+    }
+
+    const uint64_t last_index = raft_log_.LastIndex();
+    for (size_t i = 0; i < entries.size(); ++i) {
+        auto& entry = entries[i];
+        entry.set_term(term_);
+        entry.set_index(last_index + i + 1);
+    }
+
+    raft_log_.Append(entries);
+    return true;
+}
+
+bool Raft::MaybeCommit() {
+    const auto max_commit_index = progress_tracker_.MaxCommittedIndex().first;
+    if (raft_log_.MaybeCommit(max_commit_index, term_)) {
+        const uint64_t self_id = id_;
+        const uint64_t committed = raft_log_.committed();
+        progress_tracker_.at(self_id).UpdateCommitted(committed);
+        return true;
+    }
+    return false;
+}
+
+bool Raft::ShouldBroadcastCommit() const {
+    return !skip_broadcast_commit_ || HasPendingConf();
+}
+
+bool Raft::HasPendingConf() const {
+    return pending_conf_index_ > raft_log_.applied();
+}
+
+void Raft::BroadcastAppend() {
+    const auto self_id = id_;
+    auto& messages = messages_;
+    for (auto &[id, pr]: progress_tracker_.progress_map()) {
+        if (id == self_id) {
+            continue;
+        }
+        SendAppend(id, pr, messages);
+    }
+}
+
+void Raft::OnPersistEntries(const uint64_t index, const uint64_t term) {
+    const bool update = raft_log_.MaybePersist(index, term);
+    if (update && state_ == StateRole::Leader) {
+        if (term_ != term) {
+            SPDLOG_ERROR("leader's persisted index changed but the term {} is not the same as {}", term, term_);
+        }
+
+        const uint64_t self_id = id_;
+        Progress& pr = progress_tracker_.at(self_id);
+        if (pr.MaybeUpdate(index) && MaybeCommit() && ShouldBroadcastCommit()) {
+            BroadcastAppend();
+        }
+    }
+}
+
 ProgressTracker& Raft::progress_tracker() {
     return progress_tracker_;
 }

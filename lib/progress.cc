@@ -76,6 +76,12 @@ void Progress::Pause() {
     paused_ = true;
 }
 
+void Progress::UpdateCommitted(const uint64_t committed_index) {
+    if (committed_index > committed_index_) {
+        committed_index_ = committed_index;
+    }
+}
+
 bool Progress::MaybeUpdate(const uint64_t n) {
     const bool need_update = matched_ < n;
     if (need_update) {
@@ -184,6 +190,22 @@ uint64_t Progress::committed_index() const {
     return committed_index_;
 }
 
+uint64_t& Progress::pending_request_snapshot() {
+    return pending_request_snapshot_;
+}
+
+uint64_t Progress::next_idx() const {
+    return next_idx_;
+}
+
+uint64_t& Progress::next_idx() {
+    return next_idx_;
+}
+
+uint64_t Progress::pending_request_snapshot() const {
+    return pending_request_snapshot_;
+}
+
 void Progress::ResetState(const ProgressState state) {
     paused_ = false;
     pending_snapshot_ = 0;
@@ -207,7 +229,7 @@ bool& ProgressDebug::paused() {
     return paused_;
 }
 
-std::optional<Index> ProgressMap::AckedIndex(const uint64_t voter) {
+std::optional<Index> ProgressMap::AckedIndex(const uint64_t voter) const {
     if (const auto& it = find(voter); it != end()) {
         const auto& [_, p] = *it;
         return Index{p.Matched(), p.CommitGroupID()};

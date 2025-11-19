@@ -120,4 +120,22 @@ void Unstable::MustCheckOutOfBounds(uint64_t lo, uint64_t hi) {
     ASSERT(offset_ <= lo && hi <= upper, "unstable.slice[{}, {}] out of bound[{}, {}]", lo, hi, offset_, upper);
 }
 
+std::optional<Snapshot>& Unstable::snapshot() {
+    return snapshot_;
+}
+
+std::optional<Snapshot> Unstable::snapshot() const {
+    return snapshot_;
+}
+
+uint64_t Unstable::offset() const {
+    return offset_;
+}
+
+std::span<const Entry> Unstable::Slice(const uint64_t lo, const uint64_t hi) {
+    MustCheckOutOfBounds(lo, hi);
+    const auto off = offset_;
+    return std::span{entries_.begin() + lo - off, entries_.begin() + hi - off};
+}
+
 }  // namespace raftpp

@@ -50,20 +50,26 @@ void ProgressTracker::ResetVotes() {
     votes_.clear();
 }
 
+std::pair<uint64_t, bool> ProgressTracker::MaxCommittedIndex() const {
+    return conf_.voters.CommittedIndex(group_commit_, progress_);
+}
+
+Progress& ProgressTracker::at(const uint64_t id) {
+    ASSERT(progress_.contains(id));
+    return progress_.at(id);
+}
+
+const Progress& ProgressTracker::at(const uint64_t id) const {
+    ASSERT(progress_.contains(id));
+    return progress_.at(id);
+}
+
 TrackerConfiguration& ProgressTracker::conf() {
     return conf_;
 }
 
 const TrackerConfiguration& ProgressTracker::conf() const {
     return conf_;
-}
-
-ProgressMap& ProgressTracker::progress() {
-    return progress_;
-}
-
-const ProgressMap& ProgressTracker::progress() const {
-    return progress_;
 }
 
 const ProgressMap& ProgressTracker::progress_map() const {

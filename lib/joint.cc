@@ -9,7 +9,7 @@ JointConfiguration::JointConfiguration(const Set<uint64_t>& voters) : incoming_(
 JointConfiguration::JointConfiguration(const Set<uint64_t>& incoming, const Set<uint64_t>& outgoing)
     : incoming_(incoming), outgoing_(outgoing) {}
 
-std::pair<uint64_t, bool> JointConfiguration::CommittedIndex(const bool use_group_commit, AckedIndexer& l) const {
+std::pair<uint64_t, bool> JointConfiguration::CommittedIndex(const bool use_group_commit, const AckedIndexer& l) const {
     const auto [i_idx, i_use_group_commit] = incoming_.CommittedIndex(use_group_commit, l);
     const auto [o_idx, o_use_group_commit] = outgoing_.CommittedIndex(use_group_commit, l);
     return {std::min(i_idx, o_idx), i_use_group_commit && o_use_group_commit};

@@ -17,7 +17,7 @@ MajorityConfig::MajorityConfig(const Set<uint64_t>& voters) {
     insert(voters.begin(), voters.end());
 }
 
-std::pair<uint64_t, bool> MajorityConfig::CommittedIndex(const bool use_group_commit, AckedIndexer& l) const {
+std::pair<uint64_t, bool> MajorityConfig::CommittedIndex(const bool use_group_commit, const AckedIndexer& l) const {
     if (empty()) {
         return std::make_pair(std::numeric_limits<uint64_t>::max(), true);
     }

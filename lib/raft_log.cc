@@ -3,6 +3,8 @@
 #include <magic_enum/magic_enum.hpp>
 #include <spdlog/spdlog.h>
 
+#include "raftpp/util.h"
+
 namespace raftpp {
 
 RaftLog::RaftLog(const Config& config, std::unique_ptr<Storage> store)
@@ -84,6 +86,32 @@ bool RaftLog::MatchTerm(const uint64_t idx, const uint64_t term) const {
     return false;
 }
 
+bool RaftLog::MaybePersist(const uint64_t index, const uint64_t term) {
+    uint64_t first_update_index;
+
+    if (const auto snapshot = unstable_.snapshot()) {
+        first_update_index = snapshot->metadata().index();
+    } else {
+        first_update_index = unstable_.offset();
+    }
+
+    if (index > persisted_ && index < first_update_index && store_->Term(index) == term) {
+        SPDLOG_DEBUG("persisted index {}", index);
+        persisted_ = index;
+        return true;
+    }
+
+    return false;
+}
+
+bool RaftLog::MaybeCommit(const uint64_t max_index, const uint64_t term) {
+    if (max_index > committed_ && Term(max_index) == term) {
+        CommitTo(max_index);
+        return true;
+    }
+    return false;
+}
+
 std::optional<RaftLog::MaybeAppendResult> RaftLog::MaybeAppend(
     const uint64_t idx, const uint64_t term, uint64_t committed, const std::vector<Entry>& entries
 ) {
@@ -130,6 +158,89 @@ void RaftLog::CommitTo(uint64_t to_commit) {
         PANIC("to_commit {} is out of range [last_index {}]", to_commit, LastIndex());
     }
     committed_ = to_commit;
+}
+
+Result<void> RaftLog::MustCheckOutOfBounds(uint64_t low, uint64_t high) const {
+    if (low > high) {
+        PANIC("invalid slice {} > {}", low, high);
+    }
+
+    const auto first_index = FirstIndex();
+    if (low < first_index) {
+        return RaftError(StorageErrorCode::Compacted);
+    }
+
+    const auto length = LastIndex() + 1 - first_index;
+    if (low < first_index || high > first_index + length) {
+        PANIC("slice[{},{}] out of bound[{},{}]", low, high, first_index, LastIndex());
+    }
+
+    return {};
+}
+
+Result<std::vector<Entry>, RaftError> RaftLog::Slice(
+    uint64_t low, uint64_t high, std::optional<uint64_t> max_size, const GetEntriesContext& context
+) {
+    if (auto r = MustCheckOutOfBounds(low, high); !r) {
+        return r.error();
+    }
+
+    if (low == high) {
+        return {};
+    }
+
+    std::vector<Entry> entries;
+
+    if (low < unstable_.offset()) {
+        const auto unstable_high = std::min(high, unstable_.offset());
+        if (const auto r = store_->Entries(low, unstable_high, max_size, context)) {
+            entries = *r;
+            if (entries.size() < unstable_high - low) {
+                return entries;
+            }
+        } else {
+            switch (r.error()) {
+                case StorageErrorCode::Compacted:
+                case StorageErrorCode::LogTemporarilyUnavailable:
+                    return RaftError(r.error());
+                case StorageErrorCode::Unavailable:
+                    PANIC("entries[{}:{}] is unavailable from storage", low, unstable_high);
+                    break;
+                case StorageErrorCode::SnapshotOutOfDate:
+                case StorageErrorCode::SnapshotTemporarilyUnavailable:
+                    PANIC("unexpected error: {}", r.error());
+                    break;
+            }
+        }
+    }
+
+    if (high > unstable_.offset()) {
+        const auto offset = unstable_.offset();
+        const auto unstable = unstable_.Slice(std::max(low, offset), high);
+        entries.insert(entries.end(), unstable.begin(), unstable.end());
+    }
+
+    LimitSize(entries, max_size);
+    return entries;
+}
+
+Result<std::vector<Entry>> RaftLog::GetEntries(
+    uint64_t idx, std::optional<uint64_t> max_size, GetEntriesContext context
+) {
+    const auto last = LastIndex();
+    if (idx > last) {
+        return {};
+    }
+    return Slice(idx, last + 1, max_size, context);
+}
+
+Result<Snapshot, StorageErrorCode> RaftLog::GetSnapshot(const uint64_t request_index, const uint64_t to) {
+    if (const auto r = unstable_.snapshot()) {
+        if (r->metadata().index() >= request_index) {
+            return *r;
+        }
+    }
+    return store_->GetSnapshot(request_index, to);
 }
 
 uint64_t RaftLog::committed() const {

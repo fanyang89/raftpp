@@ -176,7 +176,7 @@ Result<std::pair<TrackerConfiguration, MapChange>> Changer::Simple(const std::sp
 }
 
 Result<std::pair<TrackerConfiguration, IncrChangeMap>> Changer::CheckAndCopy() const {
-    IncrChangeMap prs(tracker_.progress());
+    IncrChangeMap prs(tracker_.progress_map());
     if (auto r = CheckInvariants(tracker_.conf(), prs); !r) {
         return r.error();
     }

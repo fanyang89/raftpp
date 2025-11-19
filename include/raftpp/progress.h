@@ -15,7 +15,7 @@ class Inflights {
     explicit Inflights(size_t capacity);
 
     void Add(uint64_t last);
-    bool Full() const;
+    [[nodiscard]] bool Full() const;
     void Reset();
 
   private:
@@ -41,31 +41,32 @@ class Progress {
   public:
     explicit Progress(uint64_t next_idx, size_t max_inflight = 256);
 
-    void Reset(uint64_t next_idx);
-
+    [[nodiscard]] bool IsPaused() const;
+    [[nodiscard]] bool IsSnapshotCaughtUp() const;
+    bool MaybeDecTo(uint64_t rejected, uint64_t match_hint, uint64_t request_snapshot);
+    bool MaybeUpdate(uint64_t n);
+    [[nodiscard]] uint64_t CommitGroupID() const;
+    [[nodiscard]] uint64_t Matched() const;
     void BecomeProbe();
     void BecomeReplicate();
     void BecomeSnapshot(uint64_t snapshot_idx);
-
-    bool IsSnapshotCaughtUp() const;
-    void Resume();
-    void Pause();
-    bool MaybeUpdate(uint64_t n);
-    void UpdateState(uint64_t last);
     void OptimisticUpdate(uint64_t n);
-    bool IsPaused() const;
-    bool MaybeDecTo(uint64_t rejected, uint64_t match_hint, uint64_t request_snapshot);
+    void Pause();
+    void Reset(uint64_t next_idx);
+    void Resume();
+    void UpdateCommitted(uint64_t committed_index);
+    void UpdateState(uint64_t last);
 
-    uint64_t Matched() const;
-    uint64_t CommitGroupID() const;
-
-    bool& recent_active();
-    bool recent_active() const;
-
-    uint64_t& matched();
-    uint64_t matched() const;
+    [[nodiscard]] uint64_t committed_index() const;
     uint64_t& committed_index();
-    uint64_t committed_index() const;
+    [[nodiscard]] uint64_t matched() const;
+    uint64_t& matched();
+    [[nodiscard]] bool recent_active() const;
+    bool& recent_active();
+    [[nodiscard]] uint64_t pending_request_snapshot() const;
+    uint64_t& pending_request_snapshot();
+    [[nodiscard]] uint64_t next_idx() const;
+    uint64_t& next_idx();
 
   protected:
     friend class ProgressDebug;
@@ -84,6 +85,11 @@ class Progress {
     uint64_t committed_index_;
 };
 
+class ProgressMap final : public Map<uint64_t, Progress>, public AckedIndexer {
+  public:
+    [[nodiscard]] std::optional<Index> AckedIndex(uint64_t voter) const override;
+};
+
 class ProgressDebug : public Progress {
   public:
     using Progress::Progress;
@@ -92,11 +98,6 @@ class ProgressDebug : public Progress {
     uint64_t& matched();
     uint64_t& pending_snapshot();
     bool& paused();
-};
-
-class ProgressMap final : public Map<uint64_t, Progress>, public AckedIndexer {
-  public:
-    std::optional<Index> AckedIndex(uint64_t voter) override;
 };
 
 }  // namespace raftpp

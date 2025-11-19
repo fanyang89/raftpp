@@ -14,6 +14,13 @@ class Raft : public RaftCore {
 
     ConfState PostConfChange();
     void LoadState(const HardState& hard_state);
+    bool MaybeIncreaseUncommittedSize(std::span<const Entry> entries);
+    bool AppendEntry(std::span<Entry> entries);
+    bool MaybeCommit();
+    bool ShouldBroadcastCommit() const;
+    bool HasPendingConf()const;
+    void BroadcastAppend();
+    void OnPersistEntries(uint64_t index, uint64_t term);
 
     ProgressTracker& progress_tracker();
     const ProgressTracker& progress_tracker() const;
