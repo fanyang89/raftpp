@@ -62,6 +62,11 @@ class Progress {
     bool& recent_active();
     bool recent_active() const;
 
+    uint64_t& matched();
+    uint64_t matched() const;
+    uint64_t& committed_index();
+    uint64_t committed_index() const;
+
   protected:
     friend class ProgressDebug;
 

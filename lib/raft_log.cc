@@ -140,4 +140,16 @@ uint64_t RaftLog::applied() const {
     return applied_;
 }
 
+uint64_t RaftLog::persisted() const {
+    return persisted_;
+}
+
+uint64_t& RaftLog::max_apply_unpersisted_log_limit() {
+    return max_apply_unpersisted_log_limit_;
+}
+
+uint64_t RaftLog::max_apply_unpersisted_log_limit() const {
+    return max_apply_unpersisted_log_limit_;
+}
+
 }  // namespace raftpp

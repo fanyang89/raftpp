@@ -168,6 +168,22 @@ bool Progress::recent_active() const {
     return recent_active_;
 }
 
+uint64_t& Progress::matched() {
+    return matched_;
+}
+
+uint64_t Progress::matched() const {
+    return matched_;
+}
+
+uint64_t& Progress::committed_index() {
+    return committed_index_;
+}
+
+uint64_t Progress::committed_index() const {
+    return committed_index_;
+}
+
 void Progress::ResetState(const ProgressState state) {
     paused_ = false;
     pending_snapshot_ = 0;

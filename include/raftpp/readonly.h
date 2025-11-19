@@ -25,6 +25,8 @@ class ReadOnly {
   public:
     explicit ReadOnly(ReadOnlyOption option);
 
+    ReadOnlyOption option() const;
+
   private:
     ReadOnlyOption option_;
     Map<std::vector<uint8_t>, ReadIndexStatus> pending_read_index_;

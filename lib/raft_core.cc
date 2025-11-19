@@ -13,6 +13,7 @@ RaftCore::RaftCore(const Config& config, std::unique_ptr<Storage> store)
       state_(StateRole::Follower),
       promotable_(false),
       leader_id_(0),
+      pending_conf_index_(0),
       read_only_(config.read_only_option),
       election_elapsed_(0),
       heartbeat_elapsed_(0),
@@ -35,13 +36,5 @@ RaftCore::RaftCore(const Config& config, std::unique_ptr<Storage> store)
           }
       ),
       max_committed_size_per_ready(config.max_committed_size_per_ready) {}
-
-uint64_t RaftCore::term() const {
-    return term_;
-}
-
-RaftLog& RaftCore::raft_log() {
-    return raft_log_;
-}
 
 }  // namespace raftpp

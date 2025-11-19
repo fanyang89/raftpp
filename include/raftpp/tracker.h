@@ -25,11 +25,14 @@ class ProgressTracker {
     VoteResult GetVoteResult(const Map<uint64_t, bool>& votes) const;
     CountVoteResult CountVote();
     void ApplyConf(const TrackerConfiguration& conf, const MapChange& changes, uint64_t next_idx);
+    void ResetVotes();
 
     TrackerConfiguration& conf();
     const TrackerConfiguration& conf() const;
     ProgressMap& progress();
     const ProgressMap& progress() const;
+    const ProgressMap& progress_map() const;
+    ProgressMap& progress_map();
 
   private:
     ProgressMap progress_;

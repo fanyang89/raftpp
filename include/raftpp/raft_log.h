@@ -30,6 +30,10 @@ class RaftLog {
 
     uint64_t committed() const;
     uint64_t applied() const;
+    uint64_t persisted() const;
+
+    uint64_t& max_apply_unpersisted_log_limit();
+    uint64_t max_apply_unpersisted_log_limit() const;
 
   private:
     std::unique_ptr<Storage> store_;

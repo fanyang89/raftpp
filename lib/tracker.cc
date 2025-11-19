@@ -46,6 +46,10 @@ void ProgressTracker::ApplyConf(const TrackerConfiguration& conf, const MapChang
     }
 }
 
+void ProgressTracker::ResetVotes() {
+    votes_.clear();
+}
+
 TrackerConfiguration& ProgressTracker::conf() {
     return conf_;
 }
@@ -59,6 +63,14 @@ ProgressMap& ProgressTracker::progress() {
 }
 
 const ProgressMap& ProgressTracker::progress() const {
+    return progress_;
+}
+
+const ProgressMap& ProgressTracker::progress_map() const {
+    return progress_;
+}
+
+ProgressMap& ProgressTracker::progress_map() {
     return progress_;
 }
 

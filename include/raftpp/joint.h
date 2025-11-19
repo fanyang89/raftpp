@@ -1,5 +1,7 @@
 #pragma once
 
+#include <spdlog/fmt/fmt.h>
+
 #include "raftpp/majority.h"
 
 namespace raftpp {
@@ -26,4 +28,12 @@ class JointConfiguration {
     MajorityConfig outgoing_;
 };
 
+void to_json(nlohmann::json& j, const JointConfiguration& p);
+void from_json(const nlohmann::json& j, JointConfiguration& p);
+
 }  // namespace raftpp
+
+template <>
+struct fmt::formatter<raftpp::JointConfiguration> : formatter<std::string_view> {
+    static format_context::iterator format(const raftpp::JointConfiguration& value, const format_context& ctx);
+};

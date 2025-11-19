@@ -40,10 +40,7 @@ class RaftCore {
   public:
     RaftCore(const Config& config, std::unique_ptr<Storage> store);
 
-    uint64_t term() const;
-    RaftLog& raft_log();
-
-  private:
+  protected:
     uint64_t term_;
     uint64_t vote_;
     uint64_t id_;
@@ -56,6 +53,7 @@ class RaftCore {
     bool promotable_;
     uint64_t leader_id_;
     std::optional<uint64_t> lead_transferee_;
+    uint64_t pending_conf_index_;
     ReadOnly read_only_;
     size_t election_elapsed_;
     size_t heartbeat_elapsed_;

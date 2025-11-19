@@ -61,4 +61,21 @@ const MajorityConfig& JointConfiguration::incoming() const {
     return incoming_;
 }
 
+void to_json(nlohmann::json& j, const JointConfiguration& p) {
+    j["outgoing"] = p.outgoing();
+    j["incoming"] = p.incoming();
+}
+
+void from_json(const nlohmann::json& j, JointConfiguration& p) {
+    j.at("outgoing").get_to(p.outgoing());
+    j.at("incoming").get_to(p.incoming());
+}
+
 }  // namespace raftpp
+
+fmt::context::iterator fmt::formatter<raftpp::JointConfiguration>::format(
+    const raftpp::JointConfiguration& value, const format_context& ctx
+) {
+    const nlohmann::json j = value;
+    return fmt::format_to(ctx.out(), "{}", j.dump());
+}
