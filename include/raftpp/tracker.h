@@ -23,14 +23,17 @@ class ProgressTracker {
     };
 
     VoteResult GetVoteResult(const Map<uint64_t, bool>& votes) const;
-    CountVoteResult CountVote();
+    CountVoteResult CountVotes();
     void ApplyConf(const TrackerConfiguration& conf, const MapChange& changes, uint64_t next_idx);
     void ResetVotes();
     std::pair<uint64_t, bool> MaxCommittedIndex() const;
+    void RecordVote(uint64_t id, bool vote);
+    bool HasQuorum(const Set<uint64_t>& potential_quorum) const;
+    bool QuorumRecentlyActive(uint64_t perspective_of);
 
+    Progress* get(uint64_t id);
     Progress& at(uint64_t id);
     const Progress& at(uint64_t id) const;
-
     TrackerConfiguration& conf();
     const TrackerConfiguration& conf() const;
     const ProgressMap& progress_map() const;

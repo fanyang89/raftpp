@@ -14,4 +14,27 @@ void TrackerConfiguration::Clear() {
     auto_leave = false;
 }
 
+ConfState TrackerConfiguration::ToConfState() {
+    ConfState cs;
+
+    for (const auto v : voters.incoming()) {
+        cs.mutable_voters()->Add(v);
+    }
+
+    for (const auto v : voters.outgoing()) {
+        cs.mutable_voters_outgoing()->Add(v);
+    }
+
+    for (const auto v : learners) {
+        cs.mutable_learners()->Add(v);
+    }
+
+    for (const auto v : learners_next) {
+        cs.mutable_learners_next()->Add(v);
+    }
+
+    cs.set_auto_leave(auto_leave);
+    return cs;
+}
+
 }  // namespace raftpp

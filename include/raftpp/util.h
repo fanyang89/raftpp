@@ -1,13 +1,24 @@
 #pragma once
 
+#include <spdlog/fmt/fmt.h>
+
 #include "raftpp/raftpp.pb.h"
 
 namespace raftpp {
 
+struct IndexTerm {
+    uint64_t index;
+    uint64_t term;
+
+    IndexTerm(uint64_t index, uint64_t term);
+    explicit IndexTerm(const Snapshot& snapshot);
+};
+
 size_t EntryApproximateSize(const Entry& ent);
 
 template <typename T>
-concept HasByteSizeLong = requires(const T& t) {
+concept HasByteSizeLong = requires(const T& t)
+{
     { t.ByteSizeLong() } -> std::convertible_to<std::size_t>;
 };
 
@@ -41,4 +52,9 @@ void LimitSize(std::vector<M>& entries, const std::optional<uint64_t> max) {
 
 bool IsContinuousEntries(const Message& message, const std::vector<Entry>& entries);
 
-}  // namespace raftpp
+} // namespace raftpp
+
+template <>
+struct fmt::formatter<raftpp::IndexTerm> : formatter<std::string_view> {
+    static format_context::iterator format(const raftpp::IndexTerm& value, const format_context& ctx);
+};

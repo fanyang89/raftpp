@@ -2,6 +2,14 @@
 
 namespace raftpp {
 
+IndexTerm::IndexTerm(const uint64_t index, const uint64_t term) : index(index), term(term) {}
+
+IndexTerm::IndexTerm(const Snapshot& snapshot) {
+    const auto& m = snapshot.metadata();
+    index = m.index();
+    term = m.term();
+}
+
 size_t EntryApproximateSize(const Entry& ent) {
     // TODO(fanyang) check the 12
     return ent.data().size() + ent.context().size() + 12;
@@ -15,4 +23,12 @@ bool IsContinuousEntries(const Message& message, const std::vector<Entry>& entri
     return true;
 }
 
-}  // namespace raftpp
+} // namespace raftpp
+
+
+fmt::context::iterator fmt::formatter<raftpp::IndexTerm>::format(
+    const raftpp::IndexTerm& value, const format_context& ctx
+) {
+    const auto [i, t] = value;
+    return format_to(ctx.out(), "[i={}, t={}]", i, t);
+}

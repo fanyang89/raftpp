@@ -10,7 +10,7 @@ VoteResult ProgressTracker::GetVoteResult(const Map<uint64_t, bool>& votes) cons
     return conf_.voters.GetVoteResult([&votes](const uint64_t id) -> bool { return votes.at(id); });
 }
 
-ProgressTracker::CountVoteResult ProgressTracker::CountVote() {
+ProgressTracker::CountVoteResult ProgressTracker::CountVotes() {
     size_t granted = 0;
     size_t rejected = 0;
 
@@ -52,6 +52,39 @@ void ProgressTracker::ResetVotes() {
 
 std::pair<uint64_t, bool> ProgressTracker::MaxCommittedIndex() const {
     return conf_.voters.CommittedIndex(group_commit_, progress_);
+}
+
+void ProgressTracker::RecordVote(uint64_t id, bool vote) {
+    votes_.emplace(id, vote);
+}
+
+bool ProgressTracker::HasQuorum(const Set<uint64_t>& potential_quorum) const {
+    const auto checkFn = [&potential_quorum](const uint64_t id) -> bool {
+        return potential_quorum.contains(id);
+    };
+    return conf_.voters.GetVoteResult(checkFn) == VoteResult::Won;
+}
+
+bool ProgressTracker::QuorumRecentlyActive(const uint64_t perspective_of) {
+    Set<uint64_t> active;
+    for (auto& [id, pr] : progress_) {
+        if (id == perspective_of) {
+            active.emplace(id);
+            pr.recent_active() = true;
+        } else if (pr.recent_active()) {
+            active.emplace(id);
+            pr.recent_active() = false;
+        }
+    }
+    return HasQuorum(active);
+}
+
+Progress* ProgressTracker::get(const uint64_t id) {
+    const auto it = progress_.find(id);
+    if (it == progress_.end()) {
+        return nullptr;
+    }
+    return &it->second;
 }
 
 Progress& ProgressTracker::at(const uint64_t id) {

@@ -91,7 +91,7 @@ class RaftCore {
     UncommittedState uncommitted_state_;
 
     /// Max size per committed entries in a `Read`.
-    uint64_t max_committed_size_per_ready;
+    uint64_t max_committed_size_per_ready_;
 };
 
 }  // namespace raftpp

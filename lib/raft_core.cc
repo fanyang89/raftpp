@@ -37,7 +37,7 @@ RaftCore::RaftCore(const Config& config, std::unique_ptr<Storage> store)
               .last_log_tail_index = 0
           }
       ),
-      max_committed_size_per_ready(config.max_committed_size_per_ready) {}
+      max_committed_size_per_ready_(config.max_committed_size_per_ready) {}
 
 bool RaftCore::TryBatching(
     const uint64_t to, std::vector<Message>& messages, Progress& pr, const std::vector<Entry>& entries
@@ -58,7 +58,7 @@ bool RaftCore::TryBatching(
                     msg.mutable_entries()->Add()->CopyFrom(entry);
                 }
 
-                const size_t size = msg.entries().size();
+                const auto size = msg.entries().size();
                 const uint64_t last_idx = msg.entries().at(size - 1).index();
                 pr.UpdateState(last_idx);
             }

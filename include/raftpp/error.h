@@ -21,6 +21,10 @@ enum class StorageErrorCode {
     SnapshotTemporarilyUnavailable
 };
 
+struct StorageErrorOther {
+    std::string message;
+};
+
 enum class RaftErrorCode {
     /// Raft cannot step the local message.
     StepLocalMsg,
@@ -44,7 +48,8 @@ struct ConfChangeError {
     [[nodiscard]] RaftError ToError() const;
 };
 
-using RaftErrorInner = std::variant<StorageErrorCode, RaftErrorCode, InvalidConfigError, ConfChangeError>;
+using RaftErrorInner =
+    std::variant<StorageErrorCode, StorageErrorOther, RaftErrorCode, InvalidConfigError, ConfChangeError>;
 
 // RaftError is the universal error type in this lib
 class RaftError : public RaftErrorInner {
@@ -54,9 +59,6 @@ class RaftError : public RaftErrorInner {
 
     template <typename T>
     bool Is(const T& ec) const;
-
-    bool IsStorageError() const;
-    StorageErrorCode AsStorageError() const;
 };
 
 template <typename T>
@@ -68,6 +70,8 @@ template <typename T>
 bool RaftError::Is(const T& ec) const {
     if constexpr (std::is_same_v<T, StorageErrorCode>) {
         return std::get<StorageErrorCode>(*this) == ec;
+    } else if constexpr (std::is_same_v<T, StorageErrorOther>) {
+        return std::get<StorageErrorOther>(*this) == ec;
     } else if constexpr (std::is_same_v<T, RaftErrorCode>) {
         return std::get<RaftErrorCode>(*this) == ec;
     } else if constexpr (std::is_same_v<T, InvalidConfigError>) {

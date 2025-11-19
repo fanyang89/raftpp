@@ -17,8 +17,10 @@ class Inflights {
     void Add(uint64_t last);
     [[nodiscard]] bool Full() const;
     void Reset();
+    void FreeTo(uint64_t to);
+    void FreeFirstOne();
 
-  private:
+private:
     boost::circular_buffer<uint64_t> buffer_;
 };
 
@@ -56,6 +58,7 @@ class Progress {
     void Resume();
     void UpdateCommitted(uint64_t committed_index);
     void UpdateState(uint64_t last);
+    void SnapshotFailure();
 
     [[nodiscard]] uint64_t committed_index() const;
     uint64_t& committed_index();
@@ -67,6 +70,8 @@ class Progress {
     uint64_t& pending_request_snapshot();
     [[nodiscard]] uint64_t next_idx() const;
     uint64_t& next_idx();
+    Inflights& inflights();
+    ProgressState state() const;
 
   protected:
     friend class ProgressDebug;

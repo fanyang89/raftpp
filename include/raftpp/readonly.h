@@ -12,7 +12,7 @@ enum class ReadOnlyOption { Safe, LeaseBased };
 
 struct ReadState {
     uint64_t index;
-    std::vector<uint8_t> request_ctx;
+    std::string request_ctx;
 };
 
 struct ReadIndexStatus {
@@ -25,12 +25,17 @@ class ReadOnly {
   public:
     explicit ReadOnly(ReadOnlyOption option);
 
+    std::optional<std::string> LastPendingRequestCtx() const;
+    size_t PendingReadCount() const;
+    std::optional<Set<uint64_t>> RecvACK(uint64_t id, const std::string& ctx);
+    std::vector<ReadIndexStatus> Advance(const std::string& ctx);
+
     ReadOnlyOption option() const;
 
   private:
     ReadOnlyOption option_;
-    Map<std::vector<uint8_t>, ReadIndexStatus> pending_read_index_;
-    std::deque<std::vector<uint8_t>> read_index_queue_;
+    Map<std::string, ReadIndexStatus> pending_read_index_;
+    std::deque<std::string> read_index_queue_;
 };
 
 }  // namespace raftpp

@@ -12,6 +12,8 @@ void Inflights::Reset() {
     buffer_.clear();
 }
 
+void Inflights::FreeTo(uint64_t to) {}
+
 void Inflights::Add(const uint64_t last) {
     buffer_.push_back(last);
 }
@@ -110,6 +112,10 @@ void Progress::UpdateState(const uint64_t last) {
     }
 }
 
+void Progress::SnapshotFailure() {
+    pending_snapshot_ = 0;
+}
+
 void Progress::OptimisticUpdate(const uint64_t n) {
     next_idx_ = n + 1;
 }
@@ -200,6 +206,14 @@ uint64_t Progress::next_idx() const {
 
 uint64_t& Progress::next_idx() {
     return next_idx_;
+}
+
+Inflights& Progress::inflights() {
+    return inflights_;
+}
+
+ProgressState Progress::state() const {
+    return state_;
 }
 
 uint64_t Progress::pending_request_snapshot() const {

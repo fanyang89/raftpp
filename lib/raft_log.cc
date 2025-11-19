@@ -104,6 +104,24 @@ bool RaftLog::MaybePersist(const uint64_t index, const uint64_t term) {
     return false;
 }
 
+bool RaftLog::MaybePersistSnapshot(const uint64_t index) {
+    if (index <= persisted_) {
+        return false;
+    }
+
+    if (index > committed_) {
+        PANIC("snapshot's index {} > committed {}", index, committed_);
+    }
+
+    if (index >= unstable_.offset()) {
+        PANIC("snapshot's index {} >= offset {}", index, unstable_.offset());
+    }
+
+    SPDLOG_DEBUG("snapshot persisted index {}", index);
+    persisted_ = index;
+    return true;
+}
+
 bool RaftLog::MaybeCommit(const uint64_t max_index, const uint64_t term) {
     if (max_index > committed_ && Term(max_index) == term) {
         CommitTo(max_index);
@@ -113,7 +131,7 @@ bool RaftLog::MaybeCommit(const uint64_t max_index, const uint64_t term) {
 }
 
 std::optional<RaftLog::MaybeAppendResult> RaftLog::MaybeAppend(
-    const uint64_t idx, const uint64_t term, uint64_t committed, const std::vector<Entry>& entries
+    const uint64_t idx, const uint64_t term, const uint64_t committed, const std::vector<Entry>& entries
 ) {
     if (MatchTerm(idx, term)) {
         uint64_t conflict_idx = FindConflict(entries);
@@ -234,6 +252,41 @@ Result<std::vector<Entry>> RaftLog::GetEntries(
     return Slice(idx, last + 1, max_size, context);
 }
 
+void RaftLog::AppliedTo(uint64_t idx) {
+    if (idx == 0) {
+        return;
+    }
+    if (idx > committed_ || idx < applied_) {
+        PANIC("applied({}) is out of range [prev_applied({}), committed({})]", idx, applied_, committed_);
+    }
+    AppliedToUnchecked(idx);
+}
+
+void RaftLog::AppliedToUnchecked(uint64_t idx) {
+    applied_ = idx;
+}
+
+std::pair<uint64_t, std::optional<uint64_t>> RaftLog::FindConflictByTerm(uint64_t index, const uint64_t term) const {
+    auto conflict_index = index;
+
+    if (const auto last_index = LastIndex(); index > last_index) {
+        SPDLOG_WARN("index({}) is out of range [0, last_index({})] in find_conflict_by_term", index, last_index);
+        return {index, {}};
+    }
+
+    for (;;) {
+        if (const auto t = Term(conflict_index)) {
+            if (*t > term) {
+                conflict_index -= 1;
+            } else {
+                return {conflict_index, {}};
+            }
+        } else {
+            return {conflict_index, {}};
+        }
+    }
+}
+
 Result<Snapshot, StorageErrorCode> RaftLog::GetSnapshot(const uint64_t request_index, const uint64_t to) {
     if (const auto r = unstable_.snapshot()) {
         if (r->metadata().index() >= request_index) {
@@ -247,12 +300,24 @@ uint64_t RaftLog::committed() const {
     return committed_;
 }
 
+uint64_t& RaftLog::committed() {
+    return committed_;
+}
+
 uint64_t RaftLog::applied() const {
     return applied_;
 }
 
 uint64_t RaftLog::persisted() const {
     return persisted_;
+}
+
+const Unstable& RaftLog::unstable() const {
+    return unstable_;
+}
+
+Unstable& RaftLog::unstable() {
+    return unstable_;
 }
 
 uint64_t& RaftLog::max_apply_unpersisted_log_limit() {
@@ -263,4 +328,27 @@ uint64_t RaftLog::max_apply_unpersisted_log_limit() const {
     return max_apply_unpersisted_log_limit_;
 }
 
-}  // namespace raftpp
+std::pair<uint64_t, uint64_t> RaftLog::CommitInfo() const {
+    if (const auto r = Term(committed_)) {
+        return {committed_, *r};
+    } else {
+        PANIC("last committed entry at {} is missing: {}", committed_, r.error());
+    }
+}
+
+bool RaftLog::IsUpToDate(const uint64_t last_index, const uint64_t term) const {
+    return term > LastTerm() || (term == LastTerm() && last_index >= LastIndex());
+}
+
+void RaftLog::Restore(const Snapshot& snapshot) {
+    SPDLOG_INFO("restore snapshot, {}", IndexTerm(snapshot));
+    const uint64_t index = snapshot.metadata().index();
+    ASSERT(index >= committed_);
+    if (persisted_ > committed_) {
+        persisted_ = committed_;
+    }
+    committed_ = index;
+    unstable_.Restore(snapshot);
+}
+
+} // namespace raftpp
