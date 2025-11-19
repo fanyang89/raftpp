@@ -1,7 +1,7 @@
 #pragma once
 
-#include "raftpp/readonly.h"
 #include "raftpp/error.h"
+#include "raftpp/readonly.h"
 
 namespace raftpp {
 
@@ -32,4 +32,4 @@ struct Config {
     Result<void> Validate() const;
 };
 
-}
+}  // namespace raftpp

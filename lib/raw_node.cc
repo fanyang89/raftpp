@@ -1,6 +1,5 @@
 #include "raftpp/raw_node.h"
 
-
 bool raftpp::IsLocalMessage(MessageType t) {
     switch (t) {
         case MsgHup:
@@ -27,6 +26,4 @@ bool raftpp::IsResponseMessage(MessageType t) {
     }
 }
 
-raftpp::RawNode::RawNode(const Config& config, std::unique_ptr<Storage> store)
-    : raft_(config, std::move(store))
-{}
+raftpp::RawNode::RawNode(const Config& config, std::unique_ptr<Storage> store) : raft_(config, std::move(store)) {}

@@ -5,9 +5,8 @@
 
 namespace raftpp {
 
-RaftLog::RaftLog(std::unique_ptr<Storage> store, const Config& cfg) :
-    store_(std::move(store)),
-    unstable_(Unwrap(store_->LastIndex()) + 1) {
+RaftLog::RaftLog(std::unique_ptr<Storage> store, const Config& cfg)
+    : store_(std::move(store)), unstable_(Unwrap(store_->LastIndex()) + 1) {
     const uint64_t first_index = Unwrap(store_->FirstIndex());
     const uint64_t last_index = Unwrap(store_->LastIndex());
     committed_ = first_index - 1;
@@ -67,8 +66,8 @@ uint64_t RaftLog::FindConflict(const std::vector<Entry>& entries) const {
         if (!MatchTerm(e.index(), e.term())) {
             if (e.index() <= LastIndex()) {
                 SPDLOG_INFO(
-                    "found conflict at index({}), existing_term={}, conflicting_term={}",
-                    e.index(), UnwrapOr(Term(e.index()), uint64_t{0}), e.term()
+                    "found conflict at index({}), existing_term={}, conflicting_term={}", e.index(),
+                    UnwrapOr(Term(e.index()), uint64_t{0}), e.term()
                 );
             }
             return e.index();
@@ -86,7 +85,8 @@ bool RaftLog::MatchTerm(const uint64_t idx, const uint64_t term) const {
 }
 
 std::optional<RaftLog::MaybeAppendResult> RaftLog::MaybeAppend(
-    const uint64_t idx, const uint64_t term, uint64_t committed, const std::vector<Entry>& entries) {
+    const uint64_t idx, const uint64_t term, uint64_t committed, const std::vector<Entry>& entries
+) {
     if (MatchTerm(idx, term)) {
         uint64_t conflict_idx = FindConflict(entries);
         if (conflict_idx <= committed) {
@@ -140,4 +140,4 @@ uint64_t RaftLog::applied() const {
     return applied_;
 }
 
-}
+}  // namespace raftpp

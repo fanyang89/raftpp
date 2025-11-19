@@ -21,4 +21,4 @@ struct Status {
     std::optional<ProgressTracker> progress;
 }
 
-}
+}  // namespace raftpp

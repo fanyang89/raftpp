@@ -1,9 +1,8 @@
-#include "raftpp/primitives.h"
-
 #include <doctest/doctest.h>
 #include <spdlog/spdlog.h>
 
 #include "raftpp/majority.h"
+#include "raftpp/primitives.h"
 
 using namespace raftpp;
 

@@ -2,14 +2,14 @@
 
 #include <span>
 
-#include "raftpp/tracker.h"
 #include "raftpp/raft_log.h"
 #include "raftpp/raftpp.pb.h"
 #include "raftpp/readonly.h"
+#include "raftpp/tracker.h"
 
 namespace raftpp {
 
-enum class StateRole: uint8_t {
+enum class StateRole : uint8_t {
     /// The node is a follower of the leader.
     Follower,
     /// The node could become a leader.
@@ -19,7 +19,6 @@ enum class StateRole: uint8_t {
     /// The node could become a candidate, if `prevote` is enabled.
     PreCandidate,
 };
-
 
 struct SoftState {
     uint64_t leader_id;
@@ -37,13 +36,13 @@ struct UncommittedState {
 };
 
 class RaftCore {
-public:
+  public:
     RaftCore(const Config& config, std::unique_ptr<Storage> store);
 
     uint64_t term() const;
     RaftLog& raft_log();
 
-private:
+  private:
     uint64_t term_;
     uint64_t vote_;
     uint64_t id_;
@@ -86,16 +85,15 @@ private:
 };
 
 class Raft : public RaftCore {
-public:
+  public:
     Raft(const Config& config, std::unique_ptr<Storage> store);
 
     ProgressTracker& progress_tracker();
 
-private:
+  private:
     ProgressTracker progress_tracker_;
     std::vector<Message> messages_;
     Config config_;
 };
 
-
-}
+}  // namespace raftpp

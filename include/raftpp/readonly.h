@@ -8,10 +8,7 @@
 
 namespace raftpp {
 
-enum class ReadOnlyOption {
-    Safe,
-    LeaseBased
-};
+enum class ReadOnlyOption { Safe, LeaseBased };
 
 struct ReadState {
     uint64_t index;
@@ -25,13 +22,13 @@ struct ReadIndexStatus {
 };
 
 class ReadOnly {
-public:
+  public:
     explicit ReadOnly(ReadOnlyOption option);
 
-private:
+  private:
     ReadOnlyOption option_;
     Map<std::vector<uint8_t>, ReadIndexStatus> pending_read_index_;
     std::deque<std::vector<uint8_t>> read_index_queue_;
 };
 
-}
+}  // namespace raftpp

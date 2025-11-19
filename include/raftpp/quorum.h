@@ -18,14 +18,14 @@ struct Index {
 };
 
 class AckedIndexer {
-public:
+  public:
     virtual ~AckedIndexer() = default;
     virtual std::optional<Index> AckedIndex(uint64_t voter) = 0;
 };
 
 class AckIndexer final : public AckedIndexer, Map<uint64_t, Index> {
-public:
+  public:
     std::optional<Index> AckedIndex(uint64_t voter) override;
 };
 
-}
+}  // namespace raftpp

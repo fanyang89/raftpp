@@ -9,4 +9,4 @@ std::optional<Index> AckIndexer::AckedIndex(const uint64_t voter) {
     return std::nullopt;
 }
 
-}
+}  // namespace raftpp

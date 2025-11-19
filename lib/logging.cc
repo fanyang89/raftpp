@@ -1,8 +1,8 @@
 #include "raftpp/logging.h"
 
 #include <absl/log/initialize.h>
-#include <absl/log/log_sink_registry.h>
 #include <absl/log/internal/globals.h>
+#include <absl/log/log_sink_registry.h>
 #include <spdlog/spdlog.h>
 
 namespace raftpp {
@@ -25,4 +25,4 @@ void RegisterLogSink() {
     absl::AddLogSink(&sink);
 }
 
-}
+}  // namespace raftpp

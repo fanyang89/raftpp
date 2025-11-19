@@ -1,7 +1,7 @@
 #include "raftpp/log_unstable.h"
 
-#include <spdlog/spdlog.h>
 #include <libassert/assert.hpp>
+#include <spdlog/spdlog.h>
 
 #include "raftpp/util.h"
 
@@ -9,8 +9,10 @@ namespace raftpp {
 
 Unstable::Unstable(const uint64_t offset) : entries_size_(0), offset_(offset) {}
 
-Unstable::Unstable(const std::vector<Entry>& entries, const size_t entries_size,
-                   const uint64_t offset, const std::optional<Snapshot>& snapshot)
+Unstable::Unstable(
+    const std::vector<Entry>& entries, const size_t entries_size, const uint64_t offset,
+    const std::optional<Snapshot>& snapshot
+)
     : snapshot_(snapshot), entries_(entries), entries_size_(entries_size), offset_(offset) {}
 
 std::optional<uint64_t> Unstable::MaybeFirstIndex() const {
@@ -64,8 +66,10 @@ void Unstable::StableEntries(uint64_t index, uint32_t term) {
 
     const auto& entry = entries_.back();
     if (entry.index() != index || entry.term() != term) {
-        PANIC("the last one of unstable.slice has different index {} and term {}, expect {} {}",
-              entry.index(), entry.term(), index, term);
+        PANIC(
+            "the last one of unstable.slice has different index {} and term {}, expect {} {}", entry.index(),
+            entry.term(), index, term
+        );
     }
 
     offset_ = entry.index() + 1;
@@ -113,8 +117,7 @@ void Unstable::MustCheckOutOfBounds(uint64_t lo, uint64_t hi) {
     ASSERT(lo <= hi, "invalid unstable.slice {} > {}", lo, hi);
 
     const uint64_t upper = offset_ + entries_.size();
-    ASSERT(offset_ <= lo && hi <= upper,
-           "unstable.slice[{}, {}] out of bound[{}, {}]", lo, hi, offset_, upper);
+    ASSERT(offset_ <= lo && hi <= upper, "unstable.slice[{}, {}] out of bound[{}, {}]", lo, hi, offset_, upper);
 }
 
-}
+}  // namespace raftpp

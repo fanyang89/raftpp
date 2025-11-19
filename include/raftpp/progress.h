@@ -2,23 +2,23 @@
 
 #include <string_view>
 
-#include <magic_enum/magic_enum.hpp>
 #include <boost/circular_buffer.hpp>
+#include <magic_enum/magic_enum.hpp>
 
-#include "raftpp/quorum.h"
 #include "raftpp/primitives.h"
+#include "raftpp/quorum.h"
 
 namespace raftpp {
 
 class Inflights {
-public:
+  public:
     explicit Inflights(size_t capacity = 256);
 
     void Add(uint64_t last);
     bool Full() const;
     void Reset();
 
-private:
+  private:
     boost::circular_buffer<uint64_t> buffer_;
 };
 
@@ -38,7 +38,7 @@ constexpr std::string_view format_as(const ProgressState c) {
 class ProgressDebug;
 
 class Progress {
-public:
+  public:
     explicit Progress(uint64_t next_idx);
 
     void Reset(uint64_t next_idx);
@@ -59,10 +59,10 @@ public:
     uint64_t Matched() const;
     uint64_t CommitGroupID() const;
 
-protected:
+  protected:
     friend class ProgressDebug;
 
-private:
+  private:
     void ResetState(ProgressState state);
     uint64_t matched_;
     uint64_t next_idx_;
@@ -77,7 +77,7 @@ private:
 };
 
 class ProgressDebug : public Progress {
-public:
+  public:
     using Progress::Progress;
 
     ProgressState& state();
@@ -87,8 +87,8 @@ public:
 };
 
 class ProgressMap final : public Map<uint64_t, Progress>, public AckedIndexer {
-public:
+  public:
     std::optional<Index> AckedIndex(uint64_t voter) override;
 };
 
-}
+}  // namespace raftpp

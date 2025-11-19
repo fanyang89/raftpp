@@ -18,7 +18,7 @@ struct TrackerConfiguration {
 };
 
 class ProgressTracker {
-public:
+  public:
     explicit ProgressTracker(size_t max_inflight);
 
     struct CountVoteResult {
@@ -32,7 +32,7 @@ public:
 
     TrackerConfiguration& conf();
 
-private:
+  private:
     ProgressMap progress_;
     TrackerConfiguration conf_;
     Map<uint64_t, bool> votes_;
@@ -40,4 +40,4 @@ private:
     bool group_commit_;
 };
 
-}
+}  // namespace raftpp

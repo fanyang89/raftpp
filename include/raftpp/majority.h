@@ -1,16 +1,17 @@
 #pragma once
 
 #include <functional>
-#include <spdlog/fmt/fmt.h>
-#include <nlohmann/json.hpp>
 
-#include "raftpp/quorum.h"
+#include <nlohmann/json.hpp>
+#include <spdlog/fmt/fmt.h>
+
 #include "raftpp/primitives.h"
+#include "raftpp/quorum.h"
 
 namespace raftpp {
 
 class MajorityConfig {
-public:
+  public:
     MajorityConfig();
     explicit MajorityConfig(const Set<uint64_t>& voters);
 
@@ -22,14 +23,14 @@ public:
     Set<uint64_t>& mutable_voters();
     const Set<uint64_t>& voters() const;
 
-private:
+  private:
     Set<uint64_t> voters_;
 };
 
 void to_json(nlohmann::json& j, const MajorityConfig& p);
 void from_json(const nlohmann::json& j, MajorityConfig& p);
 
-}
+}  // namespace raftpp
 
 template <>
 struct fmt::formatter<raftpp::MajorityConfig> {

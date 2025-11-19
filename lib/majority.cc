@@ -27,9 +27,7 @@ std::pair<uint64_t, bool> MajorityConfig::CommittedIndex(const bool use_group_co
         ASSERT(x.has_value());
         matched.emplace_back(*x);
     }
-    std::ranges::sort(matched, [](const Index lhs, const Index rhs) {
-        return lhs.index > rhs.index;
-    });
+    std::ranges::sort(matched, [](const Index lhs, const Index rhs) { return lhs.index > rhs.index; });
 
     const size_t quorum = majority(matched.size());
     const auto quorum_index = matched[quorum - 1];
@@ -113,11 +111,11 @@ void from_json(const nlohmann::json& j, MajorityConfig& p) {
     j.at("voters").get_to(p.mutable_voters());
 }
 
-}
+}  // namespace raftpp
 
-fmt::context::iterator
-fmt::formatter<raftpp::MajorityConfig>::format(
-    const raftpp::MajorityConfig& value, format_context& ctx) const {
+fmt::context::iterator fmt::formatter<raftpp::MajorityConfig>::format(
+    const raftpp::MajorityConfig& value, format_context& ctx
+) const {
     const nlohmann::json j = value;
     return fmt::format_to(ctx.out(), "{}", j.dump());
 }

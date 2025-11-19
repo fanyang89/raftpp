@@ -16,7 +16,7 @@ using Map = absl::flat_hash_map<K, V, Args...>;
 template <typename K, typename... Args>
 using Set = absl::flat_hash_set<K, Args...>;
 
-}
+}  // namespace raftpp
 
 NLOHMANN_JSON_NAMESPACE_BEGIN
 
@@ -31,8 +31,7 @@ struct adl_serializer<raftpp::Set<V>> {
 
     static void from_json(const json& j, raftpp::Set<V>& m) {
         if (!j.is_array()) {
-            throw json::type_error::create(
-                302, fmt::format("invalid type {}", j.type_name()), &j);
+            throw json::type_error::create(302, fmt::format("invalid type {}", j.type_name()), &j);
         }
         m.clear();
         for (const auto& elem : j) {
@@ -53,8 +52,7 @@ struct adl_serializer<raftpp::Map<K, V>> {
 
     static void from_json(const json& j, raftpp::Map<K, V>& m) {
         if (!j.is_object()) {
-            throw json::type_error::create(
-                302, fmt::format("invalid type {}", j.type_name()), &j);
+            throw json::type_error::create(302, fmt::format("invalid type {}", j.type_name()), &j);
         }
         m.clear();
         for (const auto& [k, v] : j.items()) {

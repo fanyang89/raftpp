@@ -15,7 +15,6 @@ struct RaftState {
     ConfState conf_state;
 };
 
-
 enum class GetEntriesFor {
     // for sending entries to followers
     SendAppend,
@@ -58,12 +57,13 @@ struct GetEntriesContext {
 };
 
 class Storage {
-public:
+  public:
     virtual ~Storage();
     virtual Result<RaftState, StorageErrorCode> InitialState() = 0;
 
-    virtual Result<std::vector<Entry>, StorageErrorCode>
-    Entries(uint64_t low, uint64_t high, std::optional<uint64_t> max_size, GetEntriesContext context) = 0;
+    virtual Result<std::vector<Entry>, StorageErrorCode> Entries(
+        uint64_t low, uint64_t high, std::optional<uint64_t> max_size, GetEntriesContext context
+    ) = 0;
 
     virtual Result<uint64_t, StorageErrorCode> Term(uint64_t idx) = 0;
     virtual Result<uint64_t, StorageErrorCode> FirstIndex() = 0;
@@ -71,9 +71,8 @@ public:
     virtual Result<Snapshot, StorageErrorCode> GetSnapshot(uint64_t request_index, uint64_t to) = 0;
 };
 
-
 class MemoryStorageCore {
-public:
+  public:
     MemoryStorageCore();
 
     void SetHardState(HardState hs);
@@ -88,7 +87,7 @@ public:
 
     friend class MemoryStorage;
 
-private:
+  private:
     uint64_t first_index() const;
     uint64_t last_index() const;
     Snapshot snapshot() const;
@@ -102,22 +101,23 @@ private:
 };
 
 class MemoryStorage final : public Storage {
-public:
+  public:
     MemoryStorage();
 
     Result<RaftState, StorageErrorCode> InitialState() override;
 
-    Result<std::vector<Entry>, StorageErrorCode>
-    Entries(uint64_t low, uint64_t high, std::optional<uint64_t> max_size, GetEntriesContext context) override;
+    Result<std::vector<Entry>, StorageErrorCode> Entries(
+        uint64_t low, uint64_t high, std::optional<uint64_t> max_size, GetEntriesContext context
+    ) override;
 
     Result<uint64_t, StorageErrorCode> Term(uint64_t idx) override;
     Result<uint64_t, StorageErrorCode> FirstIndex() override;
     Result<uint64_t, StorageErrorCode> LastIndex() override;
     Result<Snapshot, StorageErrorCode> GetSnapshot(uint64_t request_index, uint64_t to) override;
 
-private:
+  private:
     std::mutex mutex_;
     MemoryStorageCore core_ ABSL_GUARDED_BY(mutex_);
 };
 
-}
+}  // namespace raftpp

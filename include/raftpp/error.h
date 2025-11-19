@@ -31,7 +31,6 @@ enum class RaftErrorCode {
     RequestSnapshotDropped,
 };
 
-
 class RaftError;
 
 struct InvalidConfigError {
@@ -43,7 +42,7 @@ struct InvalidConfigError {
 
 // RaftError is the universal error type in this lib
 class RaftError {
-public:
+  public:
     RaftError(StorageErrorCode ec);
     RaftError(RaftErrorCode ec);
     RaftError(const InvalidConfigError& ec);
@@ -51,7 +50,7 @@ public:
     template <typename T>
     operator std::expected<T, RaftError>() const;
 
-private:
+  private:
     enum class ErrorCodeType : uint8_t {
         Storage,
         Raft,
@@ -95,7 +94,7 @@ constexpr T UnwrapOr(std::expected<T, E> ex, T value) {
     return value;
 }
 
-}
+}  // namespace raftpp
 
 template <>
 struct fmt::formatter<raftpp::InvalidConfigError> {

@@ -14,13 +14,10 @@ void TrackerConfiguration::Clear() {
     auto_leave = false;
 }
 
-ProgressTracker::ProgressTracker(const size_t max_inflight)
-    : max_inflight_(max_inflight), group_commit_(false) {}
+ProgressTracker::ProgressTracker(const size_t max_inflight) : max_inflight_(max_inflight), group_commit_(false) {}
 
 VoteResult ProgressTracker::GetVoteResult(const Map<uint64_t, bool>& votes) const {
-    return conf_.voters.GetVoteResult([&votes](const uint64_t id) -> bool {
-        return votes.at(id);
-    });
+    return conf_.voters.GetVoteResult([&votes](const uint64_t id) -> bool { return votes.at(id); });
 }
 
 ProgressTracker::CountVoteResult ProgressTracker::CountVote() {
@@ -45,4 +42,4 @@ TrackerConfiguration& ProgressTracker::conf() {
     return conf_;
 }
 
-}
+}  // namespace raftpp

@@ -7,8 +7,7 @@
 
 namespace raftpp {
 
-MemoryStorageCore::MemoryStorageCore() :
-    trigger_snapshot_unavailable_(false), trigger_log_unavailable_(false) {}
+MemoryStorageCore::MemoryStorageCore() : trigger_snapshot_unavailable_(false), trigger_log_unavailable_(false) {}
 
 bool GetEntriesContext::CanAsync() const {
     if (what == GetEntriesFor::Empty) {
@@ -22,12 +21,7 @@ bool GetEntriesContext::CanAsync() const {
 
 GetEntriesContext GetEntriesContext::Empty(const bool can_async) {
     return GetEntriesContext{
-        .what = GetEntriesFor::Empty,
-        .payload = GetEntriesForPayload{
-            .empty = {
-                .can_async = can_async
-            }
-        }
+        .what = GetEntriesFor::Empty, .payload = GetEntriesForPayload{.empty = {.can_async = can_async}}
     };
 }
 
@@ -54,8 +48,7 @@ Result<void, StorageErrorCode> MemoryStorageCore::ApplySnapshot(const Snapshot& 
     }
 
     snapshot_metadata_.CopyFrom(meta);
-    raft_state_.hard_state.set_term(
-        std::max(raft_state_.hard_state.term(), meta.term()));
+    raft_state_.hard_state.set_term(std::max(raft_state_.hard_state.term(), meta.term()));
     raft_state_.hard_state.set_commit(index);
     entries_.clear();
     raft_state_.conf_state.CopyFrom(meta.conf_state());
@@ -85,13 +78,11 @@ void MemoryStorageCore::Append(const std::vector<Entry>& ents) {
     }
 
     if (first_index() > ents.front().index()) {
-        PANIC("overwrite compacted raft logs, compacted: {}, append: {}",
-              first_index() - 1, ents[0].index());
+        PANIC("overwrite compacted raft logs, compacted: {}, append: {}", first_index() - 1, ents[0].index());
     }
 
     if (last_index() + 1 > ents.front().index()) {
-        PANIC("raft logs should be continuous, last index: {}, new appended: {}",
-              last_index(), ents.front().index());
+        PANIC("raft logs should be continuous, last index: {}, new appended: {}", last_index(), ents.front().index());
     }
 
     const uint64_t diff = ents.front().index() - first_index();
@@ -159,7 +150,8 @@ Result<RaftState, StorageErrorCode> MemoryStorage::InitialState() {
 }
 
 Result<std::vector<Entry>, StorageErrorCode> MemoryStorage::Entries(
-    const uint64_t low, uint64_t high, const std::optional<uint64_t> max_size, GetEntriesContext context) {
+    const uint64_t low, uint64_t high, const std::optional<uint64_t> max_size, GetEntriesContext context
+) {
     std::lock_guard lock(mutex_);
 
     if (low < core_.first_index()) {
@@ -179,8 +171,7 @@ Result<std::vector<Entry>, StorageErrorCode> MemoryStorage::Entries(
     const size_t lo = low - offset;
     const size_t hi = high - offset;
     std::vector<Entry> entries;
-    for (auto it = core_.entries_.begin() + lo;
-         it != core_.entries_.begin() + hi; ++it) {
+    for (auto it = core_.entries_.begin() + lo; it != core_.entries_.begin() + hi; ++it) {
         entries.emplace_back(*it);
     }
     LimitSize(entries, *max_size);
@@ -229,4 +220,4 @@ Result<Snapshot, StorageErrorCode> MemoryStorage::GetSnapshot(uint64_t request_i
     return snapshot;
 }
 
-}
+}  // namespace raftpp

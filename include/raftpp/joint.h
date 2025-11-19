@@ -5,7 +5,7 @@
 namespace raftpp {
 
 class JointConfiguration {
-public:
+  public:
     JointConfiguration();
     explicit JointConfiguration(const Set<uint64_t>& voters);
     JointConfiguration(const Set<uint64_t>& incoming, const Set<uint64_t>& outgoing);
@@ -15,9 +15,9 @@ public:
     void Clear();
     bool Contains(uint64_t id) const;
 
-private:
+  private:
     MajorityConfig incoming_;
     MajorityConfig outgoing_;
 };
 
-}
+}  // namespace raftpp

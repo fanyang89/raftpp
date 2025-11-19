@@ -1,13 +1,13 @@
 #pragma once
 
 #include "log_unstable.h"
-#include "raftpp/storage.h"
 #include "raftpp/config.h"
+#include "raftpp/storage.h"
 
 namespace raftpp {
 
 class RaftLog {
-public:
+  public:
     RaftLog(std::unique_ptr<Storage> store, const Config& cfg);
 
     uint64_t LastTerm() const;
@@ -23,14 +23,15 @@ public:
     };
 
     std::optional<MaybeAppendResult> MaybeAppend(
-        uint64_t idx, uint64_t term, uint64_t committed, const std::vector<Entry>& entries);
+        uint64_t idx, uint64_t term, uint64_t committed, const std::vector<Entry>& entries
+    );
     uint64_t Append(std::span<const Entry> span);
     void CommitTo(uint64_t to_commit);
 
     uint64_t committed() const;
     uint64_t applied() const;
 
-private:
+  private:
     std::unique_ptr<Storage> store_;
     Unstable unstable_;
     uint64_t committed_;
@@ -39,4 +40,4 @@ private:
     uint64_t max_apply_unpersisted_log_limit_;
 };
 
-}
+}  // namespace raftpp

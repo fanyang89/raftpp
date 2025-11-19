@@ -134,8 +134,7 @@ bool Progress::MaybeDecTo(const uint64_t rejected, uint64_t match_hint, const ui
         return true;
     }
 
-    if ((next_idx_ == 0 || next_idx_ - 1 != rejected)
-        && request_snapshot == INVALID_INDEX) {
+    if ((next_idx_ == 0 || next_idx_ - 1 != rejected) && request_snapshot == INVALID_INDEX) {
         return false;
     }
 
@@ -191,4 +190,4 @@ std::optional<Index> ProgressMap::AckedIndex(const uint64_t voter) {
     return {};
 }
 
-}
+}  // namespace raftpp

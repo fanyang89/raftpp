@@ -8,9 +8,11 @@
 namespace raftpp {
 
 class Unstable {
-public:
+  public:
     explicit Unstable(uint64_t offset);
-    Unstable(const std::vector<Entry>& entries, size_t entries_size, uint64_t offset, const std::optional<Snapshot>& snapshot);
+    Unstable(
+        const std::vector<Entry>& entries, size_t entries_size, uint64_t offset, const std::optional<Snapshot>& snapshot
+    );
 
     [[nodiscard]] std::optional<uint64_t> MaybeFirstIndex() const;
     [[nodiscard]] std::optional<uint64_t> MaybeLastIndex() const;
@@ -21,11 +23,11 @@ public:
     void TruncateAndAppend(std::span<const Entry> ents);
     void MustCheckOutOfBounds(uint64_t lo, uint64_t hi);
 
-private:
+  private:
     std::optional<Snapshot> snapshot_;
     std::vector<Entry> entries_;
     size_t entries_size_;
     uint64_t offset_;
 };
 
-}
+}  // namespace raftpp

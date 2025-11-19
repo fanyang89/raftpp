@@ -7,4 +7,4 @@ size_t EntryApproximateSize(const Entry& ent) {
     return ent.data().size() + ent.context().size() + 12;
 }
 
-}
+}  // namespace raftpp

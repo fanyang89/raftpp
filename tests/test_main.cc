@@ -1,6 +1,5 @@
 #define DOCTEST_CONFIG_IMPLEMENT
 #include "doctest/doctest.h"
-
 #include "raftpp/logging.h"
 
 int main(const int argc, char** argv) {

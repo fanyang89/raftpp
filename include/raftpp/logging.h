@@ -5,10 +5,10 @@
 namespace raftpp {
 
 class LogSink final : public absl::LogSink {
-public:
+  public:
     void Send(const absl::LogEntry& entry) override;
 };
 
 void RegisterLogSink();
 
-}
+}  // namespace raftpp

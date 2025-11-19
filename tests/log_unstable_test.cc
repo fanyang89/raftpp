@@ -1,6 +1,7 @@
 #include "raftpp/log_unstable.h"
 
 #include <vector>
+
 #include <doctest/doctest.h>
 
 #include "raftpp/raftpp.pb.h"
@@ -27,11 +28,19 @@ Snapshot NewSnapshot(const uint64_t index, const uint64_t term) {
 TEST_CASE("Maybe first index") {
     std::tuple<std::optional<Entry>, uint64_t, std::optional<Snapshot>, bool, uint64_t> test;
     // no snapshot
-    SUBCASE("") { test = {NewEntry(5, 1), 5, {}, false, 0}; }
-    SUBCASE("") { test = {{}, 0, {}, false, 0}; }
+    SUBCASE("") {
+        test = {NewEntry(5, 1), 5, {}, false, 0};
+    }
+    SUBCASE("") {
+        test = {{}, 0, {}, false, 0};
+    }
     // has snapshot
-    SUBCASE("") { test = {NewEntry(5, 1), 5, NewSnapshot(4, 1), true, 5}; }
-    SUBCASE("") { test = {{}, 5, NewSnapshot(4, 1), true, 5}; }
+    SUBCASE("") {
+        test = {NewEntry(5, 1), 5, NewSnapshot(4, 1), true, 5};
+    }
+    SUBCASE("") {
+        test = {{}, 5, NewSnapshot(4, 1), true, 5};
+    }
 
     std::optional<Entry> e;
     uint64_t offset;

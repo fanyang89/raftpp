@@ -53,10 +53,10 @@ struct ReadyRecord {
 };
 
 class RawNode {
-public:
-    RawNode(const Config &config, std::unique_ptr<Storage> store);
+  public:
+    RawNode(const Config& config, std::unique_ptr<Storage> store);
 
-private:
+  private:
     Raft raft_;
     SoftState prev_ss_;
     HardState prev_hs_;
@@ -65,4 +65,4 @@ private:
     uint64_t commit_since_index_;
 };
 
-}
+}  // namespace raftpp
