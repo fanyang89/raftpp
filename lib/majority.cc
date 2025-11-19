@@ -90,7 +90,7 @@ VoteResult MajorityConfig::GetVoteResult(const std::function<std::optional<bool>
 }
 
 void to_json(nlohmann::json& j, const MajorityConfig& p) {
-    j["voters"] = p;
+    j["voters"] = Set<uint64_t>(p);
 }
 
 void from_json(const nlohmann::json& j, MajorityConfig& p) {
