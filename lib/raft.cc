@@ -5,6 +5,7 @@
 
 #include <google/protobuf/util/message_differencer.h>
 
+#include "raftpp/conf_changer.h"
 #include "raftpp/conf_restore.h"
 #include "spdlog/spdlog.h"
 
@@ -1201,12 +1202,66 @@ bool Raft::Tick() {
     }
 }
 
+void Raft::SetPriority(const uint64_t priority) {
+    priority_ = priority;
+}
+
 ProgressTracker& Raft::progress_tracker() {
     return progress_tracker_;
 }
 
 const ProgressTracker& Raft::progress_tracker() const {
     return progress_tracker_;
+}
+
+HardState Raft::hard_state() const {
+    HardState hs;
+    hs.set_term(term_);
+    hs.set_vote(vote_);
+    hs.set_commit(raft_log_.committed());
+    return hs;
+}
+
+SoftState Raft::soft_state() const {
+    SoftState ss;
+    ss.leader_id = leader_id_;
+    ss.raft_state = state_;
+    return ss;
+}
+
+uint64_t Raft::id() const {
+    return id_;
+}
+
+void Raft::Ping() {
+    if (state_ == StateRole::Leader) {
+        BroadcastHeartbeat();
+    }
+}
+
+bool LeaveJoint(const ConfChangeV2& cc) {
+    return cc.transition() == Auto && cc.changes().empty();
+}
+
+Result<ConfState> Raft::ApplyConfChange(const ConfChangeV2& cc) {
+    ConfChanger changer(progress_tracker_);
+
+    Result<std::pair<TrackerConfiguration, MapChange>> r;
+    if (LeaveJoint(cc)) {
+        r = changer.LeaveJoint();
+    } else if (const auto auto_leave = cc.EnterJoint(auto_leave, cc.changes())) {
+        r = changer.EnterJoint(*auto_leave, cc.changes());
+    } else {
+        r = changer.Simple(cc.changes());
+    }
+
+    if (r) {
+        const auto& cfg = r->first;
+        const auto& changes = r->second;
+        progress_tracker_.ApplyConf(cfg, changes, raft_log_.LastIndex());
+    }
+
+    return PostConfChange();
 }
 
 MessageType Raft::VoteRespMsgType(const MessageType mt) {

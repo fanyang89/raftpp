@@ -9,7 +9,7 @@
 namespace raftpp {
 
 class Raft : public RaftCore {
-public:
+  public:
     Raft(const Config& config, std::unique_ptr<Storage> store);
 
     ConfState PostConfChange();
@@ -64,11 +64,18 @@ public:
     bool TickElection();
     bool TickHeartbeat();
     bool Tick();
+    void SetPriority(uint64_t priority);
 
     ProgressTracker& progress_tracker();
     const ProgressTracker& progress_tracker() const;
 
-private:
+    HardState hard_state() const;
+    SoftState soft_state() const;
+    uint64_t id() const;
+    void Ping();
+    Result<ConfState> ApplyConfChange(const ConfChangeV2& cc);
+
+  private:
     bool HasUnappliedConfChanges(uint64_t low, uint64_t high, const GetEntriesContext& ctx);
     void CommitApplyInternal(uint64_t applied, bool skip_check);
     void AbortLeaderTransfer();
@@ -83,4 +90,4 @@ private:
     Config config_;
 };
 
-} // namespace raftpp
+}  // namespace raftpp

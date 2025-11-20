@@ -111,6 +111,40 @@ Result<std::pair<TrackerConfiguration, MapChange>> ConfChanger::EnterJoint(
     }
 }
 
+Result<std::pair<TrackerConfiguration, std::vector<std::pair<uint64_t, MapChangeType>>>, RaftError>
+ConfChanger::LeaveJoint() {
+    if (!Joint(tracker_.conf())) {
+        return RaftError(ConfChangeError("can't leave a non-joint config"));
+    }
+
+    if (auto p = CheckAndCopy(); !p) {
+        return p.error();
+    } else {
+        TrackerConfiguration& cfg = p->first;
+        IncrChangeMap& prs = p->second;
+
+        if (cfg.voters.outgoing().empty()) {
+            return RaftError(ConfChangeError(fmt::format("configuration is not joint: {}", cfg)));
+        }
+
+        cfg.learners.insert(cfg.learners_next.begin(), cfg.learners_next.end());
+        cfg.learners_next.clear();
+
+        for (const auto id : cfg.voters.outgoing()) {
+            if (!cfg.voters.incoming().contains(id) && !cfg.learners.contains(id)) {
+                prs.changes().emplace_back(id, MapChangeType::Remove);
+            }
+        }
+
+        cfg.voters.outgoing().clear();
+        cfg.auto_leave = false;
+        if (const auto r = CheckInvariants(cfg, prs); !r) {
+            return r.error();
+        }
+        return std::make_pair(cfg, prs.ToChanges());
+    }
+}
+
 Result<void> ConfChanger::Apply(
     TrackerConfiguration& cfg, IncrChangeMap& prs, const std::span<const ConfChangeSingle> ccs
 ) {
@@ -145,7 +179,9 @@ Result<std::pair<TrackerConfiguration, MapChange>> ConfChanger::Simple(const Con
     return Simple(std::span{v.begin(), v.end()});
 }
 
-Result<std::pair<TrackerConfiguration, MapChange>> ConfChanger::Simple(const std::span<const ConfChangeSingle> ccs) const {
+Result<std::pair<TrackerConfiguration, MapChange>> ConfChanger::Simple(
+    const std::span<const ConfChangeSingle> ccs
+) const {
     if (Joint(tracker_.conf())) {
         return RaftError(ConfChangeError("can't apply simple config change in joint config"));
     }

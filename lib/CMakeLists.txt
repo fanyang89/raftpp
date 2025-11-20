@@ -1,22 +1,23 @@
 add_library(raftpp
-  raft_config.cc
+  ack_indexer.cc
+  CMakeLists.txt
+  conf_changer.cc
+  conf_restore.cc
   error.cc
-  joint.cc
-  log_unstable.cc
-  majority.cc
+  joint_conf.cc
+  majority_conf.cc
+  progress_tracker.cc
   progress.cc
-  quorum.cc
-  raft.cc
+  raft_config.cc
   raft_core.cc
   raft_log.cc
+  raft.cc
   raw_node.cc
-  readonly.cc
+  read_only.cc
   storage.cc
-  tracker.cc
-  util.cc
-  conf_restore.cc
-  conf_changer.cc
   tracker_conf.cc
+  unstable_log.cc
+  util.cc
 )
 
 target_include_directories(raftpp PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../include)

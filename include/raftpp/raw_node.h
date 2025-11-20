@@ -56,6 +56,15 @@ class RawNode {
   public:
     RawNode(const Config& config, std::unique_ptr<Storage> store);
 
+    void SetPriority(uint64_t priority);
+    bool Tick();
+    Result<void> Campaign();
+    Result<void> Propose(const std::string& ctx, const std::string& data);
+    void Ping();
+    Result<void> ProposeConfChange(const std::string& ctx, const ConfChangeV2& cc);
+    Result<ConfState> ApplyConfChange(const ConfChangeV2& cc);
+    Result<void> Step(Message m);
+
   private:
     Raft raft_;
     SoftState prev_ss_;
