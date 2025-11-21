@@ -4,6 +4,10 @@
 
 namespace raftpp {
 
+bool SoftState::operator==(const SoftState& other) const {
+    return raft_state == other.raft_state && leader_id == other.leader_id;
+}
+
 RaftCore::RaftCore(const Config& config, std::unique_ptr<Storage> store)
     : term_(0),
       vote_(0),

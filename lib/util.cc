@@ -23,8 +23,15 @@ bool IsContinuousEntries(const Message& message, const std::vector<Entry>& entri
     return true;
 }
 
-} // namespace raftpp
+bool operator==(const google::protobuf::Message& lhs, const google::protobuf::Message& rhs) {
+    return google::protobuf::util::MessageDifferencer::Equals(lhs, rhs);
+}
 
+bool operator!=(const google::protobuf::Message& lhs, const google::protobuf::Message& rhs) {
+    return !(lhs == rhs);
+}
+
+}  // namespace raftpp
 
 fmt::context::iterator fmt::formatter<raftpp::IndexTerm>::format(
     const raftpp::IndexTerm& value, const format_context& ctx

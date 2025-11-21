@@ -25,6 +25,8 @@ enum class StateRole : uint8_t {
 struct SoftState {
     uint64_t leader_id;
     StateRole raft_state;
+
+    bool operator==(const SoftState& other) const;
 };
 
 struct UncommittedState {

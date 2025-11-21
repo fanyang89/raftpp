@@ -351,4 +351,39 @@ void RaftLog::Restore(const Snapshot& snapshot) {
     unstable_.Restore(snapshot);
 }
 
-} // namespace raftpp
+uint64_t RaftLog::AppliedIndexUpperBound() const {
+    return std::min(committed_, persisted_ + max_apply_unpersisted_log_limit_);
+}
+
+bool RaftLog::HasNextEntriesSince(const uint64_t since_idx) const {
+    const auto offset = std::max(since_idx + 1, FirstIndex());
+    const auto high = AppliedIndexUpperBound() + 1;
+    return high > offset;
+}
+
+std::optional<std::vector<Entry>> RaftLog::NextEntriesSince(
+    const uint64_t since_idx, const std::optional<uint64_t> max_size
+) {
+    const auto offset = std::max(since_idx + 1, FirstIndex());
+    const auto high = AppliedIndexUpperBound() + 1;
+    if (high > offset) {
+        GetEntriesContext ctx;
+        ctx.what = GetEntriesFor::GenReady;
+        if (const auto r = Slice(offset, high, max_size, ctx)) {
+            return *r;
+        } else {
+            PANIC("{}", r.error());
+        }
+    }
+    return {};
+}
+
+void RaftLog::StableSnapshot(const uint64_t index) {
+    unstable_.StableSnapshot(index);
+}
+
+void RaftLog::StableEntries(const uint64_t index, const uint64_t term) {
+    unstable_.StableEntries(index, term);
+}
+
+}  // namespace raftpp

@@ -1206,6 +1206,42 @@ void Raft::SetPriority(const uint64_t priority) {
     priority_ = priority;
 }
 
+void Raft::ReduceUncommittedSize(const std::vector<Entry>& ents) {
+    if (state_ != StateRole::Leader) {
+        return;
+    }
+
+    if (!uncommitted_state_.MaybeReduceUncommittedSize(ents)) {
+        SPDLOG_WARN(
+            "try to reduce uncommitted size less than 0, first index of pending ents is {}", ents.front().index()
+        );
+    }
+}
+
+void Raft::CommitApply(const uint64_t applied) {
+    CommitApplyInternal(applied, false);
+}
+
+Result<void> Raft::RequestSnapshot() {
+    if (state_ == StateRole::Leader) {
+        SPDLOG_INFO("can not request snapshot on leader; dropping request snapshot");
+    } else if (leader_id_ == INVALID_ID) {
+        SPDLOG_INFO("no leader; dropping request snapshot, term={}", term_);
+    } else if (snapshot().has_value() || pending_request_snapshot_ != INVALID_INDEX) {
+        SPDLOG_INFO("there is a pending snapshot; dropping request snapshot");
+    } else {
+        const auto request_index = raft_log_.LastIndex();
+        const auto request_index_term = Unwrap(raft_log_.Term(request_index));
+        if (term_ == request_index_term) {
+            pending_request_snapshot_ = request_index;
+            SendRequestSnapshot();
+            return {};
+        }
+        SPDLOG_INFO("mismatched term; dropping request snapshot, term={}, last_term={}", term_, request_index_term);
+    }
+    return RaftError(RaftErrorCode::RequestSnapshotDropped);
+}
+
 ProgressTracker& Raft::progress_tracker() {
     return progress_tracker_;
 }
@@ -1223,14 +1259,62 @@ HardState Raft::hard_state() const {
 }
 
 SoftState Raft::soft_state() const {
-    SoftState ss;
+    SoftState ss{};
     ss.leader_id = leader_id_;
     ss.raft_state = state_;
     return ss;
 }
 
+const std::vector<ReadState>& Raft::read_states() const {
+    return read_states_;
+}
+
+std::vector<ReadState>& Raft::read_states() {
+    return read_states_;
+}
+
 uint64_t Raft::id() const {
     return id_;
+}
+
+uint64_t Raft::term() const {
+    return term_;
+}
+
+StateRole Raft::state() const {
+    return state_;
+}
+
+const RaftLog& Raft::raft_log() const {
+    return raft_log_;
+}
+
+RaftLog& Raft::raft_log() {
+    return raft_log_;
+}
+
+uint64_t Raft::max_committed_size_per_ready() const {
+    return max_committed_size_per_ready_;
+}
+
+uint64_t& Raft::max_committed_size_per_ready() {
+    return max_committed_size_per_ready_;
+}
+
+const std::vector<Message>& Raft::messages() const {
+    return messages_;
+}
+
+std::vector<Message>& Raft::messages() {
+    return messages_;
+}
+
+std::optional<std::reference_wrapper<Snapshot>> Raft::snapshot() {
+    return raft_log_.unstable().snapshot();
+}
+
+const std::optional<Snapshot>& Raft::snapshot() const {
+    return raft_log_.unstable().snapshot();
 }
 
 void Raft::Ping() {
@@ -1243,16 +1327,34 @@ bool LeaveJoint(const ConfChangeV2& cc) {
     return cc.transition() == Auto && cc.changes().empty();
 }
 
+std::optional<bool> EnterJoint(const ConfChangeV2& cc) {
+    if (cc.transition() != Auto || cc.changes_size() > 1) {
+        switch (cc.transition()) {
+            case Auto:
+            case Implicit:
+                return true;
+            case Explicit:
+                return false;
+            default:
+                PANIC("unexpected transition");
+        }
+    }
+    return {};
+}
+
 Result<ConfState> Raft::ApplyConfChange(const ConfChangeV2& cc) {
     ConfChanger changer(progress_tracker_);
 
     Result<std::pair<TrackerConfiguration, MapChange>> r;
     if (LeaveJoint(cc)) {
         r = changer.LeaveJoint();
-    } else if (const auto auto_leave = cc.EnterJoint(auto_leave, cc.changes())) {
-        r = changer.EnterJoint(*auto_leave, cc.changes());
     } else {
-        r = changer.Simple(cc.changes());
+        std::vector ccs(cc.changes().begin(), cc.changes().end());
+        if (const auto auto_leave = EnterJoint(cc)) {
+            r = changer.EnterJoint(*auto_leave, ccs);
+        } else {
+            r = changer.Simple(ccs);
+        }
     }
 
     if (r) {

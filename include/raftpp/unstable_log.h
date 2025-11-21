@@ -17,16 +17,18 @@ class Unstable {
     [[nodiscard]] std::optional<uint64_t> MaybeFirstIndex() const;
     [[nodiscard]] std::optional<uint64_t> MaybeLastIndex() const;
     [[nodiscard]] std::optional<uint64_t> MaybeTerm(uint64_t idx) const;
-    void StableEntries(uint64_t index, uint32_t term);
+    [[nodiscard]] std::span<const Entry> Slice(uint64_t lo, uint64_t hi);
+    void MustCheckOutOfBounds(uint64_t lo, uint64_t hi);
     void Restore(const Snapshot& snapshot);
+    void StableEntries(uint64_t index, uint32_t term);
+    void StableSnapshot(uint64_t index);
     void TruncateAndAppend(const std::vector<Entry>& ents);
     void TruncateAndAppend(std::span<const Entry> ents);
-    void MustCheckOutOfBounds(uint64_t lo, uint64_t hi);
 
-    std::optional<Snapshot>& snapshot();
-    std::optional<Snapshot> snapshot() const;
+    const std::vector<Entry>& entries() const;
+    const std::optional<Snapshot>& snapshot() const;
+    std::optional<std::reference_wrapper<Snapshot>> snapshot();
     uint64_t offset() const;
-    std::span<const Entry> Slice(uint64_t lo, uint64_t hi);
 
   private:
     std::optional<Snapshot> snapshot_;

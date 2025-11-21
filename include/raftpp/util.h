@@ -1,5 +1,7 @@
 #pragma once
 
+#include <google/protobuf/message.h>
+#include <google/protobuf/util/message_differencer.h>
 #include <spdlog/fmt/fmt.h>
 
 #include "raftpp/raftpp.pb.h"
@@ -17,8 +19,7 @@ struct IndexTerm {
 size_t EntryApproximateSize(const Entry& ent);
 
 template <typename T>
-concept HasByteSizeLong = requires(const T& t)
-{
+concept HasByteSizeLong = requires(const T& t) {
     { t.ByteSizeLong() } -> std::convertible_to<std::size_t>;
 };
 
@@ -52,7 +53,10 @@ void LimitSize(std::vector<M>& entries, const std::optional<uint64_t> max) {
 
 bool IsContinuousEntries(const Message& message, const std::vector<Entry>& entries);
 
-} // namespace raftpp
+bool operator==(const google::protobuf::Message& lhs, const google::protobuf::Message& rhs);
+bool operator!=(const google::protobuf::Message& lhs, const google::protobuf::Message& rhs);
+
+}  // namespace raftpp
 
 template <>
 struct fmt::formatter<raftpp::IndexTerm> : formatter<std::string_view> {

@@ -56,16 +56,31 @@ class RawNode {
   public:
     RawNode(const Config& config, std::unique_ptr<Storage> store);
 
-    void SetPriority(uint64_t priority);
-    bool Tick();
+    LightReady Advance(const Ready& rd);
+    LightReady AdvanceAppend(const Ready& rd);
+    Ready GetReady();
+    Result<ConfState> ApplyConfChange(const ConfChangeV2& cc);
     Result<void> Campaign();
     Result<void> Propose(const std::string& ctx, const std::string& data);
-    void Ping();
     Result<void> ProposeConfChange(const std::string& ctx, const ConfChangeV2& cc);
-    Result<ConfState> ApplyConfChange(const ConfChangeV2& cc);
     Result<void> Step(Message m);
+    bool HasReady() const;
+    bool Tick();
+    void AdvanceApply();
+    void AdvanceApplyTo(uint64_t applied);
+    void AdvanceAppendAsync(const Ready& rd);
+    void CommitReady(const Ready& rd);
+    void OnEntriesFetched(const GetEntriesContext& ctx);
+    void OnPersistReady(uint64_t number);
+    void Ping();
+    void SetPriority(uint64_t priority);
+    Result<void> RequestSnapshot();
+    void TransferLeader(uint64_t transferee);
+    void ReadIndex(const std::string& ctx);
 
   private:
+    LightReady GetLightReady();
+
     Raft raft_;
     SoftState prev_ss_;
     HardState prev_hs_;

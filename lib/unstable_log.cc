@@ -1,7 +1,8 @@
+#include "raftpp/unstable_log.h"
+
 #include <libassert/assert.hpp>
 #include <spdlog/spdlog.h>
 
-#include "raftpp/unstable_log.h"
 #include "raftpp/util.h"
 
 namespace raftpp {
@@ -112,6 +113,17 @@ void Unstable::TruncateAndAppend(std::span<const Entry> ents) {
     }
 }
 
+void Unstable::StableSnapshot(const uint64_t index) {
+    if (const auto snapshot = snapshot_) {
+        if (snapshot->metadata().index() != index) {
+            PANIC("unstable.snap has different index {}, expect {}", snapshot->metadata().index(), index);
+        }
+        snapshot_ = {};
+    } else {
+        PANIC("unstable.snap is none, expect a snapshot with index {}", index);
+    }
+}
+
 void Unstable::MustCheckOutOfBounds(uint64_t lo, uint64_t hi) {
     ASSERT(lo <= hi, "invalid unstable.slice {} > {}", lo, hi);
 
@@ -119,16 +131,23 @@ void Unstable::MustCheckOutOfBounds(uint64_t lo, uint64_t hi) {
     ASSERT(offset_ <= lo && hi <= upper, "unstable.slice[{}, {}] out of bound[{}, {}]", lo, hi, offset_, upper);
 }
 
-std::optional<Snapshot>& Unstable::snapshot() {
-    return snapshot_;
+std::optional<std::reference_wrapper<Snapshot>> Unstable::snapshot() {
+    if (snapshot_) {
+        return *snapshot_;
+    }
+    return {};
 }
 
-std::optional<Snapshot> Unstable::snapshot() const {
+const std::optional<Snapshot>& Unstable::snapshot() const {
     return snapshot_;
 }
 
 uint64_t Unstable::offset() const {
     return offset_;
+}
+
+const std::vector<Entry>& Unstable::entries() const {
+    return entries_;
 }
 
 std::span<const Entry> Unstable::Slice(const uint64_t lo, const uint64_t hi) {
