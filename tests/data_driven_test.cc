@@ -51,10 +51,12 @@ TestDataReaderIter::TestDataReaderIter(const std::vector<std::string>& lines) : 
 }
 
 TestDataReaderIter& TestDataReaderIter::operator++() {
-    if (p_ < lines_->get().size()) {
-        data_ = Parse(lines_->get()[p_]);
-        ++p_;
-        return *this;
+    if (lines_) {
+        if (p_ < lines_->get().size()) {
+            data_ = Parse(lines_->get()[p_]);
+            ++p_;
+            return *this;
+        }
     }
 
     static TestDataReaderIter end;
@@ -80,6 +82,14 @@ bool TestDataReaderIter::operator==(const TestDataReaderIter& other) const noexc
         return true;
     }
 
+    if (lines_ && p_ >= lines_->get().size() && !other.lines_.has_value()) {
+        return true;
+    }
+
+    if (other.lines_ && other.p_ >= other.lines_->get().size() && !lines_.has_value()) {
+        return true;
+    }
+
     return false;
 }
 
@@ -87,8 +97,9 @@ bool TestDataReaderIter::operator!=(const TestDataReaderIter& other) const noexc
     return !(*this == other);
 }
 
-TestData TestDataReaderIter::Parse(std::string_view line) {
+TestData TestDataReaderIter::Parse(const std::string_view line) {
     TestData d{};
+    d.input = line;
     return d;
 }
 
