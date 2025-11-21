@@ -1,6 +1,8 @@
 add_executable(raftpp-tests
   test_main.cc
+
   log_unstable_test.cc
+  conf_change_data_test.cc
   progress_test.cc
   json_test.cc
 )
@@ -8,3 +10,5 @@ add_executable(raftpp-tests
 target_link_libraries(raftpp-tests PRIVATE raftpp)
 target_link_libraries(raftpp-tests PRIVATE raftpp-proto)
 target_link_libraries(raftpp-tests PRIVATE gtest gmock)
+
+add_library(data)
