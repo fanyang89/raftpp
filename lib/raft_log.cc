@@ -90,7 +90,7 @@ bool RaftLog::MaybePersist(const uint64_t index, const uint64_t term) {
     uint64_t first_update_index;
 
     if (const auto snapshot = unstable_.snapshot()) {
-        first_update_index = snapshot->metadata().index();
+        first_update_index = snapshot->get().metadata().index();
     } else {
         first_update_index = unstable_.offset();
     }
@@ -289,7 +289,7 @@ std::pair<uint64_t, std::optional<uint64_t>> RaftLog::FindConflictByTerm(uint64_
 
 Result<Snapshot, StorageErrorCode> RaftLog::GetSnapshot(const uint64_t request_index, const uint64_t to) {
     if (const auto r = unstable_.snapshot()) {
-        if (r->metadata().index() >= request_index) {
+        if (r->get().metadata().index() >= request_index) {
             return *r;
         }
     }

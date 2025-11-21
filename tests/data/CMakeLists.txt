@@ -10,7 +10,9 @@ add_library(raftpp-test-data-conf-change
   conf_change/generated/simple_safety.cpp
   conf_change/generated/zero.cpp
 )
-target_include_directories(raftpp-test-data-conf-change PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/conf_change/generated")
+
+target_include_directories(raftpp-test-data-conf-change PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/conf_change/generated")
+target_include_directories(raftpp-test-data-conf-change PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 
 add_library(raftpp-test-data-quorum
   quorum/generated/joint_commit.cpp
@@ -19,4 +21,6 @@ add_library(raftpp-test-data-quorum
   quorum/generated/majority_commit.cpp
   quorum/generated/majority_vote.cpp
 )
-target_include_directories(raftpp-test-data-quorum PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/quorum/generated")
+
+target_include_directories(raftpp-test-data-quorum PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/quorum/generated")
+target_include_directories(raftpp-test-data-quorum PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")

@@ -2,7 +2,6 @@
 
 #include <google/protobuf/util/message_differencer.h>
 
-#include "../build/_deps/googletest-src/googletest/include/gtest/gtest.h"
 #include "raftpp/util.h"
 
 namespace raftpp {
