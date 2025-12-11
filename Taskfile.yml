@@ -26,3 +26,25 @@ tasks:
     platforms: [linux]
     cmds:
       - clang-format --style=file -i lib/*.cc include/raftpp/*.h tests/*.cc
+
+  cmake:
+    cmds:
+      - cmake --preset=dev
+
+  build-test:
+    deps:
+      - cmake
+    cmds:
+      - cmake --build build --target raftpp-tests
+
+  list-tests:
+    deps:
+      - build-test
+    cmds:
+      - ./build/tests/raftpp-tests --gtest_list_tests
+
+  test:
+    deps:
+      - build-test
+    cmds:
+      - ./build/tests/raftpp-tests
