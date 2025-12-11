@@ -1,20 +1,22 @@
-#include "raftpp/datadriven/datadriven.h"
+#include "datadriven/datadriven.h"
 
 #include <sstream>
-#include <algorithm>
+
+#include <gtest/gtest.h>
 
 using namespace raftpp::datadriven;
 
 // 辅助函数：计算斐波那契数列
 int Fibonacci(int n) {
-    if (n <= 1) return n;
+    if (n <= 1)
+        return n;
     return Fibonacci(n - 1) + Fibonacci(n - 2);
 }
 
 // 数学运算测试函数
 std::string TestMathOperations(const TestData& data) {
     std::string result;
-    
+
     if (data.cmd == "fibonacci") {
         for (const auto& arg : data.cmd_args) {
             if (arg.HasValue()) {
@@ -77,14 +79,14 @@ std::string TestMathOperations(const TestData& data) {
             result += arg.key + "=" + std::to_string(count) + "\n";
         }
     }
-    
+
     return result;
 }
 
 // 字符串操作测试函数
 std::string TestStringOperations(const TestData& data) {
     std::string result;
-    
+
     if (data.cmd == "concat") {
         std::string concatenated;
         for (const auto& arg : data.cmd_args) {
@@ -94,27 +96,27 @@ std::string TestStringOperations(const TestData& data) {
         }
         result = concatenated;
     }
-    
+
     return result;
 }
 
 // Raft 算法测试函数
 std::string TestRaftAlgorithm(const TestData& data) {
     std::string result;
-    
+
     if (data.cmd == "leader_election") {
         auto nodes = data.GetValues("nodes");
         auto votes = data.GetValues("votes");
         auto term = data.GetValue("term");
-        
+
         if (nodes && votes && term) {
             int vote_count = votes->size();
             int node_count = nodes->size();
             int current_term = std::stoi(*term);
-            
+
             // 简单的选举逻辑：获得多数票的节点成为领导者
             bool has_majority = vote_count > (node_count / 2);
-            
+
             if (has_majority) {
                 result += "leader=" + (*votes)[0] + "\n";
                 result += "term=" + *term + "\n";
@@ -125,7 +127,7 @@ std::string TestRaftAlgorithm(const TestData& data) {
         auto partition1 = data.GetValues("partition1");
         auto partition2 = data.GetValues("partition2");
         auto current_term = data.GetValue("current_term");
-        
+
         if (partition1 && partition2 && current_term) {
             result += "partition1_leader=" + (*partition1)[0] + "\n";
             result += "partition2_leader=" + (*partition2)[0] + "\n";
@@ -135,7 +137,7 @@ std::string TestRaftAlgorithm(const TestData& data) {
         auto current_leader = data.GetValue("current_leader");
         auto new_term = data.GetValue("new_term");
         auto votes = data.GetValues("votes");
-        
+
         if (current_leader && new_term && votes) {
             result += "new_leader=1\n";
             result += "term=" + *new_term + "\n";
@@ -145,7 +147,7 @@ std::string TestRaftAlgorithm(const TestData& data) {
         auto majority1 = data.GetValues("majority1");
         auto majority2 = data.GetValues("majority2");
         auto term = data.GetValue("term");
-        
+
         if (majority1 && majority2 && term) {
             result += "split_detected=true\n";
             result += "no_majority=true\n";
@@ -156,7 +158,7 @@ std::string TestRaftAlgorithm(const TestData& data) {
         auto followers = data.GetValues("followers");
         auto entries = data.GetValues("entries");
         auto term = data.GetValue("term");
-        
+
         if (leader && followers && entries && term) {
             result += "success=true\n";
             result += "replicated=" + std::to_string(followers->size()) + "\n";
@@ -167,18 +169,20 @@ std::string TestRaftAlgorithm(const TestData& data) {
         auto followers = data.GetValues("followers");
         auto entries = data.GetValues("entries");
         auto term = data.GetValue("term");
-        
+
         if (leader && followers && entries && term) {
             result += "leader: " + *leader + "\n";
             result += "followers: [";
             for (size_t i = 0; i < followers->size(); ++i) {
-                if (i > 0) result += ", ";
+                if (i > 0)
+                    result += ", ";
                 result += (*followers)[i];
             }
             result += "]\n";
             result += "entries: [";
             for (size_t i = 0; i < entries->size(); ++i) {
-                if (i > 0) result += ", ";
+                if (i > 0)
+                    result += ", ";
                 result += (*entries)[i];
             }
             result += "]\n";
@@ -190,12 +194,12 @@ std::string TestRaftAlgorithm(const TestData& data) {
         auto leader = data.GetValue("leader");
         auto available = data.GetValues("available_followers");
         auto unreachable = data.GetValues("unreachable_followers");
-        
+
         if (leader && available && unreachable) {
             int total_followers = available->size() + unreachable->size();
             int replicated_count = available->size();
             bool quorum_achieved = replicated_count > (total_followers / 2);
-            
+
             result += "success=true\n";
             result += "replicated=" + std::to_string(replicated_count) + "\n";
             result += "failed=" + std::to_string(unreachable->size()) + "\n";
@@ -207,7 +211,7 @@ std::string TestRaftAlgorithm(const TestData& data) {
         auto conflicting_term = data.GetValue("conflicting_term");
         auto current_term = data.GetValue("current_term");
         auto entries = data.GetValues("entries");
-        
+
         if (leader && conflicting_term && current_term && entries) {
             result += "conflict_detected=true\n";
             result += "conflict_term=" + *conflicting_term + "\n";
@@ -215,30 +219,26 @@ std::string TestRaftAlgorithm(const TestData& data) {
             result += "entries_replaced=true\n";
             result += "new_entries=[";
             for (size_t i = 0; i < entries->size(); ++i) {
-                if (i > 0) result += ", ";
+                if (i > 0)
+                    result += ", ";
                 result += (*entries)[i];
             }
             result += "]\n";
             result += "resolution=success\n";
         }
     }
-    
+
     return result;
 }
 
-// doctest 测试用例
-TEST_SUITE_BEGIN("DataDriven Tests");
-
-TEST_CASE("Math operations") {
+TEST(DataDrivenTest, Mathoperations) {
     DataDrivenTest::RunTest("tests/testdata/math_operations", TestMathOperations);
 }
 
-TEST_CASE("String operations") {
+TEST(DataDrivenTest, StringOperations) {
     DataDrivenTest::RunTest("tests/testdata/string_operations", TestStringOperations);
 }
 
-TEST_CASE("Raft algorithm") {
+TEST(DataDrivenTest, Raft) {
     DataDrivenTest::RunTest("tests/testdata/raft_algorithm", TestRaftAlgorithm);
 }
-
-TEST_SUITE_END();

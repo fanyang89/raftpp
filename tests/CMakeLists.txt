@@ -1,4 +1,5 @@
 add_subdirectory(data)
+add_subdirectory(datadriven)
 
 add_executable(raftpp-tests
   test_main.cc
@@ -16,3 +17,4 @@ target_link_libraries(raftpp-tests PRIVATE raftpp-proto)
 target_link_libraries(raftpp-tests PRIVATE gtest gmock)
 target_link_libraries(raftpp-tests PRIVATE raftpp-test-data-conf-change)
 target_link_libraries(raftpp-tests PRIVATE raftpp-test-data-quorum)
+target_link_libraries(raftpp-tests PRIVATE raftpp-datadriven)

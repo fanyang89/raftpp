@@ -1,6 +1,6 @@
 # https://taskfile.dev
 
-version: '3'
+version: "3"
 
 dotenv:
   - .env
@@ -11,18 +11,18 @@ vars:
 tasks:
   proto:
     cmds:
-      - platform: [windows]
+      - platforms: [windows]
         cmd: >
           $BUILD_DIR/{{.PROTOBUF_DIR}}/protoc.exe
           -I proto
           --cpp_out=proto/generated/raftpp
           raftpp.proto
   vs:
-    platform: [windows]
+    platforms: [windows]
     cmds:
       - cmake -S . -B vs -G "Visual Studio 17 2022"
 
   fmt:
-    platform: [linux]
+    platforms: [linux]
     cmds:
       - clang-format --style=file -i lib/*.cc include/raftpp/*.h tests/*.cc

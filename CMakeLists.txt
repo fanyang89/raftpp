@@ -47,6 +47,5 @@ add_subdirectory(lib)
 add_subdirectory(proto)
 
 if (RAFTPP_BUILD_TESTING)
-  add_subdirectory(lib/datadriven)
   add_subdirectory(tests)
 endif ()
