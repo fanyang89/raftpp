@@ -34,8 +34,6 @@ tasks:
       - cmake --preset=dev
 
   build-test:
-    deps:
-      - cmake
     cmds:
       - cmake --build build --target raftpp-tests
 
