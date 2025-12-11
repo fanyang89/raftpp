@@ -1,0 +1,55 @@
+# Raft 日志复制测试
+
+# 基本日志复制
+log_replication \
+leader=1 \
+followers=(2,3,4,5) \
+entries=(cmd1,cmd2,cmd3) \
+term=2
+----
+success=true
+replicated=4
+term=2
+
+# 多行输出测试
+detailed_replication \
+leader=3 \
+followers=(1,2,4,5) \
+entries=(set x=5, set y=10, set z=15)
+----
+----
+leader: 3
+followers: [1, 2, 4, 5]
+entries: [set x=5, set y=10, set z=15]
+term: 2
+replication_status: success
+replicated_count: 4
+----
+----
+
+# 网络分区期间的日志复制
+partitioned_replication \
+leader=1 \
+available_followers=(2,3) \
+unreachable_followers=(4,5) \
+entries=(update_a,update_b)
+----
+success=true
+replicated=2
+failed=3
+quorum_achieved=true
+partial_replication=true
+
+# 日志冲突解决
+log_conflict \
+leader=1 \
+conflicting_term=3 \
+current_term=5 \
+entries=(old_entry,new_entry)
+----
+conflict_detected=true
+conflict_term=3
+current_term=5
+entries_replaced=true
+new_entries=[old_entry, new_entry]
+resolution=success

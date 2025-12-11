@@ -1,0 +1,42 @@
+# Raft Leader 选举测试
+
+# 基本选举测试
+leader_election \
+nodes=(1,2,3,4,5) \
+term=1 \
+votes=(1,2,3)
+----
+leader=1
+term=1
+votes=3
+
+# 网络分区后的选举
+network_partition \
+partition1=(1,2,3) \
+partition2=(4,5) \
+current_term=5
+----
+partition1_leader=1
+partition2_leader=4
+term_conflict=true
+
+# 高任期领导者选举
+higher_term_election \
+current_leader=2 \
+current_term=3 \
+new_term=5 \
+votes=(1,3,4,5)
+----
+new_leader=1
+term=5
+old_leader_step_down=true
+
+# 脑裂场景
+split_brain \
+majority1=(1,2,3) \
+majority2=(4,5,6) \
+term=7
+----
+split_detected=true
+no_majority=false
+requires_intervention=true
