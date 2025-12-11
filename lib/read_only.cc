@@ -1,6 +1,7 @@
+#include "raftpp/read_only.h"
+
 #include <libassert/assert.hpp>
 
-#include "raftpp/read_only.h"
 #include "raftpp/util.h"
 
 namespace raftpp {
@@ -57,4 +58,4 @@ std::vector<ReadIndexStatus> ReadOnly::Advance(const std::string& ctx) {
     return rss;
 }
 
-} // namespace raftpp
+}  // namespace raftpp

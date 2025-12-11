@@ -10,7 +10,7 @@ namespace datadriven {
  * ParseException 用于表示测试数据解析过程中的错误
  */
 class ParseException : public std::runtime_error {
-public:
+  public:
     /**
      * 构造函数
      * @param message 错误消息
@@ -18,23 +18,23 @@ public:
      * @param line 行号
      */
     ParseException(const std::string& message, const std::string& file, int line);
-    
+
     /**
      * 获取文件名
      */
     const std::string& GetFile() const { return file_; }
-    
+
     /**
      * 获取行号
      */
     int GetLine() const { return line_; }
-    
+
     /**
      * 获取完整的错误信息（包含文件和行号）
      */
     std::string GetFullMessage() const;
-    
-private:
+
+  private:
     std::string file_;
     int line_;
 };
@@ -43,22 +43,22 @@ private:
  * TestException 用于表示测试执行过程中的错误
  */
 class TestException : public std::runtime_error {
-public:
+  public:
     /**
      * 构造函数
      * @param message 错误消息
      * @param test_data 测试数据信息
      */
     TestException(const std::string& message, const std::string& test_data_pos);
-    
+
     /**
      * 获取测试数据位置信息
      */
     const std::string& GetTestDataPos() const { return test_data_pos_; }
-    
-private:
+
+  private:
     std::string test_data_pos_;
 };
 
-} // namespace datadriven
-} // namespace raftpp
+}  // namespace datadriven
+}  // namespace raftpp

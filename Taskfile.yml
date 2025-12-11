@@ -25,7 +25,9 @@ tasks:
   fmt:
     platforms: [linux]
     cmds:
-      - clang-format --style=file -i lib/*.cc include/raftpp/*.h tests/*.cc
+      - >
+        clang-format --style=file -i
+        $(git ls-files | grep '.cc$\|.h$\|.hpp$' | grep -v 'sqlite3ext\.\|sqlite3\.\|\.pb\.\|generated')
 
   cmake:
     cmds:

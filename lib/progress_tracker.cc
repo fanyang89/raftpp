@@ -1,6 +1,6 @@
-#include <libassert/assert.hpp>
-
 #include "raftpp/progress_tracker.h"
+
+#include <libassert/assert.hpp>
 
 namespace raftpp {
 

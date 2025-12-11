@@ -8,7 +8,6 @@ RaftError InvalidConfigError::ToError() const {
     return {*this};
 }
 
-
 }  // namespace raftpp
 
 fmt::context::iterator fmt::formatter<raftpp::InvalidConfigError>::format(

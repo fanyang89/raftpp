@@ -1,6 +1,6 @@
-#include <spdlog/fmt/fmt.h>
-
 #include "raftpp/raft_config.h"
+
+#include <spdlog/fmt/fmt.h>
 
 namespace raftpp {
 

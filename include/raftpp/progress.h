@@ -20,7 +20,7 @@ class Inflights {
     void FreeTo(uint64_t to);
     void FreeFirstOne();
 
-private:
+  private:
     boost::circular_buffer<uint64_t> buffer_;
 };
 

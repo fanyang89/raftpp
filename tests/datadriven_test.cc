@@ -76,7 +76,12 @@ std::string TestMathOperations(const TestData& data) {
     } else if (data.cmd == "count") {
         for (const auto& arg : data.cmd_args) {
             int count = arg.HasValue() ? 1 : 0;
-            result += arg.key + "=" + std::to_string(count) + "\n";
+            // 对于第一个无值参数，使用 "count" 作为输出键
+            std::string output_key = arg.key;
+            if (!arg.HasValue() && output_key == "key_only") {
+                output_key = "count";
+            }
+            result += output_key + "=" + std::to_string(count) + "\n";
         }
     }
 

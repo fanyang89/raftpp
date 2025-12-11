@@ -106,64 +106,28 @@ std::optional<std::string> TestDataReader::GetRewriteBuffer() const {
 }
 
 void TestDataReader::ReadExpected() {
-    // 检查是否是双分隔符模式（支持空白行）
+    // 读取期望输出，直到遇到空行或文件结束
     std::string line;
-    bool allow_blank_lines = false;
 
-    if (std::getline(content_, line)) {
+    while (std::getline(content_, line)) {
         ++line_number_;
         current_line_ = line;
+        EmitLine(line);
 
-        if (Trim(line) == "----") {
-            allow_blank_lines = true;
+        std::string trimmed = Trim(line);
+
+        // 如果遇到空行，停止读取
+        if (trimmed.empty()) {
+            break;
         }
-    }
 
-    if (allow_blank_lines) {
-        // 双分隔符模式，读取直到遇到双分隔符
-        while (std::getline(content_, line)) {
-            ++line_number_;
-            current_line_ = line;
-
-            if (Trim(line) == "----") {
-                // 检查是否是结束的双分隔符
-                if (std::getline(content_, line)) {
-                    ++line_number_;
-                    current_line_ = line;
-
-                    if (Trim(line) == "----") {
-                        // 读取最后的空行
-                        if (std::getline(content_, line)) {
-                            ++line_number_;
-                            current_line_ = line;
-                            if (!Trim(line).empty()) {
-                                throw ParseException(
-                                    "Expected blank line after double separator", filename_, line_number_
-                                );
-                            }
-                        }
-                        break;
-                    }
-                }
-
-                current_test_.expected += line + "\n";
-                continue;
-            }
-
-            current_test_.expected += line + "\n";
+        // 如果遇到分隔符，停止读取
+        if (trimmed == "----") {
+            break;
         }
-    } else {
-        // 单分隔符模式，读取到第一个空行
-        while (std::getline(content_, line)) {
-            ++line_number_;
-            current_line_ = line;
 
-            if (Trim(line).empty()) {
-                break;
-            }
-
-            current_test_.expected += line + "\n";
-        }
+        // 添加到期望输出
+        current_test_.expected += line + "\n";
     }
 }
 
