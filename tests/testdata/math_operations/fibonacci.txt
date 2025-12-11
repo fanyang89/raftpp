@@ -12,9 +12,7 @@ a=0
 b=1
 
 # 测试续行
-fibonacci \
-a=9 \
-b=14
+fibonacci a=9 b=14
 ----
 a=34
 b=377

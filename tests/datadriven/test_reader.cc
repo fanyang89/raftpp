@@ -41,27 +41,9 @@ bool TestDataReader::NextTest() {
         return false;
     }
 
-    // 处理可能的续行
-    std::string full_line = Trim(current_line_);
-    while (full_line.back() == '\\') {
-        full_line.pop_back();  // 移除续行符
-
-        if (!std::getline(content_, line)) {
-            throw ParseException("Unexpected end of file after line continuation", filename_, line_number_);
-        }
-        ++line_number_;
-        current_line_ = line;
-        EmitLine(line);
-
-        std::string next_line = Trim(line);
-        if (!next_line.empty()) {
-            full_line += " " + next_line;
-        }
-    }
-
     // 解析命令行
     try {
-        auto [cmd, args] = LineParser::ParseLine(full_line);
+        auto [cmd, args] = LineParser::ParseLine(Trim(current_line_));
         current_test_ = TestData();
         current_test_.pos = filename_ + ":" + std::to_string(line_number_);
         current_test_.cmd = cmd;

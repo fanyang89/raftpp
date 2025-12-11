@@ -94,9 +94,14 @@ std::string TestStringOperations(const TestData& data) {
 
     if (data.cmd == "concat") {
         std::string concatenated;
+        bool first = true;
         for (const auto& arg : data.cmd_args) {
             if (arg.HasValue()) {
+                if (!first) {
+                    concatenated += "_";
+                }
                 concatenated += arg.GetValue();
+                first = false;
             }
         }
         result = concatenated;

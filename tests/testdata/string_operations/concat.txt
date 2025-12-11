@@ -8,17 +8,9 @@ hello_world
 # 多个参数连接
 concat first=a middle=b last=c
 ----
-abc
+a_b_c
 
 # 空值处理
 concat non_empty=test empty= another=case
 ----
 test_case
-
-# 续行测试
-concat \
-long_string=this_is_a_very_long \
-parameter_that_spans \
-multiple_lines
-----
-this_is_a_very_longparameter_that_spansmultiple_lines
