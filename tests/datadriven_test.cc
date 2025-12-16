@@ -2,7 +2,7 @@
 
 #include <gtest/gtest.h>
 
-#include "datadriven/data_driven.h"
+#include "data-driven/data_driven.h"
 
 using namespace raftpp::datadriven;
 
