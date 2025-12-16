@@ -5,12 +5,13 @@
 
 #include "raftpp/raft.h"
 #include "raftpp/raftpp.pb.h"
+#include "raftpp/status.h"
 
 namespace raftpp {
 
 struct Peer {
     /// The ID of the peer.
-    uint64_t id;
+    uint64_t id = 0;
     /// If there is context associated with the peer (like connection information), it can be
     /// serialized and stored here.
     std::optional<std::vector<uint8_t>> context;
@@ -33,19 +34,21 @@ struct LightReady {
 };
 
 struct Ready {
-    uint64_t number;
+    uint64_t number = 0;
     std::optional<SoftState> ss;
     std::optional<HardState> hs;
     std::vector<ReadState> read_states;
     std::vector<Entry> entries;
     Snapshot snapshot;
-    bool is_persisted_msg;
+    bool is_persisted_msg = false;
     LightReady light;
-    bool must_sync;
+    bool must_sync = false;
+
+    const std::vector<Message>& Messages() const;
 };
 
 struct ReadyRecord {
-    uint64_t number;
+    uint64_t number = 0;
     // (index, term) of the last entry from the entries in Ready
     std::optional<std::pair<uint64_t, uint64_t>> last_entry;
     // (index, term) of the snapshot in Ready
@@ -77,6 +80,9 @@ class RawNode {
     Result<void> RequestSnapshot();
     void TransferLeader(uint64_t transferee);
     void ReadIndex(const std::string& ctx);
+    Status GetStatus();
+    void ReportUnreachable(uint64_t id);
+    void ReportSnapshot(uint64_t id, SnapshotStatus status);
 
   private:
     LightReady GetLightReady();

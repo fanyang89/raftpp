@@ -18,6 +18,7 @@ add_library(raftpp
   tracker_conf.cc
   unstable_log.cc
   util.cc
+  memory_storage.cc
 )
 
 target_include_directories(raftpp PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../include)
@@ -29,3 +30,5 @@ target_link_libraries(raftpp PUBLIC spdlog)
 target_link_libraries(raftpp PUBLIC nlohmann_json::nlohmann_json)
 target_link_libraries(raftpp PUBLIC libassert::assert)
 target_link_libraries(raftpp PRIVATE sqlite3)
+
+add_subdirectory(raftor)

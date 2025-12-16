@@ -9,7 +9,9 @@ add_executable(raftpp-tests
   conf_change_data_test.cc
   progress_test.cc
   json_test.cc
-  datadriven_test.cc
+  # FIXME
+  data_driven_tests.cc
+  raw_node_test.cc
 )
 
 target_link_libraries(raftpp-tests PRIVATE raftpp)

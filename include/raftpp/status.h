@@ -19,6 +19,6 @@ struct Status {
 
     /// The progress towards catching up and applying logs.
     std::optional<ProgressTracker> progress;
-}
+};
 
 }  // namespace raftpp

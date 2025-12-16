@@ -12,7 +12,16 @@ void Inflights::Reset() {
     buffer_.clear();
 }
 
-void Inflights::FreeTo(uint64_t to) {}
+void Inflights::FreeTo(const uint64_t to) {
+
+}
+
+void Inflights::FreeFirstOne() {
+    if (!buffer_.empty()) {
+        const auto start = buffer_.front();
+        FreeTo(start);
+    }
+}
 
 void Inflights::Add(const uint64_t last) {
     buffer_.push_back(last);

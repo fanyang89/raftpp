@@ -2,6 +2,7 @@ CPMAddPackage("https://github.com/Neargye/magic_enum.git@0.9.7")
 CPMAddPackage("https://github.com/gabime/spdlog.git@1.16.0")
 CPMAddPackage("https://github.com/jeremy-rifkin/libassert.git@2.2.1")
 CPMAddPackage(URI "https://github.com/nlohmann/json.git@3.12.0" OPTIONS "JSON_Install off")
+CPMAddPackage(URI "https://github.com/google/leveldb.git@1.20")
 
 CPMAddPackage(URI "https://github.com/boostorg/circular_buffer.git" GIT_TAG "boost-1.89.0")
 CPMAddPackage(URI "https://github.com/boostorg/assert.git" GIT_TAG "boost-1.89.0")

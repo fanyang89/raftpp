@@ -1,6 +1,7 @@
 #include "raftpp/raw_node.h"
 
 #include <google/protobuf/util/message_differencer.h>
+#include <spdlog/spdlog.h>
 
 #include "raftpp/util.h"
 
@@ -32,11 +33,20 @@ bool IsResponseMessage(const MessageType t) {
     }
 }
 
+const std::vector<Message>& Ready::Messages() const {
+    if (!is_persisted_msg) {
+        return light.messages;
+    }
+    static std::vector<Message> empty;
+    return empty;
+}
+
 RawNode::RawNode(const Config& config, std::unique_ptr<Storage> store)
     : raft_(config, std::move(store)), max_number_(0), commit_since_index_(config.applied) {
     ASSERT(config.id, "config.id must not be zero");
     prev_hs_ = raft_.hard_state();
     prev_ss_ = raft_.soft_state();
+    SPDLOG_INFO("RawNode created with id {}", raft_.id());
 }
 
 void RawNode::SetPriority(uint64_t priority) {
@@ -59,6 +69,34 @@ void RawNode::ReadIndex(const std::string& ctx) {
     m.set_msg_type(MsgReadIndex);
     auto* e = m.mutable_entries()->Add();
     e->set_data(ctx);
+    std::ignore = raft_.Step(m);
+}
+
+Status RawNode::GetStatus() {
+    Status s;
+    s.id = raft_.id();
+    s.hs = raft_.hard_state();
+    s.ss = raft_.soft_state();
+    s.applied = raft_.raft_log().applied();
+    if (s.ss.raft_state == StateRole::Leader) {
+        s.progress = raft_.progress_tracker();
+    }
+    return s;
+}
+
+void RawNode::ReportUnreachable(uint64_t id) {
+    Message m;
+    m.set_msg_type(MsgUnreachable);
+    m.set_from(id);
+    std::ignore = raft_.Step(m);
+}
+
+void RawNode::ReportSnapshot(const uint64_t id, const SnapshotStatus status) {
+    const auto reject = status == SnapshotStatus::Failure;
+    Message m;
+    m.set_msg_type(MsgSnapStatus);
+    m.set_from(id);
+    m.set_reject(reject);
     std::ignore = raft_.Step(m);
 }
 
