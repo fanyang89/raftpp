@@ -3,8 +3,6 @@
 #include <expected>
 #include <mutex>
 
-#include <absl/base/thread_annotations.h>
-
 #include "raftpp/error.h"
 #include "raftpp/raftpp.pb.h"
 
@@ -102,8 +100,6 @@ class MemoryStorageCore {
 
 class MemoryStorage final : public Storage {
   public:
-    MemoryStorage();
-
     Result<RaftState, StorageErrorCode> InitialState() override;
 
     Result<std::vector<Entry>, StorageErrorCode> Entries(
@@ -117,7 +113,7 @@ class MemoryStorage final : public Storage {
 
   private:
     std::mutex mutex_;
-    MemoryStorageCore core_ ABSL_GUARDED_BY(mutex_);
+    MemoryStorageCore core_;
 };
 
 }  // namespace raftpp

@@ -1,5 +1,3 @@
-#include "datadriven.h"
-
 #include <algorithm>
 #include <cctype>
 #include <filesystem>
@@ -7,6 +5,8 @@
 #include <sstream>
 
 #include <gtest/gtest.h>
+
+#include "data_driven.h"
 
 namespace raftpp {
 namespace datadriven {

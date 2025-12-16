@@ -41,7 +41,7 @@ bool MemoryStorageCore::HasEntryAt(const uint64_t index) const {
 }
 
 Result<void, StorageErrorCode> MemoryStorageCore::ApplySnapshot(const Snapshot& snapshot) {
-    const auto meta = snapshot.metadata();
+    const auto& meta = snapshot.metadata();
     const uint64_t index = meta.index();
     if (first_index() > index) {
         return std::unexpected(StorageErrorCode::SnapshotOutOfDate);
@@ -141,8 +141,6 @@ Snapshot MemoryStorageCore::snapshot() const {
 
     return snapshot;
 }
-
-MemoryStorage::MemoryStorage() {}
 
 Result<RaftState, StorageErrorCode> MemoryStorage::InitialState() {
     std::lock_guard lock(mutex_);
