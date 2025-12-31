@@ -6,7 +6,9 @@
 
 using namespace raftpp;
 
-TEST_CASE("JSONTest.Set") {
+TEST_SUITE_BEGIN("JSON");
+
+TEST_CASE("Set") {
     Set<int> s;
     s.emplace(1);
     s.emplace(2);
@@ -16,7 +18,7 @@ TEST_CASE("JSONTest.Set") {
     CHECK_EQ(s, s2);
 }
 
-TEST_CASE("JSONTest.Map") {
+TEST_CASE("Map") {
     Map<int, std::string> s;
     s.emplace(1, "a");
     s.emplace(2, "b");
@@ -26,13 +28,15 @@ TEST_CASE("JSONTest.Map") {
     CHECK_EQ(s, s2);
 }
 
-TEST_CASE("JSONTest.MajorityConfig") {
+TEST_CASE("MajorityConfig") {
     MajorityConfig c;
     c.emplace(1);
     c.emplace(2);
     c.emplace(3);
     const nlohmann::json j = c;
     const Set<uint64_t> s = j["voters"];
-    Set<uint64_t> s2{1, 2, 3};
+    const Set<uint64_t> s2{1, 2, 3};
     CHECK_EQ(s, s2);
 }
+
+TEST_SUITE_END();

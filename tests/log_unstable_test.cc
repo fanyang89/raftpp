@@ -40,7 +40,7 @@ TEST_SUITE_BEGIN("LogUnstableTest");
 
 TEST_CASE("Maybe first index") {
     LogUnstableTestParams params;
-    std::list<LogUnstableTestParams> params_list{
+    std::list<LogUnstableTestParams> tests{
         // NoSnapshot
         {NewEntry(5, 1), 5, {}, false, 0},
         {{}, 0, {}, false, 0},
@@ -48,7 +48,7 @@ TEST_CASE("Maybe first index") {
         {NewEntry(5, 1), 5, NewSnapshot(4, 1), true, 5},
         {{}, 5, NewSnapshot(4, 1), true, 5},
     };
-    DOCTEST_VALUE_PARAMETERIZED_DATA(params, params_list);
+    DOCTEST_VALUE_PARAMETERIZED_DATA(params, tests);
     const auto& [ent, offset, snapshot, w_ok, w_index] = params;
 
     size_t entries_size = 0;

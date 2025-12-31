@@ -4,6 +4,8 @@
 
 using namespace raftpp;
 
+TEST_SUITE_BEGIN("RawNode");
+
 TEST_CASE("they are local messages") {
     CHECK(IsLocalMessage(MsgHup));
     CHECK(IsLocalMessage(MsgBeat));
@@ -26,3 +28,5 @@ TEST_CASE("they are local messages") {
     CHECK_FALSE(IsLocalMessage(MsgRequestPreVote));
     CHECK_FALSE(IsLocalMessage(MsgRequestPreVoteResponse));
 }
+
+TEST_SUITE_END();
