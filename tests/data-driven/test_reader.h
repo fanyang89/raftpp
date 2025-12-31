@@ -7,7 +7,7 @@
 #include "test_data.h"
 
 namespace raftpp {
-namespace datadriven {
+namespace data_driven {
 
 /**
  * TestDataReader 负责读取和解析整个测试文件
@@ -43,8 +43,9 @@ class TestDataReader {
   private:
     /**
      * 读取期望输出部分
+     * @param include_first_separator 是否包含第一个分隔符（当输入部分为空时）
      */
-    void ReadExpected();
+    void ReadExpected(bool include_first_separator = false);
 
     /**
      * 输出一行到重写缓冲区（如果启用重写模式）

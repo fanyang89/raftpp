@@ -1,6 +1,12 @@
-#include <gtest/gtest.h>
+#define DOCTEST_CONFIG_IMPLEMENT
+#include "doctest/doctest.h"
 
-int main(int argc, char** argv) {
-    testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
+int main(const int argc, char** argv) {
+    doctest::Context context;
+    context.applyCommandLine(argc, argv);
+    const int rc = context.run();
+    if (context.shouldExit()) {
+        return rc;
+    }
+    return 0;
 }

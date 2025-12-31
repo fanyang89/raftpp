@@ -6,7 +6,7 @@
 #include "line_parser.h"
 
 namespace raftpp {
-namespace datadriven {
+namespace data_driven {
 
 TestDataReader::TestDataReader(const std::string& filename, const std::string& content, bool rewrite)
     : filename_(filename), content_(content), rewrite_mode_(rewrite), line_number_(0) {
@@ -41,9 +41,27 @@ bool TestDataReader::NextTest() {
         return false;
     }
 
+    // 合并以反斜杠结尾的续行
+    std::string command_line = current_line_;
+    while (command_line.ends_with('\\')) {
+        // 移除反斜杠和行尾空白
+        command_line = Trim(command_line.substr(0, command_line.length() - 1));
+        
+        // 读取下一行
+        if (!std::getline(content_, line)) {
+            throw ParseException("Unexpected end of file while processing line continuation", filename_, line_number_);
+        }
+        ++line_number_;
+        current_line_ = line;
+        EmitLine(line);
+        
+        // 合并到命令行
+        command_line += " " + Trim(line);
+    }
+
     // 解析命令行
     try {
-        auto [cmd, args] = LineParser::ParseLine(Trim(current_line_));
+        auto [cmd, args] = LineParser::ParseLine(Trim(command_line));
         current_test_ = TestData();
         current_test_.pos = filename_ + ":" + std::to_string(line_number_);
         current_test_.cmd = cmd;
@@ -73,7 +91,10 @@ bool TestDataReader::NextTest() {
     current_test_.input = Trim(input_buffer);
 
     if (separator_found) {
-        ReadExpected();
+        // 如果输入部分为空，说明期望输出可能以 ---- 开头
+        // 需要特殊处理：读取第二个 ---- 并将其包含在期望输出中
+        bool empty_input = current_test_.input.empty();
+        ReadExpected(empty_input);
     }
 
     return true;
@@ -87,9 +108,28 @@ std::optional<std::string> TestDataReader::GetRewriteBuffer() const {
     return rewrite_buffer_;
 }
 
-void TestDataReader::ReadExpected() {
+void TestDataReader::ReadExpected(bool include_first_separator) {
     // 读取期望输出，直到遇到空行或文件结束
     std::string line;
+
+    // 如果需要包含第一个分隔符（当输入部分为空时）
+    if (include_first_separator) {
+        if (std::getline(content_, line)) {
+            ++line_number_;
+            current_line_ = line;
+            EmitLine(line);
+
+            std::string trimmed = Trim(line);
+            if (trimmed == "----") {
+                // 将分隔符添加到期望输出
+                current_test_.expected += line + "\n";
+            } else {
+                // 不是分隔符，将行添加到期望输出并继续正常读取
+                current_test_.expected += line + "\n";
+                include_first_separator = false;
+            }
+        }
+    }
 
     while (std::getline(content_, line)) {
         ++line_number_;
@@ -103,8 +143,8 @@ void TestDataReader::ReadExpected() {
             break;
         }
 
-        // 如果遇到分隔符，停止读取
-        if (trimmed == "----") {
+        // 如果遇到分隔符且不是第一个分隔符，停止读取
+        if (trimmed == "----" && !include_first_separator) {
             break;
         }
 

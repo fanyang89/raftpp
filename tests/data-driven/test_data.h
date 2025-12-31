@@ -6,7 +6,7 @@
 #include <vector>
 
 namespace raftpp {
-namespace datadriven {
+namespace data_driven {
 
 /**
  * CmdArg 包含命令行参数的信息

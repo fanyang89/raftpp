@@ -1,9 +1,10 @@
 #include "raftpp/progress.h"
 
-#include <gtest/gtest.h>
+#include <doctest/doctest.h>
 #include <magic_enum/magic_enum.hpp>
 
 #include "raftpp/primitives.h"
+#include "test_util.h"
 
 using namespace raftpp;
 
@@ -13,17 +14,6 @@ ProgressDebug NewProgress(ProgressState state, uint64_t matched, uint64_t next_i
     p.matched() = matched;
     p.pending_snapshot() = pending_snapshot;
     return p;
-}
-
-TEST(ProgressTest, Resume) {
-    ProgressDebug p(2);
-    p.paused() = true;
-    p.MaybeDecTo(1, 1, INVALID_INDEX);
-    EXPECT_FALSE(p.paused());
-
-    p.paused() = true;
-    p.MaybeUpdate(2);
-    EXPECT_FALSE(p.paused());
 }
 
 struct ProgressPausedTestParams {
@@ -36,35 +26,37 @@ struct ProgressPausedTestParams {
     }
 };
 
-class ProgressPausedTest : public testing::TestWithParam<ProgressPausedTestParams> {};
+TEST_SUITE_BEGIN("ProgressTest");
 
-TEST_P(ProgressPausedTest, Paused) {
-    const auto [state, paused, w] = GetParam();
-    auto p = NewProgress(state, 0, 0, 0);
-    p.paused() = paused;
-    EXPECT_EQ(w, p.IsPaused());
+TEST_CASE("resume") {
+    ProgressDebug p(2);
+    p.paused() = true;
+    p.MaybeDecTo(1, 1, INVALID_INDEX);
+    CHECK_FALSE(p.paused());
+
+    p.paused() = true;
+    p.MaybeUpdate(2);
+    CHECK_FALSE(p.paused());
 }
 
-INSTANTIATE_TEST_SUITE_P(
-    Probe, ProgressPausedTest,
-    ::testing::ValuesIn<ProgressPausedTestParams>({
+TEST_CASE("paused") {
+    ProgressPausedTestParams params;
+    std::list<ProgressPausedTestParams> tests{
+        // probe
         {ProgressState::Probe, false, false},
         {ProgressState::Probe, true, true},
-    })
-);
-
-INSTANTIATE_TEST_SUITE_P(
-    Replicate, ProgressPausedTest,
-    ::testing::ValuesIn<ProgressPausedTestParams>({
+        // Replicate
         {ProgressState::Replicate, false, false},
         {ProgressState::Replicate, true, false},
-    })
-);
-
-INSTANTIATE_TEST_SUITE_P(
-    Snapshot, ProgressPausedTest,
-    ::testing::ValuesIn<ProgressPausedTestParams>({
+        // Snapshot
         {ProgressState::Snapshot, false, true},
         {ProgressState::Snapshot, true, true},
-    })
-);
+    };
+    DOCTEST_VALUE_PARAMETERIZED_DATA(params, tests);
+    const auto [state, paused, w] = params;
+    auto p = NewProgress(state, 0, 0, 0);
+    p.paused() = paused;
+    CHECK_EQ(w, p.IsPaused());
+}
+
+TEST_SUITE_END();

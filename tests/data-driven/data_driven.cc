@@ -1,117 +1,128 @@
-#include <algorithm>
-#include <cctype>
-#include <filesystem>
-#include <fstream>
-#include <sstream>
-
-#include <gtest/gtest.h>
-
 #include "data_driven.h"
 
-namespace raftpp {
-namespace datadriven {
+#include <absl/strings/str_split.h>
+#include <doctest/doctest.h>
+#include <nlohmann/json.hpp>
+#include <spdlog/spdlog.h>
 
-void DataDrivenTest::RunTest(const std::string& path, TestFunction func, bool rewrite) {
-    auto files = GetTestFiles(path);
+#include "conf_change/generated/zero.h"
 
-    for (const auto& file : files) {
-        try {
-            std::string content = ReadFileContent(file);
-            RunSingleTest(file, content, func, rewrite);
-        } catch (const std::exception& e) {
-            FAIL() << "Error processing file " << file << ": " << e.what();
+bool TestData::ContainsKey(const std::string_view key) {
+    for (const auto& [k, _] : cmd_args) {
+        if (k == key) {
+            return true;
         }
     }
+    return false;
 }
 
-void DataDrivenTest::WalkTests(const std::string& path, WalkFunction func) {
-    auto files = GetTestFiles(path);
+void to_json(nlohmann::json& j, const TestData& p) {
+    j["pos"] = p.pos;
+    j["cmd"] = p.cmd;
 
-    for (const auto& file : files) {
-        std::filesystem::path file_path(file);
-        func(file_path);
+    nlohmann::json args = nlohmann::json::array();
+    for (const auto& a : p.cmd_args) {
+        nlohmann::json arg = nlohmann::json::object();
+        arg["key"] = a.key;
+
+        nlohmann::json values = nlohmann::json::array();
+        for (const auto& v : a.values) {
+            values.emplace_back(v);
+        }
+        arg["values"] = values;
+
+        args.emplace_back(arg);
     }
+
+    j["cmd_args"] = args;
+    j["input"] = p.input;
+    j["expected"] = p.expected;
 }
 
-void DataDrivenTest::RunSingleTest(
-    const std::string& filename, const std::string& content, TestFunction func, bool rewrite
-) {
-    TestDataReader reader(filename, content, rewrite);
+fmt::context::iterator fmt::formatter<TestData>::format(const TestData& value, const format_context& ctx) {
+    nlohmann::json j = value;
+    return fmt::format_to(ctx.out(), "{}", j.dump());
+}
 
-    while (reader.NextTest()) {
-        RunDirective(reader, func);
-    }
+TestDataReaderIter::TestDataReaderIter() noexcept : p_(0) {}
 
-    // 如果是重写模式，写入新内容
-    if (rewrite) {
-        auto rewrite_buffer = reader.GetRewriteBuffer();
-        if (rewrite_buffer) {
-            WriteFileContent(filename, *rewrite_buffer);
+TestDataReaderIter::TestDataReaderIter(const std::vector<std::string>& lines) : lines_(lines), p_(0) {
+    ++*this;
+}
+
+TestDataReaderIter& TestDataReaderIter::operator++() {
+    if (lines_) {
+        if (p_ < lines_->get().size()) {
+            data_ = Parse(lines_->get()[p_]);
+            ++p_;
+            return *this;
         }
     }
+
+    static TestDataReaderIter end;
+    return end;
 }
 
-void DataDrivenTest::RunDirective(TestDataReader& reader, TestFunction func) {
-    const TestData& test_data = reader.GetCurrentTest();
-
-    try {
-        std::string actual = func(test_data);
-
-        // 确保输出以换行符结尾
-        if (!actual.empty() && !actual.ends_with('\n')) {
-            actual += '\n';
-        }
-
-        // 比较实际输出和期望输出
-        EXPECT_EQ(actual, test_data.expected);
-    } catch (const std::exception& e) {
-        FAIL() << "Test failed at " << test_data.pos << ": " << e.what();
-    }
+TestDataReaderIter TestDataReaderIter::operator++(int) {
+    TestDataReaderIter tmp = *this;
+    ++*this;
+    return tmp;
 }
 
-bool DataDrivenTest::HasBlankLine(const std::string& s) {
-    return s.size() == std::count_if(s.begin(), s.end(), [](unsigned char c) { return std::isblank(c); });
+const TestDataReaderIter::value_type& TestDataReaderIter::operator*() const noexcept {
+    return data_;
 }
 
-std::vector<std::string> DataDrivenTest::GetTestFiles(const std::string& path) {
-    std::vector<std::string> files;
+const TestDataReaderIter::value_type* TestDataReaderIter::operator->() const noexcept {
+    return &data_;
+}
 
-    if (std::filesystem::is_directory(path)) {
-        // 如果是目录，递归查找所有 .txt 文件
-        for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
-            if (entry.is_regular_file() && entry.path().extension() == ".txt") {
-                files.push_back(entry.path().string());
-            }
-        }
-        std::sort(files.begin(), files.end());
-    } else {
-        // 如果是文件，直接添加
-        files.push_back(path);
+bool TestDataReaderIter::operator==(const TestDataReaderIter& other) const noexcept {
+    if (lines_ && other.lines_ && lines_->get().size() == other.lines_->get().size() && p_ == other.p_) {
+        return true;
     }
 
-    return files;
-}
-
-std::string DataDrivenTest::ReadFileContent(const std::string& filename) {
-    std::ifstream file(filename);
-    if (!file.is_open()) {
-        throw std::runtime_error("Cannot open file: " + filename);
+    if (lines_ && p_ >= lines_->get().size() && !other.lines_.has_value()) {
+        return true;
     }
 
-    std::stringstream buffer;
-    buffer << file.rdbuf();
-    return buffer.str();
-}
-
-void DataDrivenTest::WriteFileContent(const std::string& filename, const std::string& content) {
-    std::ofstream file(filename, std::ios::trunc);
-    if (!file.is_open()) {
-        throw std::runtime_error("Cannot write to file: " + filename);
+    if (other.lines_ && other.p_ >= other.lines_->get().size() && !lines_.has_value()) {
+        return true;
     }
 
-    file << content;
-    file.close();
+    return false;
 }
 
-}  // namespace datadriven
-}  // namespace raftpp
+bool TestDataReaderIter::operator!=(const TestDataReaderIter& other) const noexcept {
+    return !(*this == other);
+}
+
+TestData TestDataReaderIter::Parse(const std::string_view line) {
+    TestData d{};
+    d.input = line;
+    return d;
+}
+
+bool SkipComment(const std::string_view line) {
+    return !line.starts_with("#");
+}
+
+TestDataReader::TestDataReader(const std::string_view source_name, const std::string_view content, const bool rewrite)
+    : source_name_(source_name),
+      lines_(absl::StrSplit(content, "\n", SkipComment)),
+      rewrite_buffer_(rewrite ? std::make_optional(std::string()) : std::nullopt) {}
+
+TestDataReaderIter TestDataReader::begin() const {
+    return TestDataReaderIter(lines_);
+}
+
+TestDataReaderIter TestDataReader::end() const {
+    return {};
+}
+
+TEST_CASE("TestDataReaderTest can read data") {
+    TestDataReader reader("zero", bin2cpp::getZeroTxtFile().getBuffer(), false);
+    for (auto it = reader.begin(); it != reader.end(); ++it) {
+        SPDLOG_INFO("{}", nlohmann::json(*it).dump());
+    }
+}

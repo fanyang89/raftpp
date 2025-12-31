@@ -3,6 +3,16 @@ CPMAddPackage("https://github.com/gabime/spdlog.git@1.16.0")
 CPMAddPackage("https://github.com/jeremy-rifkin/libassert.git@2.2.1")
 CPMAddPackage(URI "https://github.com/nlohmann/json.git@3.12.0" OPTIONS "JSON_Install off")
 CPMAddPackage(URI "https://github.com/google/leveldb.git@1.20")
+CPMAddPackage(URI "https://github.com/libuv/libuv.git@1.51.0")
+CPMAddPackage(URI "https://github.com/abseil/abseil-cpp.git" GIT_TAG "20250814.1")
+
+if (MSVC)
+  set(protobuf_MSVC_STATIC_RUNTIME OFF CACHE BOOL "Link Protobuf dynamically" FORCE)
+endif ()
+
+CPMAddPackage(
+  URI "https://github.com/protocolbuffers/protobuf.git@33.2"
+  OPTIONS "protobuf_INSTALL OFF" "ABSL_ENABLE_INSTALL OFF" "protobuf_BUILD_TESTS OFF")
 
 CPMAddPackage(URI "https://github.com/boostorg/circular_buffer.git" GIT_TAG "boost-1.89.0")
 CPMAddPackage(URI "https://github.com/boostorg/assert.git" GIT_TAG "boost-1.89.0")
@@ -15,19 +25,8 @@ CPMAddPackage(URI "https://github.com/boostorg/throw_exception.git" GIT_TAG "boo
 CPMAddPackage(URI "https://github.com/boostorg/type_traits.git" GIT_TAG "boost-1.89.0")
 CPMAddPackage(URI "https://github.com/boostorg/preprocessor.git" GIT_TAG "boost-1.89.0")
 
-CPMAddPackage(
-  NAME grpc
-  URL "file://${CMAKE_CURRENT_SOURCE_DIR}/grpc-v1.76.0-1-g719498daab.tar.gz"
-  OPTIONS
-  "protobuf_INSTALL OFF"
-  "utf8_range_ENABLE_INSTALL OFF"
-)
-
 if (RAFTPP_BUILD_TESTING)
-  CPMAddPackage(
-    NAME googletest
-    URL "file://${CMAKE_CURRENT_SOURCE_DIR}/googletest-1.17.0.tar.gz"
-  )
+  CPMAddPackage(URI "https://github.com/doctest/doctest.git@2.4.12")
 endif ()
 
 add_library(sqlite3 sqlite3/sqlite3.c)

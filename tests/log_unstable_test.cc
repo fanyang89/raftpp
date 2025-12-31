@@ -1,11 +1,12 @@
 #include <vector>
 
-#include <gtest/gtest.h>
+#include <doctest/doctest.h>
 #include <spdlog/fmt/fmt.h>
 
 #include "raftpp/raftpp.pb.h"
 #include "raftpp/unstable_log.h"
 #include "raftpp/util.h"
+#include "test_util.h"
 
 using namespace raftpp;
 
@@ -35,10 +36,20 @@ struct LogUnstableTestParams {
     }
 };
 
-class LogUnstableTest : public testing::TestWithParam<LogUnstableTestParams> {};
+TEST_SUITE_BEGIN("LogUnstableTest");
 
-TEST_P(LogUnstableTest, MaybeFirstIndex) {
-    const auto& [ent, offset, snapshot, w_ok, w_index] = GetParam();
+TEST_CASE("Maybe first index") {
+    LogUnstableTestParams params;
+    std::list<LogUnstableTestParams> params_list{
+        // NoSnapshot
+        {NewEntry(5, 1), 5, {}, false, 0},
+        {{}, 0, {}, false, 0},
+        // HasSnapshot
+        {NewEntry(5, 1), 5, NewSnapshot(4, 1), true, 5},
+        {{}, 5, NewSnapshot(4, 1), true, 5},
+    };
+    DOCTEST_VALUE_PARAMETERIZED_DATA(params, params_list);
+    const auto& [ent, offset, snapshot, w_ok, w_index] = params;
 
     size_t entries_size = 0;
     std::vector<Entry> entries;
@@ -49,24 +60,10 @@ TEST_P(LogUnstableTest, MaybeFirstIndex) {
 
     const Unstable u(entries, entries_size, offset, snapshot);
     if (const auto index = u.MaybeFirstIndex(); index) {
-        EXPECT_EQ(w_index, index);
+        CHECK_EQ(w_index, index);
     } else {
-        EXPECT_FALSE(w_ok);
+        CHECK_FALSE(w_ok);
     }
 }
 
-INSTANTIATE_TEST_SUITE_P(
-    NoSnapshot, LogUnstableTest,
-    ::testing::ValuesIn<LogUnstableTestParams>({
-        {NewEntry(5, 1), 5, {}, false, 0},
-        {{}, 0, {}, false, 0},
-    })
-);
-
-INSTANTIATE_TEST_SUITE_P(
-    HasSnapshot, LogUnstableTest,
-    ::testing::ValuesIn<LogUnstableTestParams>({
-        {NewEntry(5, 1), 5, NewSnapshot(4, 1), true, 5},
-        {{}, 5, NewSnapshot(4, 1), true, 5},
-    })
-);
+TEST_SUITE_END();

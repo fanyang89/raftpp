@@ -1,28 +1,28 @@
 #include "raftpp/raw_node.h"
 
-#include <gtest/gtest.h>
+#include <doctest/doctest.h>
 
 using namespace raftpp;
 
-TEST(RawNowUtils, IsLocalMessage) {
-    EXPECT_TRUE(IsLocalMessage(MsgHup));
-    EXPECT_TRUE(IsLocalMessage(MsgBeat));
-    EXPECT_TRUE(IsLocalMessage(MsgUnreachable));
-    EXPECT_TRUE(IsLocalMessage(MsgSnapStatus));
-    EXPECT_TRUE(IsLocalMessage(MsgCheckQuorum));
+TEST_CASE("they are local messages") {
+    CHECK(IsLocalMessage(MsgHup));
+    CHECK(IsLocalMessage(MsgBeat));
+    CHECK(IsLocalMessage(MsgUnreachable));
+    CHECK(IsLocalMessage(MsgSnapStatus));
+    CHECK(IsLocalMessage(MsgCheckQuorum));
 
-    EXPECT_FALSE(IsLocalMessage(MsgPropose));
-    EXPECT_FALSE(IsLocalMessage(MsgAppend));
-    EXPECT_FALSE(IsLocalMessage(MsgAppendResponse));
-    EXPECT_FALSE(IsLocalMessage(MsgRequestVote));
-    EXPECT_FALSE(IsLocalMessage(MsgRequestVoteResponse));
-    EXPECT_FALSE(IsLocalMessage(MsgSnapshot));
-    EXPECT_FALSE(IsLocalMessage(MsgHeartbeat));
-    EXPECT_FALSE(IsLocalMessage(MsgHeartbeatResponse));
-    EXPECT_FALSE(IsLocalMessage(MsgTransferLeader));
-    EXPECT_FALSE(IsLocalMessage(MsgTimeoutNow));
-    EXPECT_FALSE(IsLocalMessage(MsgReadIndex));
-    EXPECT_FALSE(IsLocalMessage(MsgReadIndexResp));
-    EXPECT_FALSE(IsLocalMessage(MsgRequestPreVote));
-    EXPECT_FALSE(IsLocalMessage(MsgRequestPreVoteResponse));
+    CHECK_FALSE(IsLocalMessage(MsgPropose));
+    CHECK_FALSE(IsLocalMessage(MsgAppend));
+    CHECK_FALSE(IsLocalMessage(MsgAppendResponse));
+    CHECK_FALSE(IsLocalMessage(MsgRequestVote));
+    CHECK_FALSE(IsLocalMessage(MsgRequestVoteResponse));
+    CHECK_FALSE(IsLocalMessage(MsgSnapshot));
+    CHECK_FALSE(IsLocalMessage(MsgHeartbeat));
+    CHECK_FALSE(IsLocalMessage(MsgHeartbeatResponse));
+    CHECK_FALSE(IsLocalMessage(MsgTransferLeader));
+    CHECK_FALSE(IsLocalMessage(MsgTimeoutNow));
+    CHECK_FALSE(IsLocalMessage(MsgReadIndex));
+    CHECK_FALSE(IsLocalMessage(MsgReadIndexResp));
+    CHECK_FALSE(IsLocalMessage(MsgRequestPreVote));
+    CHECK_FALSE(IsLocalMessage(MsgRequestPreVoteResponse));
 }

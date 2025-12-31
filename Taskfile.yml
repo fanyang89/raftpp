@@ -5,18 +5,16 @@ version: "3"
 dotenv:
   - .env
 
-vars:
-  PROTOBUF_DIR: _deps/grpc-build/third_party/protobuf
-
 tasks:
-  proto:
+  pb:
     cmds:
       - platforms: [windows]
         cmd: >
-          $BUILD_DIR/{{.PROTOBUF_DIR}}/protoc.exe
+          protoc.exe
           -I proto
           --cpp_out=proto/generated/raftpp
           raftpp.proto
+
   vs:
     platforms: [windows]
     cmds:

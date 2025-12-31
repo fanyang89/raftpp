@@ -25,8 +25,7 @@ enum class StateRole : uint8_t {
 struct SoftState {
     uint64_t leader_id;
     StateRole raft_state;
-
-    bool operator==(const SoftState& other) const;
+    bool operator==(const SoftState& other) const = default;
 };
 
 struct UncommittedState {
@@ -34,9 +33,9 @@ struct UncommittedState {
     size_t uncommitted_size;
     uint64_t last_log_tail_index;
 
-    bool IsNoLimit() const;
-    bool MaybeIncreaseUncommittedSize(std::span<const Entry> entries);
-    bool MaybeReduceUncommittedSize(std::span<const Entry> entries);
+    [[nodiscard]] bool IsNoLimit() const;
+    [[nodiscard]] bool MaybeIncreaseUncommittedSize(std::span<const Entry> entries);
+    [[nodiscard]] bool MaybeReduceUncommittedSize(std::span<const Entry> entries);
 };
 
 class RaftCore {

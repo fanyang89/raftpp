@@ -4,8 +4,7 @@
 
 #include "exceptions.h"
 
-namespace raftpp {
-namespace datadriven {
+namespace raftpp::data_driven {
 
 // 正则表达式模式定义
 const std::regex LineParser::kArgumentPattern(R"(^ *[-a-zA-Z0-9/_,.]+(|=[-a-zA-Z0-9_@=+/,.]*|=\([^)]*\))( |$))");
@@ -115,5 +114,4 @@ std::string LineParser::Trim(const std::string& str) {
     return str.substr(start, end - start + 1);
 }
 
-}  // namespace datadriven
-}  // namespace raftpp
+}  // namespace raftpp::data_driven

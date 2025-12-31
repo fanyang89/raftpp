@@ -7,8 +7,7 @@
 
 #include "test_data.h"
 
-namespace raftpp {
-namespace datadriven {
+namespace raftpp::data_driven {
 
 /**
  * LineParser 负责解析单行命令参数
@@ -55,5 +54,4 @@ class LineParser {
     static const std::regex kArgumentPattern;
 };
 
-}  // namespace datadriven
-}  // namespace raftpp
+}  // namespace raftpp::data_driven

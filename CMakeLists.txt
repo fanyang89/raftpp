@@ -6,7 +6,6 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 project(raftpp VERSION 0.1.0 DESCRIPTION "C++ RAFT" LANGUAGES C CXX)
 
-option(RAFTPP_BUILD_STATIC "Build static library" ON)
 option(RAFTPP_BUILD_TESTING "Build unit tests" ON)
 option(RAFTPP_WITH_CCACHE "Build with ccache" ON)
 option(RAFTPP_WITH_LLD "Build with lld" OFF)
@@ -20,10 +19,6 @@ if (RAFTPP_WITH_LLD)
   else ()
     message(WARNING "lld not found but RAFTPP_WITH_LLD is enabled")
   endif ()
-endif ()
-
-if (RAFTPP_BUILD_STATIC)
-  set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build shared library")
 endif ()
 
 if (RAFTPP_SANITIZE)
