@@ -6,7 +6,7 @@ using namespace raftpp;
 
 TEST_SUITE_BEGIN("RawNode");
 
-TEST_CASE("they are local messages") {
+TEST_CASE("Is local message") {
     CHECK(IsLocalMessage(MsgHup));
     CHECK(IsLocalMessage(MsgBeat));
     CHECK(IsLocalMessage(MsgUnreachable));

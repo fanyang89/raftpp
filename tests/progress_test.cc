@@ -28,7 +28,7 @@ struct ProgressPausedTestParams {
 
 TEST_SUITE_BEGIN("ProgressTest");
 
-TEST_CASE("resume") {
+TEST_CASE("Resume") {
     ProgressDebug p(2);
     p.paused() = true;
     p.MaybeDecTo(1, 1, INVALID_INDEX);
@@ -39,7 +39,7 @@ TEST_CASE("resume") {
     CHECK_FALSE(p.paused());
 }
 
-TEST_CASE("paused") {
+TEST_CASE("Paused") {
     ProgressPausedTestParams params;
     std::list<ProgressPausedTestParams> tests{
         // probe
