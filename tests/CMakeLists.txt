@@ -5,6 +5,7 @@ add_executable(raftpp-tests
   test_main.cc
 
   data_driven_tests.cc
+  inflights_test.cc
   json_test.cc
   log_unstable_test.cc
   progress_test.cc

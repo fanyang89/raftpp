@@ -6,23 +6,10 @@
 #include <magic_enum/magic_enum.hpp>
 
 #include "raftpp/ack_indexer.h"
+#include "raftpp/inflights.h"
 #include "raftpp/primitives.h"
 
 namespace raftpp {
-
-class Inflights {
-  public:
-    explicit Inflights(size_t capacity);
-
-    void Add(uint64_t last);
-    [[nodiscard]] bool Full() const;
-    void Reset();
-    void FreeTo(uint64_t to);
-    void FreeFirstOne();
-
-  private:
-    boost::circular_buffer<uint64_t> buffer_;
-};
 
 enum class ProgressState : uint8_t {
     /// Whether it's probing.

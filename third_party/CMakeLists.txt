@@ -14,17 +14,6 @@ CPMAddPackage(
   URI "https://github.com/protocolbuffers/protobuf.git@33.2"
   OPTIONS "protobuf_INSTALL OFF" "ABSL_ENABLE_INSTALL OFF" "protobuf_BUILD_TESTS OFF")
 
-CPMAddPackage(URI "https://github.com/boostorg/circular_buffer.git" GIT_TAG "boost-1.89.0")
-CPMAddPackage(URI "https://github.com/boostorg/assert.git" GIT_TAG "boost-1.89.0")
-CPMAddPackage(URI "https://github.com/boostorg/concept_check.git" GIT_TAG "boost-1.89.0")
-CPMAddPackage(URI "https://github.com/boostorg/config.git" GIT_TAG "boost-1.89.0")
-CPMAddPackage(URI "https://github.com/boostorg/core.git" GIT_TAG "boost-1.89.0")
-CPMAddPackage(URI "https://github.com/boostorg/move.git" GIT_TAG "boost-1.89.0")
-CPMAddPackage(URI "https://github.com/boostorg/static_assert.git" GIT_TAG "boost-1.89.0")
-CPMAddPackage(URI "https://github.com/boostorg/throw_exception.git" GIT_TAG "boost-1.89.0")
-CPMAddPackage(URI "https://github.com/boostorg/type_traits.git" GIT_TAG "boost-1.89.0")
-CPMAddPackage(URI "https://github.com/boostorg/preprocessor.git" GIT_TAG "boost-1.89.0")
-
 if (RAFTPP_BUILD_TESTING)
   CPMAddPackage(URI "https://github.com/doctest/doctest.git@2.4.12")
 endif ()

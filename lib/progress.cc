@@ -6,31 +6,6 @@
 
 namespace raftpp {
 
-Inflights::Inflights(const size_t capacity) : buffer_(capacity) {}
-
-void Inflights::Reset() {
-    buffer_.clear();
-}
-
-void Inflights::FreeTo(const uint64_t to) {
-
-}
-
-void Inflights::FreeFirstOne() {
-    if (!buffer_.empty()) {
-        const auto start = buffer_.front();
-        FreeTo(start);
-    }
-}
-
-void Inflights::Add(const uint64_t last) {
-    buffer_.push_back(last);
-}
-
-bool Inflights::Full() const {
-    return buffer_.full();
-}
-
 Progress::Progress(const uint64_t next_idx, const size_t max_inflight)
     : matched_(0),
       next_idx_(next_idx),

@@ -4,28 +4,28 @@ add_library(raftpp
   conf_changer.cc
   conf_restore.cc
   error.cc
+  inflights.cc
   joint_conf.cc
   majority_conf.cc
-  progress_tracker.cc
+  memory_storage.cc
   progress.cc
+  progress_tracker.cc
+  raft.cc
   raft_config.cc
   raft_core.cc
   raft_log.cc
-  raft.cc
   raw_node.cc
   read_only.cc
   storage.cc
   tracker_conf.cc
   unstable_log.cc
   util.cc
-  memory_storage.cc
 )
 
 target_include_directories(raftpp PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../include)
 
 target_link_libraries(raftpp PUBLIC raftpp-proto)
 target_link_libraries(raftpp PUBLIC magic_enum::magic_enum)
-target_link_libraries(raftpp PUBLIC Boost::circular_buffer)
 target_link_libraries(raftpp PUBLIC spdlog)
 target_link_libraries(raftpp PUBLIC nlohmann_json::nlohmann_json)
 target_link_libraries(raftpp PUBLIC libassert::assert)
