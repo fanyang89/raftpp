@@ -40,7 +40,7 @@ Result<void> MemoryStorageCore::ApplySnapshot(const Snapshot& snapshot) {
 }
 
 void MemoryStorageCore::Compact(uint64_t compact_index) {
-    if (compact_index >= first_index()) {
+    if (compact_index <= first_index()) {
         return;
     }
 
@@ -57,22 +57,40 @@ void MemoryStorageCore::Compact(uint64_t compact_index) {
 }
 
 void MemoryStorageCore::Append(const std::vector<Entry>& ents) {
+    MayAppend(ents, true);
+}
+
+Result<void, std::string> MemoryStorageCore::MayAppend(const std::vector<Entry>& ents, bool panic) {
     if (ents.empty()) {
-        return;
+        return {};
     }
 
-    if (first_index() > ents.front().index()) {
-        PANIC("overwrite compacted raft logs, compacted: {}, append: {}", first_index() - 1, ents[0].index());
+    const auto new_appended = ents.front().index();
+    if (first_index() > new_appended) {
+        const auto compacted = first_index() - 1;
+        if (panic) {
+            PANIC("overwrite compacted raft logs", compacted, new_appended);
+        }
+        return std::unexpected(
+            fmt::format("overwrite compacted raft logs, compacted={} new_appended={}", compacted, new_appended)
+        );
     }
 
-    if (last_index() + 1 > ents.front().index()) {
-        PANIC("raft logs should be continuous, last index: {}, new appended: {}", last_index(), ents.front().index());
+    if (last_index() + 1 < new_appended) {
+        if (panic) {
+            PANIC("raft logs should be continuous", last_index(), new_appended);
+        }
+        return std::unexpected(
+            fmt::format("raft logs should be continuous, last_index={} new_appended={}", last_index(), new_appended)
+        );
     }
 
-    const uint64_t diff = ents.front().index() - first_index();
-    entries_.erase(entries_.begin() + static_cast<int64_t>(diff), entries_.end());
+    if (const uint64_t diff = new_appended - first_index(); diff < entries_.size()) {
+        entries_.erase(entries_.begin() + static_cast<int64_t>(diff), entries_.end());
+    }
     entries_.reserve(entries_.size() + ents.size());
-    entries_.insert(entries_.end(), ents.begin(), ents.end());
+    entries_.insert_range(entries_.end(), ents);
+    return {};
 }
 
 void MemoryStorageCore::TriggerSnapshotUnavailable() {
@@ -165,6 +183,41 @@ Result<std::vector<Entry>> MemoryStorage::Entries(
 void MemoryStorage::SetEntries(const std::vector<Entry>& entries) {
     std::lock_guard lock(mutex_);
     core_.entries_ = entries;
+}
+
+void MemoryStorage::Append(const std::vector<Entry>& ents) {
+    std::lock_guard lock(mutex_);
+    core_.Append(ents);
+}
+
+void MemoryStorage::Compact(const uint64_t idx) {
+    std::lock_guard lock(mutex_);
+    core_.Compact(idx);
+}
+
+void MemoryStorage::SetRaftState(const RaftState& raft_state) {
+    std::lock_guard lock(mutex_);
+    core_.raft_state_ = raft_state;
+}
+
+void MemoryStorage::TriggerSnapshotUnavailable() {
+    std::lock_guard lock(mutex_);
+    core_.TriggerSnapshotUnavailable();
+}
+
+Result<void> MemoryStorage::ApplySnapshot(const Snapshot& snapshot) {
+    std::lock_guard lock(mutex_);
+    return core_.ApplySnapshot(snapshot);
+}
+
+std::vector<Entry> MemoryStorage::AllEntries() {
+    std::lock_guard lock(mutex_);
+    return core_.entries_;
+}
+
+Result<void, std::string> MemoryStorage::MayAppend(const std::vector<Entry>& entries) {
+    std::lock_guard lock(mutex_);
+    return core_.MayAppend(entries, false);
 }
 
 Result<uint64_t> MemoryStorage::Term(const uint64_t idx) {

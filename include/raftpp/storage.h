@@ -57,14 +57,14 @@ struct GetEntriesContext {
 class Storage {
   public:
     virtual ~Storage();
-    virtual Result<RaftState, RaftError> InitialState() = 0;
-    virtual Result<std::vector<Entry>, RaftError> Entries(
+    virtual Result<RaftState> InitialState() = 0;
+    virtual Result<std::vector<Entry>> Entries(
         uint64_t low, uint64_t high, std::optional<uint64_t> max_size, GetEntriesContext context
     ) = 0;
-    virtual Result<uint64_t, RaftError> Term(uint64_t idx) = 0;
-    virtual Result<uint64_t, RaftError> FirstIndex() = 0;
-    virtual Result<uint64_t, RaftError> LastIndex() = 0;
-    virtual Result<Snapshot, RaftError> GetSnapshot(uint64_t request_index, uint64_t to) = 0;
+    virtual Result<uint64_t> Term(uint64_t idx) = 0;
+    virtual Result<uint64_t> FirstIndex() = 0;
+    virtual Result<uint64_t> LastIndex() = 0;
+    virtual Result<Snapshot> GetSnapshot(uint64_t request_index, uint64_t to) = 0;
 };
 
 }  // namespace raftpp

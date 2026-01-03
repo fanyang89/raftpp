@@ -6,6 +6,7 @@
 
 #include "absl/strings/str_join.h"
 #include "raftpp/memory_storage.h"
+#include "raftpp/raft_config.h"
 #include "spdlog/spdlog.h"
 #include "test_util.h"
 
@@ -25,11 +26,23 @@ size_t size_of(const T& m) {
     return m.ByteSizeLong();
 }
 
+Snapshot NewSnapshot(const uint64_t index, const uint64_t term, const std::vector<uint64_t>& voters) {
+    Snapshot s;
+    s.mutable_metadata()->set_index(index);
+    s.mutable_metadata()->set_term(term);
+    s.mutable_metadata()->mutable_conf_state()->mutable_voters()->Add(voters.begin(), voters.end());
+    return s;
+}
+
 }  // namespace
 
 namespace raftpp {
 
 bool operator==(const Entry& e1, const Entry& e2) {
+    return google::protobuf::util::MessageDifferencer::Equals(e1, e2);
+}
+
+bool operator==(const Snapshot& e1, const Snapshot& e2) {
     return google::protobuf::util::MessageDifferencer::Equals(e1, e2);
 }
 
@@ -121,6 +134,194 @@ TEST_CASE("Entries") {
     storage.SetEntries(ents);
     const auto e = storage.Entries(lo, hi, maxSize, GetEntriesContext::Empty(false));
     CHECK(e == wEntries);
+}
+
+TEST_CASE("LastIndex") {
+    const std::vector ents{
+        NewEntry(3, 3),
+        NewEntry(4, 4),
+        NewEntry(5, 5),
+    };
+    MemoryStorage storage;
+    storage.SetEntries(ents);
+
+    auto result = storage.LastIndex();
+    CHECK(5 == result);
+
+    storage.Append({NewEntry(6, 5)});
+    result = storage.LastIndex();
+    CHECK(6 == result);
+}
+
+TEST_CASE("FirstIndex") {
+    const std::vector ents{
+        NewEntry(3, 3),
+        NewEntry(4, 4),
+        NewEntry(5, 5),
+    };
+
+    MemoryStorage storage;
+    storage.SetEntries(ents);
+    CHECK(3 == storage.FirstIndex());
+
+    storage.Compact(4);
+    CHECK(4 == storage.FirstIndex());
+}
+
+TEST_CASE("Compact") {
+    const std::vector ents{
+        NewEntry(3, 3),
+        NewEntry(4, 4),
+        NewEntry(5, 5),
+    };
+
+    using TestParam = std::tuple<uint64_t, uint64_t, uint64_t, uint64_t>;
+    TestParam test;
+    std::vector<TestParam> tests{
+        {2, 3, 3, 3},
+        {3, 3, 3, 3},
+        {4, 4, 4, 2},
+        {5, 5, 5, 1},
+    };
+    DOCTEST_VALUE_PARAMETERIZED_DATA(test, tests);
+    const auto [idx, wIndex, wTerm, wLen] = test;
+
+    MemoryStorage storage;
+    storage.SetEntries(ents);
+    storage.Compact(idx);
+
+    uint64_t index;
+    if (const auto r = storage.FirstIndex(); r) {
+        index = *r;
+    } else {
+        FAIL("FirstIndex()");
+    }
+    REQUIRE(wIndex == index);
+
+    uint64_t term = 0;
+    if (const auto r = storage.Entries(index, index + 1, 1, GetEntriesContext::Empty(false))) {
+        if (!r->empty()) {
+            term = r->front().term();
+        }
+    }
+    REQUIRE(wTerm == term);
+
+    uint64_t last = 0;
+    if (const auto r = storage.LastIndex(); r) {
+        last = *r;
+    } else {
+        FAIL("LastIndex()");
+    }
+
+    size_t len;
+    if (const auto r = storage.Entries(index, last + 1, 100, GetEntriesContext::Empty(false)); r) {
+        len = r->size();
+    } else {
+        FAIL("Entries()");
+    }
+    REQUIRE(wLen == len);
+}
+
+TEST_CASE("CreateSnapshot") {
+    const std::vector ents{
+        NewEntry(3, 3),
+        NewEntry(4, 4),
+        NewEntry(5, 5),
+    };
+
+    const std::vector<uint64_t> nodes{1, 2, 3};
+    ConfState conf_state;
+    conf_state.mutable_voters()->Add(nodes.begin(), nodes.end());
+
+    RaftError unavailable(StorageErrorCode::SnapshotTemporarilyUnavailable);
+    using TestParam = std::tuple<uint64_t, Result<Snapshot>, uint64_t>;
+    TestParam test;
+    std::vector<TestParam> tests{
+        {4, NewSnapshot(4, 4, nodes), 0},
+        {5, NewSnapshot(5, 5, nodes), 5},
+        {5, NewSnapshot(6, 5, nodes), 6},
+        {5, unavailable, 6},
+    };
+    DOCTEST_VALUE_PARAMETERIZED_DATA(test, tests);
+    const auto [idx, wResult, wIndex] = test;
+
+    MemoryStorage storage;
+    storage.SetEntries(ents);
+
+    RaftState raft_state;
+    raft_state.hard_state.set_commit(idx);
+    raft_state.hard_state.set_term(idx);
+    raft_state.conf_state.CopyFrom(conf_state);
+    storage.SetRaftState(raft_state);
+
+    if (!wResult.has_value()) {
+        storage.TriggerSnapshotUnavailable();
+    }
+
+    const auto result = storage.GetSnapshot(wIndex, 0);
+    CHECK(result == wResult);
+}
+
+TEST_CASE("Append") {
+    const std::vector ents{
+        NewEntry(3, 3),
+        NewEntry(4, 4),
+        NewEntry(5, 5),
+    };
+
+    using TestParam = std::tuple<std::vector<Entry>, std::optional<std::vector<Entry>>>;
+    TestParam test;
+    std::vector<TestParam> tests{
+        {
+            {NewEntry(3, 3), NewEntry(4, 4), NewEntry(5, 5)},
+            std::make_optional(std::vector{NewEntry(3, 3), NewEntry(4, 4), NewEntry(5, 5)}),
+        },
+        {
+            {NewEntry(3, 3), NewEntry(4, 6), NewEntry(5, 6)},
+            std::make_optional(std::vector{NewEntry(3, 3), NewEntry(4, 6), NewEntry(5, 6)}),
+        },
+        {
+            {NewEntry(3, 3), NewEntry(4, 4), NewEntry(5, 5), NewEntry(6, 5)},
+            std::make_optional(std::vector{NewEntry(3, 3), NewEntry(4, 4), NewEntry(5, 5), NewEntry(6, 5)}),
+        },
+        {{NewEntry(2, 3), NewEntry(3, 3), NewEntry(4, 5)}, std::nullopt},
+        {
+            {NewEntry(4, 5)},
+            std::make_optional(std::vector{NewEntry(3, 3), NewEntry(4, 5)}),
+        },
+        {{NewEntry(6, 6)},
+         std::make_optional(std::vector{NewEntry(3, 3), NewEntry(4, 4), NewEntry(5, 5), NewEntry(6, 6)})}
+    };
+    DOCTEST_VALUE_PARAMETERIZED_DATA(test, tests);
+    const auto [entries, wEntries] = test;
+
+    MemoryStorage storage;
+    storage.SetEntries(ents);
+
+    if (wEntries) {
+        storage.Append(entries);
+        CHECK(*wEntries == storage.AllEntries());
+    } else {
+        const auto r = storage.MayAppend(entries);
+        CHECK(!r.has_value());
+    }
+}
+
+TEST_CASE("ApplySnapshot") {
+    const std::vector<uint64_t> nodes{1, 2, 3};
+    MemoryStorage storage;
+
+    // Apply snapshot successfully
+    auto snap = NewSnapshot(4, 4, nodes);
+    if (auto r = storage.ApplySnapshot(snap); !r) {
+        FAIL("ApplySnapshot()");
+    }
+
+    // Apply snapshot fails due to StorageError::SnapshotOutOfDate
+    snap = NewSnapshot(3, 3, nodes);
+    if (auto r = storage.ApplySnapshot(snap); r) {
+        FAIL("ApplySnapshot()");
+    }
 }
 
 TEST_SUITE_END();
