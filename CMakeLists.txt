@@ -12,6 +12,10 @@ option(RAFTPP_WITH_LLD "Build with lld" OFF)
 option(RAFTPP_SANITIZE "Build with address sanitizer" OFF)
 option(RAFTPP_ENABLE_UBSAN "Build with undefined sanitizer when address sanitizer is enabled" ON)
 
+# cpm.cmake cache directory
+# https://github.com/cpm-cmake/CPM.cmake/issues/563
+set(CPM_SOURCE_CACHE "${CMAKE_CURRENT_SOURCE_DIR}/.cache/cpm" CACHE STRING "CPM cache path")
+
 if (RAFTPP_WITH_LLD)
   find_program(LLD_FOUND lld)
   if (LLD_FOUND)
