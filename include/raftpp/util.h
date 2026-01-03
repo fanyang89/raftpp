@@ -31,24 +31,33 @@ void LimitSize(std::vector<M>& entries, const std::optional<uint64_t> max) {
     if (entries.size() <= 1) {
         return;
     }
-    if (!max.has_value()) {
-        return;
-    }
-    if (*max == std::numeric_limits<uint64_t>::max()) {
+    if (!max.has_value() || *max == std::numeric_limits<uint64_t>::max()) {
         return;
     }
 
-    size_t size = 0;
-    size_t limit = 0;
-    for (auto& entry : entries) {
-        if (size >= *max) {
+    size_t current_total_size = 0;
+    size_t keep_count = 0;
+
+    for (const auto& entry : entries) {
+        const size_t entry_size = entry.ByteSizeLong();
+
+        if (keep_count == 0) {
+            current_total_size += entry_size;
+            keep_count++;
+            continue;
+        }
+
+        if (current_total_size + entry_size > *max) {
             break;
         }
-        size += entry.ByteSizeLong();
-        ++limit;
+
+        current_total_size += entry_size;
+        keep_count++;
     }
 
-    entries.erase(entries.begin(), entries.begin() + limit);
+    if (keep_count < entries.size()) {
+        entries.erase(entries.begin() + keep_count, entries.end());
+    }
 }
 
 bool IsContinuousEntries(const Message& message, const std::vector<Entry>& entries);

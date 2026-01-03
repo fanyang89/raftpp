@@ -10,12 +10,16 @@
 
 using namespace raftpp;
 
+namespace {
+
 std::optional<Entry> NewEntry(const uint64_t index, const uint64_t term) {
     Entry ent;
     ent.set_term(term);
     ent.set_index(index);
     return ent;
 }
+
+}  // namespace
 
 Snapshot NewSnapshot(const uint64_t index, const uint64_t term) {
     Snapshot snap;

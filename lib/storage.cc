@@ -7,7 +7,6 @@
 
 namespace raftpp {
 
-
 bool GetEntriesContext::CanAsync() const {
     if (what == GetEntriesFor::Empty) {
         return payload.empty.can_async;
@@ -23,5 +22,7 @@ GetEntriesContext GetEntriesContext::Empty(const bool can_async) {
         .what = GetEntriesFor::Empty, .payload = GetEntriesForPayload{.empty = {.can_async = can_async}}
     };
 }
+
+Storage::~Storage() = default;
 
 }  // namespace raftpp

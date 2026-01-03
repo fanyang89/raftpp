@@ -39,13 +39,10 @@ Result<uint64_t> RaftLog::Term(const uint64_t idx) const {
         return r.value();
     } else {
         const auto err = r.error();
-        switch (err) {
-            case StorageErrorCode::Compacted:
-            case StorageErrorCode::Unavailable:
-                return RaftError(err);
-            default:
-                PANIC("unexpected error: {}, code: {}", magic_enum::enum_name(err), magic_enum::enum_integer(err));
+        if (err.Is(StorageErrorCode::Compacted) || err.Is(StorageErrorCode::Unavailable)) {
+            return err;
         }
+        PANIC("unexpected error: {}", err);
     }
 }
 
@@ -217,18 +214,16 @@ Result<std::vector<Entry>, RaftError> RaftLog::Slice(
                 return entries;
             }
         } else {
-            switch (r.error()) {
-                case StorageErrorCode::Compacted:
-                case StorageErrorCode::LogTemporarilyUnavailable:
-                    return RaftError(r.error());
-                case StorageErrorCode::Unavailable:
-                    PANIC("entries[{}:{}] is unavailable from storage", low, unstable_high);
-                    break;
-                case StorageErrorCode::SnapshotOutOfDate:
-                case StorageErrorCode::SnapshotTemporarilyUnavailable:
-                    PANIC("unexpected error: {}", r.error());
-                    break;
+            const auto err = r.error();
+            if (err.Is(StorageErrorCode::Compacted) || err.Is(StorageErrorCode::LogTemporarilyUnavailable)) {
+                return err;
             }
+
+            if (err.Is(StorageErrorCode::Unavailable)) {
+                PANIC("entries[{}:{}] is unavailable from storage", low, unstable_high);
+            }
+
+            PANIC("unexpected error: {}", r.error());
         }
     }
 
@@ -287,7 +282,7 @@ std::pair<uint64_t, std::optional<uint64_t>> RaftLog::FindConflictByTerm(uint64_
     }
 }
 
-Result<Snapshot, StorageErrorCode> RaftLog::GetSnapshot(const uint64_t request_index, const uint64_t to) {
+Result<Snapshot> RaftLog::GetSnapshot(const uint64_t request_index, const uint64_t to) {
     if (const auto r = unstable_.snapshot()) {
         if (r->get().metadata().index() >= request_index) {
             return *r;

@@ -13,7 +13,7 @@ class MemoryStorageCore {
     void SetHardState(HardState&& hs);
     void CommitTo(uint64_t index);
     bool HasEntryAt(uint64_t index) const;
-    Result<void, StorageErrorCode> ApplySnapshot(const Snapshot& snapshot);
+    Result<void> ApplySnapshot(const Snapshot& snapshot);
     void Compact(uint64_t compact_index);
     void Append(const std::vector<Entry>& ents);
     void TriggerSnapshotUnavailable();
@@ -37,16 +37,18 @@ class MemoryStorageCore {
 
 class MemoryStorage final : public Storage {
   public:
-    Result<RaftState, StorageErrorCode> InitialState() override;
+    ~MemoryStorage() override;
+    Result<RaftState> InitialState() override;
 
-    Result<std::vector<Entry>, StorageErrorCode> Entries(
+    Result<std::vector<Entry>> Entries(
         uint64_t low, uint64_t high, std::optional<uint64_t> max_size, GetEntriesContext context
     ) override;
+    void SetEntries(const std::vector<Entry>& entries);
 
-    Result<uint64_t, StorageErrorCode> Term(uint64_t idx) override;
-    Result<uint64_t, StorageErrorCode> FirstIndex() override;
-    Result<uint64_t, StorageErrorCode> LastIndex() override;
-    Result<Snapshot, StorageErrorCode> GetSnapshot(uint64_t request_index, uint64_t to) override;
+    Result<uint64_t> Term(uint64_t idx) override;
+    Result<uint64_t> FirstIndex() override;
+    Result<uint64_t> LastIndex() override;
+    Result<Snapshot> GetSnapshot(uint64_t request_index, uint64_t to) override;
 
   private:
     std::mutex mutex_;

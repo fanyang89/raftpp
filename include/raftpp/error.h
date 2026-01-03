@@ -23,6 +23,7 @@ enum class StorageErrorCode {
 
 struct StorageErrorOther {
     std::string message;
+    bool operator==(const StorageErrorOther&) const;
 };
 
 enum class RaftErrorCode {
@@ -41,11 +42,13 @@ class RaftError;
 struct InvalidConfigError {
     std::string message;
     [[nodiscard]] RaftError ToError() const;
+    bool operator==(const InvalidConfigError&) const;
 };
 
 struct ConfChangeError {
     std::string message;
     [[nodiscard]] RaftError ToError() const;
+    bool operator==(const ConfChangeError&) const;
 };
 
 using RaftErrorInner =
@@ -54,11 +57,20 @@ using RaftErrorInner =
 // RaftError is the universal error type in this lib
 class RaftError : public RaftErrorInner {
   public:
+    using RaftErrorInner::RaftErrorInner;
+
+    RaftError(StorageErrorCode ec);
+
     template <typename T>
     operator std::expected<T, RaftError>() const;
 
     template <typename T>
     bool Is(const T& ec) const;
+
+    template <typename T>
+    bool operator==(const T& ec) const;
+
+    bool operator==(const RaftError& other) const;
 };
 
 template <typename T>
@@ -82,6 +94,11 @@ bool RaftError::Is(const T& ec) const {
         static_assert(!std::is_same_v<T, T>, "unexpected type");
         return false;
     }
+}
+
+template <typename T>
+bool RaftError::operator==(const T& ec) const {
+    return Is(ec);
 }
 
 template <typename R, typename E = RaftError>

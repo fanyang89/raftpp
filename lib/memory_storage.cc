@@ -24,11 +24,11 @@ bool MemoryStorageCore::HasEntryAt(const uint64_t index) const {
     return !entries_.empty() && index >= first_index() && index <= last_index();
 }
 
-Result<void, StorageErrorCode> MemoryStorageCore::ApplySnapshot(const Snapshot& snapshot) {
+Result<void> MemoryStorageCore::ApplySnapshot(const Snapshot& snapshot) {
     const auto& meta = snapshot.metadata();
     const uint64_t index = meta.index();
     if (first_index() > index) {
-        return std::unexpected(StorageErrorCode::SnapshotOutOfDate);
+        return RaftError(StorageErrorCode::SnapshotOutOfDate);
     }
 
     snapshot_metadata_.CopyFrom(meta);
@@ -126,18 +126,20 @@ Snapshot MemoryStorageCore::snapshot() const {
     return snapshot;
 }
 
-Result<RaftState, StorageErrorCode> MemoryStorage::InitialState() {
+MemoryStorage::~MemoryStorage() = default;
+
+Result<RaftState> MemoryStorage::InitialState() {
     std::lock_guard lock(mutex_);
     return core_.raft_state_;
 }
 
-Result<std::vector<Entry>, StorageErrorCode> MemoryStorage::Entries(
+Result<std::vector<Entry>> MemoryStorage::Entries(
     const uint64_t low, uint64_t high, const std::optional<uint64_t> max_size, GetEntriesContext context
 ) {
     std::lock_guard lock(mutex_);
 
     if (low < core_.first_index()) {
-        return std::unexpected(StorageErrorCode::Compacted);
+        return RaftError(StorageErrorCode::Compacted);
     }
 
     if (high > core_.last_index() + 1) {
@@ -146,7 +148,7 @@ Result<std::vector<Entry>, StorageErrorCode> MemoryStorage::Entries(
 
     if (core_.trigger_log_unavailable_ && context.CanAsync()) {
         core_.get_entries_context_ = context;
-        return std::unexpected(StorageErrorCode::LogTemporarilyUnavailable);
+        return RaftError(StorageErrorCode::LogTemporarilyUnavailable);
     }
 
     const uint64_t offset = core_.entries_.front().index();
@@ -160,7 +162,12 @@ Result<std::vector<Entry>, StorageErrorCode> MemoryStorage::Entries(
     return entries;
 }
 
-Result<uint64_t, StorageErrorCode> MemoryStorage::Term(const uint64_t idx) {
+void MemoryStorage::SetEntries(const std::vector<Entry>& entries) {
+    std::lock_guard lock(mutex_);
+    core_.entries_ = entries;
+}
+
+Result<uint64_t> MemoryStorage::Term(const uint64_t idx) {
     std::lock_guard lock(mutex_);
     if (idx == core_.snapshot_metadata_.index()) {
         return core_.snapshot_metadata_.term();
@@ -178,17 +185,17 @@ Result<uint64_t, StorageErrorCode> MemoryStorage::Term(const uint64_t idx) {
     return core_.entries_[idx - offset].term();
 }
 
-Result<uint64_t, StorageErrorCode> MemoryStorage::FirstIndex() {
+Result<uint64_t> MemoryStorage::FirstIndex() {
     std::lock_guard lock(mutex_);
     return core_.first_index();
 }
 
-Result<uint64_t, StorageErrorCode> MemoryStorage::LastIndex() {
+Result<uint64_t> MemoryStorage::LastIndex() {
     std::lock_guard lock(mutex_);
     return core_.last_index();
 }
 
-Result<Snapshot, StorageErrorCode> MemoryStorage::GetSnapshot(const uint64_t request_index, uint64_t to) {
+Result<Snapshot> MemoryStorage::GetSnapshot(const uint64_t request_index, uint64_t to) {
     std::lock_guard lock(mutex_);
     if (core_.trigger_snapshot_unavailable_) {
         core_.trigger_snapshot_unavailable_ = false;

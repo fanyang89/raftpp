@@ -15,7 +15,7 @@ class RaftLog {
         uint64_t last_index;
     };
 
-    Result<Snapshot, StorageErrorCode> GetSnapshot(uint64_t request_index, uint64_t to);  // return the current snapshot
+    Result<Snapshot> GetSnapshot(uint64_t request_index, uint64_t to);  // return the current snapshot
     Result<std::vector<Entry>, RaftError> Slice(
         uint64_t low, uint64_t high, std::optional<uint64_t> max_size, const GetEntriesContext& context
     );
