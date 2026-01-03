@@ -32,4 +32,6 @@ struct Config {
     Result<void> Validate() const;
 };
 
+Config DefaultConfig();
+
 }  // namespace raftpp

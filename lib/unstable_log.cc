@@ -48,7 +48,7 @@ std::optional<uint64_t> Unstable::MaybeTerm(const uint64_t idx) const {
     }
 
     if (const auto last = MaybeLastIndex(); last.has_value()) {
-        if (idx >= *last) {
+        if (idx > *last) {
             return {};
         }
         return entries_[idx - offset_].term();
@@ -97,13 +97,12 @@ void Unstable::TruncateAndAppend(std::span<const Entry> ents) {
         entries_.clear();
         entries_size_ = 0;
     } else {
-        const int64_t off = offset_;
-        const int64_t diff = static_cast<int64_t>(off - after);
-        MustCheckOutOfBounds(off, after);
-        for (auto it = ents.begin() + diff; it != ents.end(); ++it) {
-            entries_size_ -= EntryApproximateSize(*it);
+        uint64_t keep_count = after - offset_;
+        MustCheckOutOfBounds(offset_, after);
+        for (size_t i = keep_count; i < entries_.size(); ++i) {
+            entries_size_ -= EntryApproximateSize(entries_[i]);
         }
-        entries_.erase(entries_.begin(), entries_.begin() + diff);
+        entries_.resize(keep_count);
     }
 
     entries_.reserve(entries_.size() + ents.size());

@@ -1,6 +1,10 @@
 #pragma once
 
+#include <optional>
+
 #include <doctest/doctest.h>
+
+#include "raftpp/raftpp.pb.h"
 
 #define DOCTEST_VALUE_PARAMETERIZED_DATA(data, data_container)                                        \
     if (auto i = 0; true) {                                                                           \
@@ -11,4 +15,8 @@
         }                                                                                             \
     }
 
-namespace raftpp {}
+namespace raftpp {
+
+Entry NewEntry(uint64_t index, uint64_t term);
+
+}  // namespace raftpp

@@ -14,13 +14,6 @@ using namespace raftpp;
 
 namespace {
 
-Entry NewEntry(const uint64_t index, const uint64_t term) {
-    Entry e;
-    e.set_term(term);
-    e.set_index(index);
-    return e;
-}
-
 template <typename T>
 size_t size_of(const T& m) {
     return m.ByteSizeLong();

@@ -65,4 +65,21 @@ Result<void> Config::Validate() const {
     return {};
 }
 
+Config DefaultConfig() {
+    Config c;
+    c.id = 0;
+    c.applied = 0;
+    c.max_size_per_message = 0;
+    c.check_quorum = false;
+    c.pre_vote = false;
+    c.min_election_tick = 0;
+    c.max_election_tick = 0;
+    c.skip_broadcast_commit = false;
+    c.batch_append = false;
+    c.priority = 0;
+    c.max_apply_unpersisted_log_limit = 0;
+    c.disable_proposal_forwarding = false;
+    return c;
+}
+
 }  // namespace raftpp
