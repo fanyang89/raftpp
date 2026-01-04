@@ -20,7 +20,7 @@ class RaftLog {
     );  // return the current snapshot
     Result<std::vector<Entry>, RaftError> Slice(
         uint64_t low, uint64_t high, std::optional<uint64_t> max_size,
-        const GetEntriesContext& context
+        const GetEntriesContext& context, bool panic = false
     );
     Result<std::vector<Entry>> GetEntries(
         uint64_t idx, std::optional<uint64_t> max_size,
@@ -42,7 +42,9 @@ class RaftLog {
     std::optional<std::vector<Entry>> NextEntriesSince(
         uint64_t since_idx, std::optional<uint64_t> max_size
     );
-    std::optional<std::vector<Entry>> NextEntries(std::optional<uint64_t> max_size);
+    std::optional<std::vector<Entry>> NextEntries(
+        std::optional<uint64_t> max_size
+    );
     std::pair<uint64_t, std::optional<uint64_t>> FindConflictByTerm(
         uint64_t index, uint64_t term
     ) const;
@@ -75,7 +77,7 @@ class RaftLog {
     uint64_t persisted() const;
 
   private:
-    Result<void> MustCheckOutOfBounds(uint64_t low, uint64_t high) const;
+    Result<void> MustCheckOutOfBounds(uint64_t low, uint64_t high, bool panic) const;
 
     std::unique_ptr<Storage> store_;
     Unstable unstable_;

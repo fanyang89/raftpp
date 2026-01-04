@@ -185,9 +185,16 @@ void RaftLog::CommitTo(uint64_t to_commit) {
     committed_ = to_commit;
 }
 
-Result<void> RaftLog::MustCheckOutOfBounds(uint64_t low, uint64_t high) const {
+Result<void> RaftLog::MustCheckOutOfBounds(
+    uint64_t low, uint64_t high, bool panic
+) const {
     if (low > high) {
-        PANIC("invalid slice {} > {}", low, high);
+        if (panic) {
+            PANIC("invalid slice", low, high);
+        }
+        return RaftError(
+            FatalError{fmt::format("invalid slice {} > {}", low, high)}
+        );
     }
 
     const auto first_index = FirstIndex();
@@ -197,9 +204,21 @@ Result<void> RaftLog::MustCheckOutOfBounds(uint64_t low, uint64_t high) const {
 
     const auto length = LastIndex() + 1 - first_index;
     if (low < first_index || high > first_index + length) {
-        PANIC(
-            "slice[{},{}] out of bound[{},{}]", low, high, first_index,
-            LastIndex()
+        const auto slice_low = low;
+        const auto slice_high = high;
+        const auto bound_first_index = first_index;
+        const auto bound_last_index = LastIndex();
+        if (panic) {
+            PANIC(
+                "slice out of bound", slice_low, slice_high, bound_first_index,
+                bound_last_index
+            );
+        }
+        return RaftError(
+            FatalError{fmt::format(
+                "slice[{},{}] out of bound[{},{}]", slice_low, slice_high,
+                bound_first_index, bound_last_index
+            )}
         );
     }
 
@@ -208,9 +227,9 @@ Result<void> RaftLog::MustCheckOutOfBounds(uint64_t low, uint64_t high) const {
 
 Result<std::vector<Entry>, RaftError> RaftLog::Slice(
     uint64_t low, uint64_t high, std::optional<uint64_t> max_size,
-    const GetEntriesContext& context
+    const GetEntriesContext& context, const bool panic
 ) {
-    if (auto r = MustCheckOutOfBounds(low, high); !r) {
+    if (auto r = MustCheckOutOfBounds(low, high, panic); !r) {
         return r.error();
     }
 
@@ -224,7 +243,7 @@ Result<std::vector<Entry>, RaftError> RaftLog::Slice(
         const auto unstable_high = std::min(high, unstable_.offset());
         if (const auto r =
                 store_->Entries(low, unstable_high, max_size, context)) {
-            entries = *r;
+            entries = std::move(*r);
             if (entries.size() < unstable_high - low) {
                 return entries;
             }
@@ -248,8 +267,11 @@ Result<std::vector<Entry>, RaftError> RaftLog::Slice(
 
     if (high > unstable_.offset()) {
         const auto offset = unstable_.offset();
-        const auto unstable = unstable_.Slice(std::max(low, offset), high);
-        entries.insert(entries.end(), unstable.begin(), unstable.end());
+        auto unstable = unstable_.Slice(std::max(low, offset), high);
+        entries.insert(
+            entries.end(), std::make_move_iterator(unstable.begin()),
+            std::make_move_iterator(unstable.end())
+        );
     }
 
     LimitSize(entries, max_size);

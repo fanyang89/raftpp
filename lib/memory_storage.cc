@@ -6,15 +6,20 @@
 
 namespace raftpp {
 
-MemoryStorageCore::MemoryStorageCore() : trigger_snapshot_unavailable_(false), trigger_log_unavailable_(false) {}
+MemoryStorageCore::MemoryStorageCore()
+    : trigger_snapshot_unavailable_(false), trigger_log_unavailable_(false) {}
 
 void MemoryStorageCore::SetHardState(HardState&& hs) {
-    static_assert(std::is_rvalue_reference_v<decltype(hs)>, "hs must be rvalue reference");
+    static_assert(
+        std::is_rvalue_reference_v<decltype(hs)>, "hs must be rvalue reference"
+    );
     raft_state_.hard_state = std::move(hs);
 }
 
 void MemoryStorageCore::CommitTo(uint64_t index) {
-    ASSERT(HasEntryAt(index), "commit_to {} but the entry does not exist", index);
+    ASSERT(
+        HasEntryAt(index), "commit_to {} but the entry does not exist", index
+    );
     const size_t diff = index - entries_[0].index();
     raft_state_.hard_state.set_commit(index);
     raft_state_.hard_state.set_term(entries_[diff].term());
@@ -32,7 +37,9 @@ Result<void> MemoryStorageCore::ApplySnapshot(const Snapshot& snapshot) {
     }
 
     snapshot_metadata_.CopyFrom(meta);
-    raft_state_.hard_state.set_term(std::max(raft_state_.hard_state.term(), meta.term()));
+    raft_state_.hard_state.set_term(
+        std::max(raft_state_.hard_state.term(), meta.term())
+    );
     raft_state_.hard_state.set_commit(index);
     entries_.clear();
     raft_state_.conf_state.CopyFrom(meta.conf_state());
@@ -53,14 +60,18 @@ void MemoryStorageCore::Compact(uint64_t compact_index) {
     }
 
     const uint64_t offset = compact_index - entries_[0].index();
-    entries_.erase(entries_.begin(), entries_.begin() + static_cast<int64_t>(offset));
+    entries_.erase(
+        entries_.begin(), entries_.begin() + static_cast<int64_t>(offset)
+    );
 }
 
 void MemoryStorageCore::Append(const std::vector<Entry>& ents) {
-    MayAppend(ents, true);
+    std::ignore = MayAppend(ents, true);
 }
 
-Result<void, std::string> MemoryStorageCore::MayAppend(const std::vector<Entry>& ents, bool panic) {
+Result<void, std::string> MemoryStorageCore::MayAppend(
+    const std::vector<Entry>& ents, const bool panic
+) {
     if (ents.empty()) {
         return {};
     }
@@ -72,7 +83,10 @@ Result<void, std::string> MemoryStorageCore::MayAppend(const std::vector<Entry>&
             PANIC("overwrite compacted raft logs", compacted, new_appended);
         }
         return std::unexpected(
-            fmt::format("overwrite compacted raft logs, compacted={} new_appended={}", compacted, new_appended)
+            fmt::format(
+                "overwrite compacted raft logs, compacted={} new_appended={}",
+                compacted, new_appended
+            )
         );
     }
 
@@ -81,12 +95,18 @@ Result<void, std::string> MemoryStorageCore::MayAppend(const std::vector<Entry>&
             PANIC("raft logs should be continuous", last_index(), new_appended);
         }
         return std::unexpected(
-            fmt::format("raft logs should be continuous, last_index={} new_appended={}", last_index(), new_appended)
+            fmt::format(
+                "raft logs should be continuous, last_index={} new_appended={}",
+                last_index(), new_appended
+            )
         );
     }
 
-    if (const uint64_t diff = new_appended - first_index(); diff < entries_.size()) {
-        entries_.erase(entries_.begin() + static_cast<int64_t>(diff), entries_.end());
+    if (const uint64_t diff = new_appended - first_index();
+        diff < entries_.size()) {
+        entries_.erase(
+            entries_.begin() + static_cast<int64_t>(diff), entries_.end()
+        );
     }
     entries_.reserve(entries_.size() + ents.size());
     entries_.insert_range(entries_.end(), ents);
@@ -129,7 +149,10 @@ Snapshot MemoryStorageCore::snapshot() const {
 
     uint64_t term;
     if (meta->index() < snapshot_metadata_.index()) {
-        PANIC("commit {} < snapshot_metadata.index {}", meta->index(), snapshot_metadata_.index());
+        PANIC(
+            "commit {} < snapshot_metadata.index {}", meta->index(),
+            snapshot_metadata_.index()
+        );
     }
     if (meta->index() > snapshot_metadata_.index()) {
         const uint64_t offset = entries_[0].index();
@@ -152,7 +175,8 @@ Result<RaftState> MemoryStorage::InitialState() {
 }
 
 Result<std::vector<Entry>> MemoryStorage::Entries(
-    const uint64_t low, uint64_t high, const std::optional<uint64_t> max_size, GetEntriesContext context
+    const uint64_t low, uint64_t high, const std::optional<uint64_t> max_size,
+    GetEntriesContext context
 ) {
     std::lock_guard lock(mutex_);
 
@@ -161,7 +185,10 @@ Result<std::vector<Entry>> MemoryStorage::Entries(
     }
 
     if (high > core_.last_index() + 1) {
-        PANIC("index out of bound (last: {}, high: {})", core_.last_index() + 1, high);
+        PANIC(
+            "index out of bound (last: {}, high: {})", core_.last_index() + 1,
+            high
+        );
     }
 
     if (core_.trigger_log_unavailable_ && context.CanAsync()) {
@@ -173,7 +200,8 @@ Result<std::vector<Entry>> MemoryStorage::Entries(
     const auto lo = static_cast<int64_t>(low - offset);
     const auto hi = static_cast<int64_t>(high - offset);
     std::vector<Entry> entries;
-    for (auto it = core_.entries_.begin() + lo; it != core_.entries_.begin() + hi; ++it) {
+    for (auto it = core_.entries_.begin() + lo;
+         it != core_.entries_.begin() + hi; ++it) {
         entries.emplace_back(*it);
     }
     if (max_size) {
@@ -217,7 +245,9 @@ std::vector<Entry> MemoryStorage::AllEntries() {
     return core_.entries_;
 }
 
-Result<void, std::string> MemoryStorage::MayAppend(const std::vector<Entry>& entries) {
+Result<void, std::string> MemoryStorage::MayAppend(
+    const std::vector<Entry>& entries
+) {
     std::lock_guard lock(mutex_);
     return core_.MayAppend(entries, false);
 }
@@ -250,11 +280,15 @@ Result<uint64_t> MemoryStorage::LastIndex() {
     return core_.last_index();
 }
 
-Result<Snapshot> MemoryStorage::GetSnapshot(const uint64_t request_index, uint64_t to) {
+Result<Snapshot> MemoryStorage::GetSnapshot(
+    const uint64_t request_index, uint64_t to
+) {
     std::lock_guard lock(mutex_);
     if (core_.trigger_snapshot_unavailable_) {
         core_.trigger_snapshot_unavailable_ = false;
-        return std::unexpected(StorageErrorCode::SnapshotTemporarilyUnavailable);
+        return std::unexpected(
+            StorageErrorCode::SnapshotTemporarilyUnavailable
+        );
     }
 
     Snapshot snapshot = core_.snapshot();

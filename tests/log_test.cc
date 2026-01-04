@@ -9,7 +9,7 @@ using namespace raftpp;
 
 TEST_SUITE_BEGIN("Log");
 
-TEST_CASE("Find conflict") {
+TEST_CASE("raft_log: find conflict") {
     const std::vector previous_entries{
         NewEntry(1, 1),
         NewEntry(2, 2),
@@ -52,7 +52,7 @@ TEST_CASE("Find conflict") {
     CHECK_EQ(w_conflict, r);
 }
 
-TEST_CASE("is up-to-date") {
+TEST_CASE("raft_log: is up-to-date") {
     const std::vector previous_entries{
         NewEntry(1, 1),
         NewEntry(2, 2),
@@ -86,7 +86,7 @@ TEST_CASE("is up-to-date") {
     CHECK_EQ(up_to_date, r);
 }
 
-TEST_CASE("Raft log append") {
+TEST_CASE("raft_log: append") {
     const std::vector previous_entries{
         NewEntry(1, 1),
         NewEntry(2, 2),
@@ -138,7 +138,7 @@ TEST_CASE("Raft log append") {
     }
 }
 
-TEST_CASE("Compaction side effects") {
+TEST_CASE("raft_log: compaction side effects") {
     const uint64_t last_index = 1000;
     const uint64_t unstable_index = 750;
     const uint64_t last_term = last_index;
@@ -183,7 +183,7 @@ TEST_CASE("Compaction side effects") {
     REQUIRE_EQ(1, ents->size());
 }
 
-TEST_CASE("Term with unstable snapshot") {
+TEST_CASE("raft_log: term with unstable snapshot") {
     constexpr uint64_t storage_snap_idx = 10064;
     constexpr uint64_t unstable_snap_idx = storage_snap_idx + 5;
     auto store = std::make_unique<MemoryStorage>();
@@ -219,7 +219,7 @@ TEST_CASE("Term with unstable snapshot") {
     CHECK_EQ(r, w);
 }
 
-TEST_CASE("Term") {
+TEST_CASE("raft_log: term") {
     constexpr uint64_t offset = 100;
     constexpr uint64_t num = 100;
 
@@ -253,7 +253,7 @@ TEST_CASE("Term") {
     CHECK_EQ(term, w);
 }
 
-TEST_CASE("Log restore") {
+TEST_CASE("raft_log: log restore") {
     constexpr uint64_t index = 1000;
     constexpr uint64_t term = 1000;
     auto store = std::make_unique<MemoryStorage>();
@@ -280,7 +280,7 @@ TEST_CASE("Log restore") {
     CHECK_EQ(term + 1, raft_log.Term(index + 2));
 }
 
-TEST_CASE("Maybe persist with snapshot") {
+TEST_CASE("raft_log: maybe persist with snapshot") {
     {
         constexpr uint64_t snap_index = 5;
         constexpr uint64_t snap_term = 2;
@@ -335,7 +335,7 @@ TEST_CASE("Maybe persist with snapshot") {
     }
 }
 
-TEST_CASE("Unstable entries") {
+TEST_CASE("raft_log: unstable entries") {
     const std::vector previous_ents{NewEntry(1, 1), NewEntry(2, 2)};
 
     struct TestParam {
@@ -375,7 +375,7 @@ TEST_CASE("Unstable entries") {
     REQUIRE_EQ(w, g);
 }
 
-TEST_CASE("Has next entries and next entries") {
+TEST_CASE("raft_log: has next entries and next entries") {
     const std::vector ents{
         NewEntry(4, 1),
         NewEntry(5, 1),
@@ -441,7 +441,7 @@ TEST_CASE("Has next entries and next entries") {
     CHECK_EQ(w_entries, next_entries);
 }
 
-TEST_CASE("Has next entries and next entries - 2") {
+TEST_CASE("raft_log: has next entries and next entries, 2") {
     const std::vector ents{
         NewEntry(4, 1), NewEntry(5, 1), NewEntry(6, 1),  NewEntry(7, 1),
         NewEntry(8, 1), NewEntry(9, 1), NewEntry(10, 1),
@@ -516,6 +516,147 @@ TEST_CASE("Has next entries and next entries - 2") {
     CHECK_EQ(w_entries.has_value(), raft_log.HasNextEntries());
     const auto next_entries = raft_log.NextEntries({});
     CHECK_EQ(w_entries, next_entries);
+}
+
+TEST_CASE("raft_log: slice") {
+    constexpr uint64_t offset = 100;
+    constexpr uint64_t num = 100;
+    constexpr uint64_t last = offset + num;
+    constexpr uint64_t half = offset + num / 2;
+    const Entry half_e = NewEntry(half, half);
+    const auto half_e_size = half_e.ByteSizeLong();
+
+    auto store = std::make_unique<MemoryStorage>();
+    CHECK(store->ApplySnapshot(NewSnapshot(offset, 0)));
+    for (uint64_t i = 1; i < num / 2; ++i) {
+        store->Append({NewEntry(offset + i, offset + i)});
+    }
+
+    RaftLog raft_log(DefaultConfig(), std::move(store));
+    for (uint64_t i = num / 2; i < num; ++i) {
+        raft_log.Append({NewEntry(offset + i, offset + i)});
+    }
+
+    struct TestParam {
+        uint64_t from = 0;
+        uint64_t to = 0;
+        uint64_t limit = 0;
+        std::vector<Entry> w;
+        bool w_panic = false;
+        size_t test_index = 0;
+    };
+
+    constexpr auto NO_LIMIT = std::numeric_limits<uint64_t>::max();
+
+    TestParam test;
+    const std::vector<TestParam> tests{
+        // test no limit
+        {offset - 1, offset + 1, NO_LIMIT, {}, false},
+        {offset, offset + 1, NO_LIMIT, {}, false},
+        {
+            half - 1,
+            half + 1,
+            NO_LIMIT,
+            {NewEntry(half - 1, half - 1), NewEntry(half, half)},
+            false,
+        },
+        {
+            half,
+            half + 1,
+            NO_LIMIT,
+            {NewEntry(half, half)},
+            false,
+        },
+        {
+            last - 1,
+            last,
+            NO_LIMIT,
+            {NewEntry(last - 1, last - 1)},
+            false,
+        },
+        {last, last + 1, NO_LIMIT, {}, true},
+        // test limit
+        {
+            half - 1,
+            half + 1,
+            0,
+            {NewEntry(half - 1, half - 1)},
+            false,
+        },
+        {
+            half - 1,
+            half + 1,
+            half_e_size + 1,
+            {NewEntry(half - 1, half - 1)},
+            false,
+        },
+        {
+            half - 2,
+            half + 1,
+            half_e_size + 1,
+            {NewEntry(half - 2, half - 2)},
+            false,
+        },
+        {
+            half - 1,
+            half + 1,
+            half_e_size * 2,
+            {NewEntry(half - 1, half - 1), NewEntry(half, half)},
+            false,
+        },
+        {
+            half - 1,
+            half + 2,
+            half_e_size * 3,
+            {
+                NewEntry(half - 1, half - 1),
+                NewEntry(half, half),
+                NewEntry(half + 1, half + 1),
+            },
+            false,
+        },
+        {
+            half,
+            half + 2,
+            half_e_size,
+            {NewEntry(half, half)},
+            false,
+        },
+        {
+            half,
+            half + 2,
+            half_e_size * 2,
+            {NewEntry(half, half), NewEntry(half + 1, half + 1)},
+            false,
+        },
+    };
+    DOCTEST_VALUE_PARAMETERIZED_DATA_WITH_INDEX(test, tests);
+    const auto& [from, to, limit, w, w_panic, test_index] = test;
+
+    auto slice_result =
+        raft_log.Slice(from, to, limit, GetEntriesContext::Empty(false), false);
+
+    if (w_panic) {
+        if (slice_result) {
+            FAIL("expected fatal error");
+        }
+        return;
+    }
+
+    // compacted
+    if (from <= offset) {
+        if (slice_result) {
+            FAIL(
+                "Expected Compacted error, but got OK. size: ",
+                slice_result->size()
+            );
+        } else if (!slice_result.error().Is(StorageErrorCode::Compacted)) {
+            FAIL("Expected Compacted error, but got: ", slice_result.error());
+        }
+        return;
+    }
+
+    REQUIRE_EQ(slice_result, w);
 }
 
 TEST_SUITE_END();
