@@ -19,10 +19,10 @@ Snapshot NewSnapshot(const uint64_t index, const uint64_t term) {
 
 struct LogUnstableTestParams {
     std::optional<Entry> ent;
-    uint64_t offset;
+    uint64_t offset = 0;
     std::optional<Snapshot> snapshot;
-    bool w_ok;
-    uint64_t w_index;
+    bool w_ok = false;
+    uint64_t w_index = 0;
 
     friend std::ostream& operator<<(std::ostream& os, const LogUnstableTestParams& param) {
         return os << (param.snapshot.has_value() ? "has entry" : "don't have entry");

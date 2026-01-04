@@ -8,7 +8,9 @@
 
 using namespace raftpp;
 
-ProgressDebug NewProgress(ProgressState state, uint64_t matched, uint64_t next_idx, uint64_t pending_snapshot) {
+ProgressDebug NewProgress(
+    const ProgressState state, const uint64_t matched, const uint64_t next_idx, const uint64_t pending_snapshot
+) {
     ProgressDebug p(next_idx);
     p.state() = state;
     p.matched() = matched;
@@ -40,8 +42,8 @@ TEST_CASE("Resume") {
 }
 
 TEST_CASE("Paused") {
-    ProgressPausedTestParams params;
-    std::list<ProgressPausedTestParams> tests{
+    ProgressPausedTestParams params{};
+    const std::list<ProgressPausedTestParams> tests{
         // probe
         {ProgressState::Probe, false, false},
         {ProgressState::Probe, true, true},

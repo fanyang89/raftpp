@@ -77,7 +77,7 @@ TEST_CASE("Term") {
     MemoryStorage storage;
     storage.SetEntries(entries);
     const auto term = storage.Term(idx);
-    CHECK(term == wTerm);
+    CHECK_EQ(term, wTerm);
 }
 
 TEST_CASE("Entries") {
@@ -126,7 +126,7 @@ TEST_CASE("Entries") {
     MemoryStorage storage;
     storage.SetEntries(ents);
     const auto e = storage.Entries(lo, hi, maxSize, GetEntriesContext::Empty(false));
-    CHECK(e == wEntries);
+    CHECK_EQ(e, wEntries);
 }
 
 TEST_CASE("LastIndex") {
@@ -139,11 +139,11 @@ TEST_CASE("LastIndex") {
     storage.SetEntries(ents);
 
     auto result = storage.LastIndex();
-    CHECK(5 == result);
+    CHECK_EQ(5, result);
 
     storage.Append({NewEntry(6, 5)});
     result = storage.LastIndex();
-    CHECK(6 == result);
+    CHECK_EQ(6, result);
 }
 
 TEST_CASE("FirstIndex") {
@@ -155,10 +155,10 @@ TEST_CASE("FirstIndex") {
 
     MemoryStorage storage;
     storage.SetEntries(ents);
-    CHECK(3 == storage.FirstIndex());
+    CHECK_EQ(3, storage.FirstIndex());
 
     storage.Compact(4);
-    CHECK(4 == storage.FirstIndex());
+    CHECK_EQ(4, storage.FirstIndex());
 }
 
 TEST_CASE("Compact") {
@@ -183,13 +183,13 @@ TEST_CASE("Compact") {
     storage.SetEntries(ents);
     storage.Compact(idx);
 
-    uint64_t index;
+    uint64_t index = 0;
     if (const auto r = storage.FirstIndex(); r) {
         index = *r;
     } else {
         FAIL("FirstIndex()");
     }
-    REQUIRE(wIndex == index);
+    REQUIRE_EQ(wIndex, index);
 
     uint64_t term = 0;
     if (const auto r = storage.Entries(index, index + 1, 1, GetEntriesContext::Empty(false))) {
@@ -197,7 +197,7 @@ TEST_CASE("Compact") {
             term = r->front().term();
         }
     }
-    REQUIRE(wTerm == term);
+    REQUIRE_EQ(wTerm, term);
 
     uint64_t last = 0;
     if (const auto r = storage.LastIndex(); r) {
@@ -212,7 +212,7 @@ TEST_CASE("Compact") {
     } else {
         FAIL("Entries()");
     }
-    REQUIRE(wLen == len);
+    REQUIRE_EQ(wLen, len);
 }
 
 TEST_CASE("CreateSnapshot") {
@@ -252,7 +252,7 @@ TEST_CASE("CreateSnapshot") {
     }
 
     const auto result = storage.GetSnapshot(wIndex, 0);
-    CHECK(result == wResult);
+    CHECK_EQ(result, wResult);
 }
 
 TEST_CASE("Append") {
@@ -293,7 +293,7 @@ TEST_CASE("Append") {
 
     if (wEntries) {
         storage.Append(entries);
-        CHECK(*wEntries == storage.AllEntries());
+        CHECK_EQ(*wEntries, storage.AllEntries());
     } else {
         const auto r = storage.MayAppend(entries);
         CHECK(!r.has_value());

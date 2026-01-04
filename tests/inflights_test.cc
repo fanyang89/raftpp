@@ -11,11 +11,11 @@ class InflightsDebug : public Inflights {
   public:
     using Inflights::Inflights;
 
-    size_t& start();
-    size_t count() const;
-    std::vector<uint64_t>& buffer();
-    size_t capacity() const;
-    std::optional<size_t> incoming_capacity() const;
+    [[nodiscard]] size_t& start();
+    [[nodiscard]] size_t count() const;
+    [[nodiscard]] std::vector<uint64_t>& buffer();
+    [[nodiscard]] size_t capacity() const;
+    [[nodiscard]] std::optional<size_t> incoming_capacity() const;
 };
 
 size_t& InflightsDebug::start() {
@@ -46,20 +46,20 @@ TEST_CASE("Add") {
     for (uint64_t i = 0; i < 5; ++i) {
         inflight.Add(i);
     }
-    CHECK(inflight.start() == 0);
-    CHECK(inflight.count() == 5);
-    CHECK(inflight.buffer() == std::vector<uint64_t>{0, 1, 2, 3, 4});
-    CHECK(inflight.capacity() == 10);
-    CHECK(inflight.incoming_capacity() == std::nullopt);
+    CHECK_EQ(inflight.start(), 0);
+    CHECK_EQ(inflight.count(), 5);
+    CHECK_EQ(inflight.buffer(), std::vector<uint64_t>{0, 1, 2, 3, 4});
+    CHECK_EQ(inflight.capacity(), 10);
+    CHECK_EQ(inflight.incoming_capacity(), std::nullopt);
 
     for (uint64_t i = 5; i < 10; ++i) {
         inflight.Add(i);
     }
-    CHECK(inflight.start() == 0);
-    CHECK(inflight.count() == 10);
-    CHECK(inflight.buffer() == std::vector<uint64_t>{0, 1, 2, 3, 4, 5, 6, 7, 8, 9});
-    CHECK(inflight.capacity() == 10);
-    CHECK(inflight.incoming_capacity() == std::nullopt);
+    CHECK_EQ(inflight.start(), 0);
+    CHECK_EQ(inflight.count(), 10);
+    CHECK_EQ(inflight.buffer(), std::vector<uint64_t>{0, 1, 2, 3, 4, 5, 6, 7, 8, 9});
+    CHECK_EQ(inflight.capacity(), 10);
+    CHECK_EQ(inflight.incoming_capacity(), std::nullopt);
 
     InflightsDebug inflight2(10);
     inflight2.start() = 5;
@@ -68,20 +68,20 @@ TEST_CASE("Add") {
     for (uint64_t i = 0; i < 5; ++i) {
         inflight2.Add(i);
     }
-    CHECK(inflight2.start() == 5);
-    CHECK(inflight2.count() == 5);
-    CHECK(inflight2.buffer() == std::vector<uint64_t>{0, 0, 0, 0, 0, 0, 1, 2, 3, 4});
-    CHECK(inflight2.capacity() == 10);
-    CHECK(inflight2.incoming_capacity() == std::nullopt);
+    CHECK_EQ(inflight2.start(), 5);
+    CHECK_EQ(inflight2.count(), 5);
+    CHECK_EQ(inflight2.buffer(), std::vector<uint64_t>{0, 0, 0, 0, 0, 0, 1, 2, 3, 4});
+    CHECK_EQ(inflight2.capacity(), 10);
+    CHECK_EQ(inflight2.incoming_capacity(), std::nullopt);
 
     for (uint64_t i = 5; i < 10; ++i) {
         inflight2.Add(i);
     }
-    CHECK(inflight2.start() == 5);
-    CHECK(inflight2.count() == 10);
-    CHECK(inflight2.buffer() == std::vector<uint64_t>{5, 6, 7, 8, 9, 0, 1, 2, 3, 4});
-    CHECK(inflight2.capacity() == 10);
-    CHECK(inflight2.incoming_capacity() == std::nullopt);
+    CHECK_EQ(inflight2.start(), 5);
+    CHECK_EQ(inflight2.count(), 10);
+    CHECK_EQ(inflight2.buffer(), std::vector<uint64_t>{5, 6, 7, 8, 9, 0, 1, 2, 3, 4});
+    CHECK_EQ(inflight2.capacity(), 10);
+    CHECK_EQ(inflight2.incoming_capacity(), std::nullopt);
 }
 
 TEST_CASE("FreeTo") {
@@ -91,36 +91,36 @@ TEST_CASE("FreeTo") {
     }
 
     inflight.FreeTo(4);
-    CHECK(inflight.start() == 5);
-    CHECK(inflight.count() == 5);
-    CHECK(inflight.buffer() == std::vector<uint64_t>{0, 1, 2, 3, 4, 5, 6, 7, 8, 9});
-    CHECK(inflight.capacity() == 10);
-    CHECK(inflight.incoming_capacity() == std::nullopt);
+    CHECK_EQ(inflight.start(), 5);
+    CHECK_EQ(inflight.count(), 5);
+    CHECK_EQ(inflight.buffer(), std::vector<uint64_t>{0, 1, 2, 3, 4, 5, 6, 7, 8, 9});
+    CHECK_EQ(inflight.capacity(), 10);
+    CHECK_EQ(inflight.incoming_capacity(), std::nullopt);
 
     inflight.FreeTo(8);
-    CHECK(inflight.start() == 9);
-    CHECK(inflight.count() == 1);
-    CHECK(inflight.buffer() == std::vector<uint64_t>{0, 1, 2, 3, 4, 5, 6, 7, 8, 9});
-    CHECK(inflight.capacity() == 10);
-    CHECK(inflight.incoming_capacity() == std::nullopt);
+    CHECK_EQ(inflight.start(), 9);
+    CHECK_EQ(inflight.count(), 1);
+    CHECK_EQ(inflight.buffer(), std::vector<uint64_t>{0, 1, 2, 3, 4, 5, 6, 7, 8, 9});
+    CHECK_EQ(inflight.capacity(), 10);
+    CHECK_EQ(inflight.incoming_capacity(), std::nullopt);
 
     for (uint64_t i = 10; i < 15; ++i) {
         inflight.Add(i);
     }
 
     inflight.FreeTo(12);
-    CHECK(inflight.start() == 3);
-    CHECK(inflight.count() == 2);
-    CHECK(inflight.buffer() == std::vector<uint64_t>{10, 11, 12, 13, 14, 5, 6, 7, 8, 9});
-    CHECK(inflight.capacity() == 10);
-    CHECK(inflight.incoming_capacity() == std::nullopt);
+    CHECK_EQ(inflight.start(), 3);
+    CHECK_EQ(inflight.count(), 2);
+    CHECK_EQ(inflight.buffer(), std::vector<uint64_t>{10, 11, 12, 13, 14, 5, 6, 7, 8, 9});
+    CHECK_EQ(inflight.capacity(), 10);
+    CHECK_EQ(inflight.incoming_capacity(), std::nullopt);
 
     inflight.FreeTo(14);
-    CHECK(inflight.start() == 5);
-    CHECK(inflight.count() == 0);
-    CHECK(inflight.buffer() == std::vector<uint64_t>{10, 11, 12, 13, 14, 5, 6, 7, 8, 9});
-    CHECK(inflight.capacity() == 10);
-    CHECK(inflight.incoming_capacity() == std::nullopt);
+    CHECK_EQ(inflight.start(), 5);
+    CHECK_EQ(inflight.count(), 0);
+    CHECK_EQ(inflight.buffer(), std::vector<uint64_t>{10, 11, 12, 13, 14, 5, 6, 7, 8, 9});
+    CHECK_EQ(inflight.capacity(), 10);
+    CHECK_EQ(inflight.incoming_capacity(), std::nullopt);
 }
 
 TEST_CASE("FreeFirstOne") {
@@ -130,11 +130,11 @@ TEST_CASE("FreeFirstOne") {
     }
 
     inflight.FreeFirstOne();
-    CHECK(inflight.start() == 1);
-    CHECK(inflight.count() == 9);
-    CHECK(inflight.buffer() == std::vector<uint64_t>{0, 1, 2, 3, 4, 5, 6, 7, 8, 9});
-    CHECK(inflight.capacity() == 10);
-    CHECK(inflight.incoming_capacity() == std::nullopt);
+    CHECK_EQ(inflight.start(), 1);
+    CHECK_EQ(inflight.count(), 9);
+    CHECK_EQ(inflight.buffer(), std::vector<uint64_t>{0, 1, 2, 3, 4, 5, 6, 7, 8, 9});
+    CHECK_EQ(inflight.capacity(), 10);
+    CHECK_EQ(inflight.incoming_capacity(), std::nullopt);
 }
 
 TEST_CASE("SetCapacity") {
@@ -150,17 +150,17 @@ TEST_CASE("SetCapacity") {
     for (uint64_t i = 0; i < 16; ++i) {
         inflight.Add(i);
     }
-    CHECK(inflight.count() == 16);
-    CHECK(inflight.start() == start);
+    CHECK_EQ(inflight.count(), 16);
+    CHECK_EQ(inflight.start(), start);
 
     inflight.SetCapacity(1024);
-    CHECK(inflight.capacity() == 1024);
-    CHECK(inflight.incoming_capacity() == std::nullopt);
-    REQUIRE(inflight.buffer().capacity() == 1024);
+    CHECK_EQ(inflight.capacity(), 1024);
+    CHECK_EQ(inflight.incoming_capacity(), std::nullopt);
+    REQUIRE_EQ(inflight.buffer().capacity(), 1024);
     if (start != 120) {
-        CHECK(inflight.start() != 0);
+        CHECK_NE(inflight.start(), 0);
     } else {
-        CHECK(inflight.start() == 0);
+        CHECK_EQ(inflight.start(), 0);
     }
 }
 

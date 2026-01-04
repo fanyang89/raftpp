@@ -16,7 +16,11 @@ TEST_CASE("Find conflict") {
         NewEntry(3, 3),
     };
 
-    using TestParam = std::tuple<std::vector<Entry>, uint64_t>;
+    struct TestParam {
+        std::vector<Entry> entries;
+        uint64_t w_conflict = 0;
+    };
+
     TestParam test;
     std::vector<TestParam> tests{
         // no conflict, empty ent
@@ -36,14 +40,14 @@ TEST_CASE("Find conflict") {
         {{NewEntry(3, 1), NewEntry(4, 2), NewEntry(5, 4), NewEntry(6, 4)}, 3},
     };
     DOCTEST_VALUE_PARAMETERIZED_DATA(test, tests);
-    const auto [ents, wConflict] = test;
+    const auto [ents, w_conflict] = test;
 
     auto store = std::make_unique<MemoryStorage>();
     RaftLog raft_log(DefaultConfig(), std::move(store));
     raft_log.Append(previous_entries);
 
     const auto r = raft_log.FindConflict(ents);
-    CHECK(wConflict == r);
+    CHECK_EQ(w_conflict, r);
 }
 
 TEST_CASE("is up-to-date") {
@@ -77,7 +81,7 @@ TEST_CASE("is up-to-date") {
     const auto [last_index, term, up_to_date] = test;
 
     const auto r = raft_log.IsUpToDate(last_index, term);
-    CHECK(r == up_to_date);
+    CHECK_EQ(up_to_date, r);
 }
 
 TEST_SUITE_END();

@@ -2,7 +2,6 @@
 
 #include <string_view>
 
-#include <boost/circular_buffer.hpp>
 #include <magic_enum/magic_enum.hpp>
 
 #include "raftpp/ack_indexer.h"
