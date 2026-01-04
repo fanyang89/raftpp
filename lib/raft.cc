@@ -151,11 +151,11 @@ bool Raft::MaybeIncreaseUncommittedSize(const std::span<const Entry> entries) {
     return uncommitted_state_.MaybeIncreaseUncommittedSize(entries);
 }
 
-bool Raft::AppendEntry(Entry& entry) {
-    return AppendEntry(std::span(&entry, 1));
+bool Raft::AppendEntry(const Entry& entry) {
+    return AppendEntry({entry});
 }
 
-bool Raft::AppendEntry(std::span<Entry> entries) {
+bool Raft::AppendEntry(std::vector<Entry>& entries) {
     if (!MaybeIncreaseUncommittedSize(entries)) {
         return false;
     }
@@ -255,7 +255,7 @@ void Raft::BecomeLeader() {
     progress_tracker_.at(id_).BecomeReplicate();
     pending_conf_index_ = last_index;
 
-    if (Entry empty_entry; AppendEntry(empty_entry)) {
+    if (AppendEntry(Entry())) {
         PANIC("appending an empty entry should never be dropped");
     }
 

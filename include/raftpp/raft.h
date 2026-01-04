@@ -21,8 +21,8 @@ class Raft : public RaftCore {
     Result<void> StepLeader(const Message& m);
 
     VoteResult Poll(uint64_t from, MessageType mt, bool vote);
-    bool AppendEntry(Entry& entry);
-    bool AppendEntry(std::span<Entry> entries);
+    bool AppendEntry(const Entry& entry);
+    bool AppendEntry(std::vector<Entry>& entries);
     bool CheckQuorumActive();
     bool HasPendingConf() const;
     bool Restore(const Snapshot& snapshot);

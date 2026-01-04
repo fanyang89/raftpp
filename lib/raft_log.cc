@@ -39,7 +39,8 @@ Result<uint64_t> RaftLog::Term(const uint64_t idx) const {
         return r.value();
     } else {
         const auto err = r.error();
-        if (err.Is(StorageErrorCode::Compacted) || err.Is(StorageErrorCode::Unavailable)) {
+        if (err.Is(StorageErrorCode::Compacted) ||
+            err.Is(StorageErrorCode::Unavailable)) {
             return err;
         }
         PANIC("unexpected error: {}", err);
@@ -65,8 +66,9 @@ uint64_t RaftLog::FindConflict(const std::vector<Entry>& entries) const {
         if (!MatchTerm(e.index(), e.term())) {
             if (e.index() <= LastIndex()) {
                 SPDLOG_INFO(
-                    "found conflict at index({}), existing_term={}, conflicting_term={}", e.index(),
-                    UnwrapOr(Term(e.index()), uint64_t{0}), e.term()
+                    "found conflict at index({}), existing_term={}, "
+                    "conflicting_term={}",
+                    e.index(), UnwrapOr(Term(e.index()), uint64_t{0}), e.term()
                 );
             }
             return e.index();
@@ -92,7 +94,8 @@ bool RaftLog::MaybePersist(const uint64_t index, const uint64_t term) {
         first_update_index = unstable_.offset();
     }
 
-    if (index > persisted_ && index < first_update_index && store_->Term(index) == term) {
+    if (index > persisted_ && index < first_update_index &&
+        store_->Term(index) == term) {
         SPDLOG_DEBUG("persisted index {}", index);
         persisted_ = index;
         return true;
@@ -128,16 +131,20 @@ bool RaftLog::MaybeCommit(const uint64_t max_index, const uint64_t term) {
 }
 
 std::optional<RaftLog::MaybeAppendResult> RaftLog::MaybeAppend(
-    const uint64_t idx, const uint64_t term, const uint64_t committed, const std::vector<Entry>& entries
+    const uint64_t idx, const uint64_t term, const uint64_t committed,
+    const std::vector<Entry>& entries
 ) {
     if (MatchTerm(idx, term)) {
         uint64_t conflict_idx = FindConflict(entries);
         if (conflict_idx <= committed) {
-            PANIC("entry {} conflict with committed entry {}", conflict_idx, committed_);
+            PANIC(
+                "entry {} conflict with committed entry {}", conflict_idx,
+                committed_
+            );
         }
         if (conflict_idx != 0 && conflict_idx > committed) {
             const size_t start = conflict_idx - (idx + 1);
-            Append(std::span{entries.begin() + start, entries.end()});
+            Append({entries.begin() + start, entries.end()});
 
             // persisted should be decreased because entries are changed
             if (persisted_ > conflict_idx - 1) {
@@ -152,7 +159,7 @@ std::optional<RaftLog::MaybeAppendResult> RaftLog::MaybeAppend(
     return std::nullopt;
 }
 
-uint64_t RaftLog::Append(std::span<const Entry> entries) {
+uint64_t RaftLog::Append(const std::vector<Entry>& entries) {
     if (entries.empty()) {
         return LastIndex();
     }
@@ -170,7 +177,10 @@ void RaftLog::CommitTo(uint64_t to_commit) {
         return;
     }
     if (LastIndex() < to_commit) {
-        PANIC("to_commit {} is out of range [last_index {}]", to_commit, LastIndex());
+        PANIC(
+            "to_commit {} is out of range [last_index {}]", to_commit,
+            LastIndex()
+        );
     }
     committed_ = to_commit;
 }
@@ -187,14 +197,18 @@ Result<void> RaftLog::MustCheckOutOfBounds(uint64_t low, uint64_t high) const {
 
     const auto length = LastIndex() + 1 - first_index;
     if (low < first_index || high > first_index + length) {
-        PANIC("slice[{},{}] out of bound[{},{}]", low, high, first_index, LastIndex());
+        PANIC(
+            "slice[{},{}] out of bound[{},{}]", low, high, first_index,
+            LastIndex()
+        );
     }
 
     return {};
 }
 
 Result<std::vector<Entry>, RaftError> RaftLog::Slice(
-    uint64_t low, uint64_t high, std::optional<uint64_t> max_size, const GetEntriesContext& context
+    uint64_t low, uint64_t high, std::optional<uint64_t> max_size,
+    const GetEntriesContext& context
 ) {
     if (auto r = MustCheckOutOfBounds(low, high); !r) {
         return r.error();
@@ -208,19 +222,24 @@ Result<std::vector<Entry>, RaftError> RaftLog::Slice(
 
     if (low < unstable_.offset()) {
         const auto unstable_high = std::min(high, unstable_.offset());
-        if (const auto r = store_->Entries(low, unstable_high, max_size, context)) {
+        if (const auto r =
+                store_->Entries(low, unstable_high, max_size, context)) {
             entries = *r;
             if (entries.size() < unstable_high - low) {
                 return entries;
             }
         } else {
             const auto err = r.error();
-            if (err.Is(StorageErrorCode::Compacted) || err.Is(StorageErrorCode::LogTemporarilyUnavailable)) {
+            if (err.Is(StorageErrorCode::Compacted) ||
+                err.Is(StorageErrorCode::LogTemporarilyUnavailable)) {
                 return err;
             }
 
             if (err.Is(StorageErrorCode::Unavailable)) {
-                PANIC("entries[{}:{}] is unavailable from storage", low, unstable_high);
+                PANIC(
+                    "entries[{}:{}] is unavailable from storage", low,
+                    unstable_high
+                );
             }
 
             PANIC("unexpected error: {}", r.error());
@@ -238,7 +257,8 @@ Result<std::vector<Entry>, RaftError> RaftLog::Slice(
 }
 
 Result<std::vector<Entry>> RaftLog::GetEntries(
-    uint64_t idx, std::optional<uint64_t> max_size, GetEntriesContext context
+    const uint64_t idx, const std::optional<uint64_t> max_size,
+    const GetEntriesContext context
 ) {
     const auto last = LastIndex();
     if (idx > last) {
@@ -247,25 +267,47 @@ Result<std::vector<Entry>> RaftLog::GetEntries(
     return Slice(idx, last + 1, max_size, context);
 }
 
+std::vector<Entry> RaftLog::AllEntries() {
+    const auto first_index = FirstIndex();
+    const auto r =
+        GetEntries(first_index, std::nullopt, GetEntriesContext::Empty(false));
+    if (r) {
+        return *r;
+    }
+    if (r.error().Is(StorageErrorCode::Compacted)) {
+        return AllEntries();
+    }
+    PANIC("unexpected error", r.error());
+}
+
 void RaftLog::AppliedTo(uint64_t idx) {
     if (idx == 0) {
         return;
     }
     if (idx > committed_ || idx < applied_) {
-        PANIC("applied({}) is out of range [prev_applied({}), committed({})]", idx, applied_, committed_);
+        PANIC(
+            "applied({}) is out of range [prev_applied({}), committed({})]",
+            idx, applied_, committed_
+        );
     }
     AppliedToUnchecked(idx);
 }
 
-void RaftLog::AppliedToUnchecked(uint64_t idx) {
+void RaftLog::AppliedToUnchecked(const uint64_t idx) {
     applied_ = idx;
 }
 
-std::pair<uint64_t, std::optional<uint64_t>> RaftLog::FindConflictByTerm(uint64_t index, const uint64_t term) const {
+std::pair<uint64_t, std::optional<uint64_t>> RaftLog::FindConflictByTerm(
+    uint64_t index, const uint64_t term
+) const {
     auto conflict_index = index;
 
     if (const auto last_index = LastIndex(); index > last_index) {
-        SPDLOG_WARN("index({}) is out of range [0, last_index({})] in find_conflict_by_term", index, last_index);
+        SPDLOG_WARN(
+            "index({}) is out of range [0, last_index({})] in "
+            "find_conflict_by_term",
+            index, last_index
+        );
         return {index, {}};
     }
 
@@ -282,7 +324,9 @@ std::pair<uint64_t, std::optional<uint64_t>> RaftLog::FindConflictByTerm(uint64_
     }
 }
 
-Result<Snapshot> RaftLog::GetSnapshot(const uint64_t request_index, const uint64_t to) {
+Result<Snapshot> RaftLog::GetSnapshot(
+    const uint64_t request_index, const uint64_t to
+) {
     if (const auto r = unstable_.snapshot()) {
         if (r->get().metadata().index() >= request_index) {
             return *r;
@@ -327,12 +371,15 @@ std::pair<uint64_t, uint64_t> RaftLog::CommitInfo() const {
     if (const auto r = Term(committed_)) {
         return {committed_, *r};
     } else {
-        PANIC("last committed entry at {} is missing: {}", committed_, r.error());
+        PANIC(
+            "last committed entry at {} is missing: {}", committed_, r.error()
+        );
     }
 }
 
 bool RaftLog::IsUpToDate(const uint64_t last_index, const uint64_t term) const {
-    return term > LastTerm() || (term == LastTerm() && last_index >= LastIndex());
+    return term > LastTerm() ||
+        (term == LastTerm() && last_index >= LastIndex());
 }
 
 void RaftLog::Restore(const Snapshot& snapshot) {
@@ -356,6 +403,10 @@ bool RaftLog::HasNextEntriesSince(const uint64_t since_idx) const {
     return high > offset;
 }
 
+bool RaftLog::HasNextEntries() const {
+    return HasNextEntriesSince(applied_);
+}
+
 std::optional<std::vector<Entry>> RaftLog::NextEntriesSince(
     const uint64_t since_idx, const std::optional<uint64_t> max_size
 ) {
@@ -371,6 +422,12 @@ std::optional<std::vector<Entry>> RaftLog::NextEntriesSince(
         }
     }
     return {};
+}
+
+std::optional<std::vector<Entry>> RaftLog::NextEntries(
+    const std::optional<uint64_t> max_size
+) {
+    return NextEntriesSince(applied_, max_size);
 }
 
 void RaftLog::StableSnapshot(const uint64_t index) {

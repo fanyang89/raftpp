@@ -10,13 +10,6 @@
 
 using namespace raftpp;
 
-Snapshot NewSnapshot(const uint64_t index, const uint64_t term) {
-    Snapshot snap;
-    snap.mutable_metadata()->set_index(index);
-    snap.mutable_metadata()->set_term(term);
-    return snap;
-}
-
 struct LogUnstableTestParams {
     std::optional<Entry> ent;
     uint64_t offset = 0;

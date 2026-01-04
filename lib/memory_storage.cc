@@ -45,7 +45,7 @@ void MemoryStorageCore::Compact(uint64_t compact_index) {
     }
 
     if (compact_index > last_index() + 1) {
-        PANIC("compact not received raft logs: {}, last index: {}", compact_index, last_index());
+        PANIC("compact not received raft logs", compact_index, last_index());
     }
 
     if (entries_.empty()) {

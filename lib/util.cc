@@ -37,5 +37,5 @@ fmt::context::iterator fmt::formatter<raftpp::IndexTerm>::format(
     const raftpp::IndexTerm& value, const format_context& ctx
 ) {
     const auto [i, t] = value;
-    return format_to(ctx.out(), "[i={}, t={}]", i, t);
+    return format_to(ctx.out(), "[index={}, term={}]", i, t);
 }
