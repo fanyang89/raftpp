@@ -176,7 +176,9 @@ Result<std::vector<Entry>> MemoryStorage::Entries(
     for (auto it = core_.entries_.begin() + lo; it != core_.entries_.begin() + hi; ++it) {
         entries.emplace_back(*it);
     }
-    LimitSize(entries, *max_size);
+    if (max_size) {
+        LimitSize(entries, *max_size);
+    }
     return entries;
 }
 

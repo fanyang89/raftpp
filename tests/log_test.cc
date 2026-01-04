@@ -22,7 +22,7 @@ TEST_CASE("Find conflict") {
     };
 
     TestParam test;
-    std::vector<TestParam> tests{
+    const std::vector<TestParam> tests{
         // no conflict, empty ent
         {{}, 0},
         // no conflict
@@ -82,6 +82,41 @@ TEST_CASE("is up-to-date") {
 
     const auto r = raft_log.IsUpToDate(last_index, term);
     CHECK_EQ(up_to_date, r);
+}
+
+TEST_CASE("Append") {
+    const std::vector previous_entries{
+        NewEntry(1, 1),
+        NewEntry(2, 2),
+    };
+
+    struct TestParam {
+        std::vector<Entry> entries;
+        uint64_t w_index = 0;
+        std::vector<Entry> w_entries;
+        uint64_t w_unstable = 0;
+    };
+
+    TestParam test;
+    const std::vector<TestParam> tests{
+        {{}, 2, {NewEntry(1, 1), NewEntry(2, 2)}, 3},
+    };
+    DOCTEST_VALUE_PARAMETERIZED_DATA(test, tests);
+    const auto [entries, w_index, w_entries, w_unstable] = test;
+
+    auto store = std::make_unique<MemoryStorage>();
+    const auto r = store->MayAppend(previous_entries);
+    REQUIRE(r);
+
+    RaftLog raft_log(DefaultConfig(), std::move(store));
+    const auto index = raft_log.Append(entries);
+    REQUIRE_EQ(index, w_index);
+
+    if (const auto ents = raft_log.GetEntries(1, std::nullopt, GetEntriesContext::Empty(false))) {
+        CHECK_EQ(ents, w_entries);
+    } else {
+        FAIL("GetEntries()");
+    }
 }
 
 TEST_SUITE_END();

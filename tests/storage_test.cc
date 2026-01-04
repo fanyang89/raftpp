@@ -29,18 +29,6 @@ Snapshot NewSnapshot(const uint64_t index, const uint64_t term, const std::vecto
 
 }  // namespace
 
-namespace raftpp {
-
-bool operator==(const Entry& e1, const Entry& e2) {
-    return google::protobuf::util::MessageDifferencer::Equals(e1, e2);
-}
-
-bool operator==(const Snapshot& e1, const Snapshot& e2) {
-    return google::protobuf::util::MessageDifferencer::Equals(e1, e2);
-}
-
-}  // namespace raftpp
-
 template <>
 struct fmt::formatter<std::vector<Entry>> : formatter<std::string_view> {
     static format_context::iterator format(const std::vector<Entry>& values, const format_context& ctx) {
