@@ -1,4 +1,5 @@
 #include <doctest/doctest.h>
+#include <variant>
 
 #include "raftpp/memory_storage.h"
 #include "raftpp/raft_log.h"
@@ -638,7 +639,10 @@ TEST_CASE("raft_log: slice") {
 
     if (w_panic) {
         if (slice_result) {
-            FAIL("expected fatal error");
+            FAIL("expected error");
+        }
+        if (!std::holds_alternative<FatalError>(slice_result.error())) {
+            FAIL("expected FatalError, but got: ", slice_result.error());
         }
         return;
     }
