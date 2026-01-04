@@ -38,13 +38,46 @@ TEST_CASE("Find conflict") {
     DOCTEST_VALUE_PARAMETERIZED_DATA(test, tests);
     const auto [ents, wConflict] = test;
 
-    Config config;
     auto store = std::make_unique<MemoryStorage>();
-    RaftLog raft_log(config, std::move(store));
+    RaftLog raft_log(DefaultConfig(), std::move(store));
     raft_log.Append(previous_entries);
 
     const auto r = raft_log.FindConflict(ents);
     CHECK(wConflict == r);
+}
+
+TEST_CASE("is up-to-date") {
+    const std::vector previous_entries{
+        NewEntry(1, 1),
+        NewEntry(2, 2),
+        NewEntry(3, 3),
+    };
+
+    auto store = std::make_unique<MemoryStorage>();
+    RaftLog raft_log(DefaultConfig(), std::move(store));
+    raft_log.Append(previous_entries);
+
+    using TestParam = std::tuple<uint64_t, uint64_t, bool>;
+    TestParam test;
+    std::vector<TestParam> tests{
+        // greater term, ignore lastIndex
+        {raft_log.LastIndex() - 1, 4, true},
+        {raft_log.LastIndex(), 4, true},
+        {raft_log.LastIndex() + 1, 4, true},
+        // smaller term, ignore lastIndex
+        {raft_log.LastIndex() - 1, 2, false},
+        {raft_log.LastIndex(), 2, false},
+        {raft_log.LastIndex() + 1, 2, false},
+        // equal term, lager lastIndex wins
+        {raft_log.LastIndex() - 1, 3, false},
+        {raft_log.LastIndex(), 3, true},
+        {raft_log.LastIndex() + 1, 3, true},
+    };
+    DOCTEST_VALUE_PARAMETERIZED_DATA(test, tests);
+    const auto [last_index, term, up_to_date] = test;
+
+    const auto r = raft_log.IsUpToDate(last_index, term);
+    CHECK(r == up_to_date);
 }
 
 TEST_SUITE_END();
