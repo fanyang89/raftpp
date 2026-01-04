@@ -33,16 +33,16 @@ tasks:
 
   build-test:
     cmds:
-      - cmake --build build --target raftpp-tests
+      - cmake --build build-dev --target raftpp-tests
 
   list-tests:
     deps:
       - build-test
     cmds:
-      - ./build/tests/raftpp-tests --gtest_list_tests
+      - ./build-dev/tests/raftpp-tests --gtest_list_tests
 
   test:
     deps:
       - build-test
     cmds:
-      - ./build/tests/raftpp-tests
+      - ./build-dev/tests/raftpp-tests
