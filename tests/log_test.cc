@@ -153,7 +153,7 @@ TEST_CASE("raft_log: compaction side effects") {
     CHECK(raft_log.MaybeCommit(last_index, last_term));
 
     constexpr uint64_t offset = 500;
-    store_ptr->Compact(offset);
+    REQUIRE(store_ptr->Compact(offset));
     CHECK_EQ(last_index, raft_log.LastIndex());
 
     for (uint64_t j = offset; j < raft_log.LastIndex(); ++j) {
@@ -186,7 +186,7 @@ TEST_CASE("raft_log: term with unstable snapshot") {
     }
 
     RaftLog raft_log(DefaultConfig(), std::move(store));
-    raft_log.Restore(NewSnapshot(unstable_snap_idx, 1));
+    REQUIRE(raft_log.Restore(NewSnapshot(unstable_snap_idx, 1)));
     REQUIRE_EQ(raft_log.committed(), unstable_snap_idx);
     REQUIRE_EQ(raft_log.persisted(), storage_snap_idx);
 
@@ -316,7 +316,7 @@ TEST_CASE("raft_log: maybe persist with snapshot") {
 
     {
         RaftLog raft_log(DefaultConfig(), std::make_unique<MemoryStorage>());
-        raft_log.Restore(NewSnapshot(100, 1));
+        REQUIRE(raft_log.Restore(NewSnapshot(100, 1)));
         CHECK_EQ(raft_log.unstable().offset(), 101);
         REQUIRE(raft_log.Append({NewEntry(101, 1)}));
         CHECK_EQ(raft_log.Term(101), 1);
@@ -343,7 +343,7 @@ TEST_CASE("raft_log: unstable entries") {
     // append unstable entries to raft log
     auto store = std::make_unique<MemoryStorage>();
     if (unstable - 1 > 0) {
-        store->Append({previous_ents.begin(), previous_ents.begin() + unstable - 1});
+        REQUIRE(store->Append({previous_ents.begin(), previous_ents.begin() + unstable - 1}));
     }
 
     RaftLog raft_log(DefaultConfig(), std::move(store));
@@ -413,7 +413,7 @@ TEST_CASE("raft_log: has next entries and next entries") {
     if (!unstable.empty()) {
         const auto& e = unstable.back();
         raft_log.StableEntries(e.index(), e.term());
-        store_ptr->Append(unstable);
+        REQUIRE(store_ptr->Append(unstable));
     }
 
     std::ignore = raft_log.MaybePersist(persisted, 1);
@@ -490,7 +490,7 @@ TEST_CASE("raft_log: has next entries and next entries, 2") {
     if (!unstable.empty()) {
         const auto& e = unstable.back();
         raft_log.StableEntries(e.index(), e.term());
-        store_ptr->Append(unstable);
+        REQUIRE(store_ptr->Append(unstable));
     }
 
     std::ignore = raft_log.MaybePersist(persisted, 1);
@@ -517,7 +517,7 @@ TEST_CASE("raft_log: slice") {
     auto store = std::make_unique<MemoryStorage>();
     CHECK(store->ApplySnapshot(NewSnapshot(offset, 0)));
     for (uint64_t i = 1; i < num / 2; ++i) {
-        store->Append({NewEntry(offset + i, offset + i)});
+        REQUIRE(store->Append({NewEntry(offset + i, offset + i)}));
     }
 
     RaftLog raft_log(DefaultConfig(), std::move(store));
@@ -665,7 +665,7 @@ TEST_CASE("raft_log: scan") {
 
     auto store = std::make_unique<MemoryStorage>();
     REQUIRE(store->ApplySnapshot(NewSnapshot(offset, 0)));
-    store->Append(entries(offset + 1, half));
+    REQUIRE(store->Append(entries(offset + 1, half)));
     RaftLog raft_log(DefaultConfig(), std::move(store));
     REQUIRE(raft_log.Append(entries(half, last)));
 
@@ -1018,7 +1018,7 @@ TEST_CASE("raft_log: compaction") {
     auto store = std::make_unique<MemoryStorage>();
     auto* store_ptr = store.get();
     for (size_t i = 1; i < index; ++i) {
-        store->Append({NewEntry(i, 0)});
+        REQUIRE(store->Append({NewEntry(i, 0)}));
     }
 
     RaftLog raft_log(DefaultConfig(), std::move(store));
@@ -1094,6 +1094,40 @@ TEST_CASE("raft_log: is out of bounds") {
     if (w_err_compacted) {
         REQUIRE(r.error().Is(StorageErrorCode::Compacted));
     }
+}
+
+TEST_CASE("raft_log: restore snapshot") {
+    auto store = std::make_unique<MemoryStorage>();
+    auto* store_ptr = store.get();
+    REQUIRE(store->ApplySnapshot(NewSnapshot(100, 1)));
+
+    RaftLog raft_log(DefaultConfig(), std::move(store));
+    REQUIRE_EQ(raft_log.committed(), 100);
+    REQUIRE_EQ(raft_log.persisted(), 100);
+
+    REQUIRE(raft_log.Restore(NewSnapshot(200, 1)));
+    REQUIRE_EQ(raft_log.committed(), 200);
+    REQUIRE_EQ(raft_log.persisted(), 100);
+
+    for (uint64_t i = 201; i < 210; ++i) {
+        REQUIRE(raft_log.Append({NewEntry(i, 1)}));
+    }
+
+    REQUIRE(store_ptr->ApplySnapshot(NewSnapshot(200, 1)));
+    raft_log.StableSnapshot(200);
+
+    const auto unstable = raft_log.unstable().entries();
+    raft_log.StableEntries(209, 1);
+    REQUIRE(store_ptr->Append(unstable));
+    REQUIRE(raft_log.MaybePersist(209, 1));
+    CHECK_EQ(raft_log.persisted(), 209);
+
+    REQUIRE(raft_log.Restore(NewSnapshot(205, 1)));
+    REQUIRE_EQ(raft_log.committed(), 205);
+    REQUIRE_EQ(raft_log.persisted(), 200);
+
+    const auto r = raft_log.Restore(NewSnapshot(204, 1));
+    CHECK_FALSE(r);
 }
 
 TEST_SUITE_END();

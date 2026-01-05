@@ -63,13 +63,11 @@ Result<void> MemoryStorageCore::Compact(uint64_t compact_index) {
     return {};
 }
 
-void MemoryStorageCore::Append(const std::vector<Entry>& ents) {
-    std::ignore = MayAppend(ents, true);
+Result<void> MemoryStorageCore::Append(const std::vector<Entry>& ents) {
+    return MayAppend(ents);
 }
 
-Result<void, std::string> MemoryStorageCore::MayAppend(
-    const std::vector<Entry>& ents, const bool panic
-) {
+Result<void> MemoryStorageCore::MayAppend(const std::vector<Entry>& ents) {
     if (ents.empty()) {
         return {};
     }
@@ -77,26 +75,20 @@ Result<void, std::string> MemoryStorageCore::MayAppend(
     const auto new_appended = ents.front().index();
     if (first_index() > new_appended) {
         const auto compacted = first_index() - 1;
-        if (panic) {
-            PANIC("overwrite compacted raft logs", compacted, new_appended);
-        }
-        return std::unexpected(
-            fmt::format(
+        return RaftError(
+            FatalError{fmt::format(
                 "overwrite compacted raft logs, compacted={} new_appended={}", compacted,
                 new_appended
-            )
+            )}
         );
     }
 
     if (last_index() + 1 < new_appended) {
-        if (panic) {
-            PANIC("raft logs should be continuous", last_index(), new_appended);
-        }
-        return std::unexpected(
-            fmt::format(
+        return RaftError(
+            FatalError{fmt::format(
                 "raft logs should be continuous, last_index={} new_appended={}", last_index(),
                 new_appended
-            )
+            )}
         );
     }
 
@@ -203,9 +195,9 @@ void MemoryStorage::SetEntries(const std::vector<Entry>& entries) {
     core_.entries_ = entries;
 }
 
-void MemoryStorage::Append(const std::vector<Entry>& ents) {
+Result<void> MemoryStorage::Append(const std::vector<Entry>& ents) {
     std::lock_guard lock(mutex_);
-    core_.Append(ents);
+    return core_.Append(ents);
 }
 
 Result<void> MemoryStorage::Compact(const uint64_t idx) {
@@ -233,9 +225,9 @@ std::vector<Entry> MemoryStorage::AllEntries() {
     return core_.entries_;
 }
 
-Result<void, std::string> MemoryStorage::MayAppend(const std::vector<Entry>& entries) {
+Result<void> MemoryStorage::MayAppend(const std::vector<Entry>& entries) {
     std::lock_guard lock(mutex_);
-    return core_.MayAppend(entries, false);
+    return core_.MayAppend(entries);
 }
 
 Result<uint64_t> MemoryStorage::Term(const uint64_t idx) {

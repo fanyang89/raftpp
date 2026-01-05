@@ -15,8 +15,8 @@ class MemoryStorageCore {
     bool HasEntryAt(uint64_t index) const;
     [[nodiscard]] Result<void> ApplySnapshot(const Snapshot& snapshot);
     [[nodiscard]] Result<void> Compact(uint64_t compact_index);
-    void Append(const std::vector<Entry>& ents);
-    [[nodiscard]] Result<void, std::string> MayAppend(const std::vector<Entry>& ents, bool panic);
+    [[nodiscard]] Result<void> Append(const std::vector<Entry>& ents);
+    [[nodiscard]] Result<void> MayAppend(const std::vector<Entry>& ents);
     void TriggerSnapshotUnavailable();
     void TriggerLogUnavailable();
     [[nodiscard]] std::optional<GetEntriesContext> TakeGetEntriesContext();
@@ -50,13 +50,13 @@ class MemoryStorage final : public Storage {
     [[nodiscard]] Result<Snapshot> GetSnapshot(uint64_t request_index, uint64_t to) override;
 
     void SetEntries(const std::vector<Entry>& entries);
-    void Append(const std::vector<Entry>& ents);
-    Result<void> Compact(uint64_t idx);
+    [[nodiscard]] Result<void> Compact(uint64_t idx);
     void SetRaftState(const RaftState& raft_state);
     void TriggerSnapshotUnavailable();
     [[nodiscard]] Result<void> ApplySnapshot(const Snapshot& snapshot);
-    std::vector<Entry> AllEntries();
-    [[nodiscard]] Result<void, std::string> MayAppend(const std::vector<Entry>& entries);
+    [[nodiscard]] std::vector<Entry> AllEntries();
+    [[nodiscard]] Result<void> Append(const std::vector<Entry>& ents);
+    [[nodiscard]] Result<void> MayAppend(const std::vector<Entry>& entries);
 
   private:
     std::mutex mutex_;

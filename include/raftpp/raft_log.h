@@ -60,8 +60,8 @@ class RaftLog {
     [[nodiscard]] uint64_t LastTerm() const;
     void AppliedTo(uint64_t idx);
     void AppliedToUnchecked(uint64_t idx);
-    Result<void> CommitTo(uint64_t to_commit);
-    void Restore(const Snapshot& snapshot);
+    [[nodiscard]] Result<void> CommitTo(uint64_t to_commit);
+    [[nodiscard]] Result<void> Restore(const Snapshot& snapshot);
     void StableEntries(uint64_t index, uint64_t term);
     void StableSnapshot(uint64_t index);
 

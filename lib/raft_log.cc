@@ -387,15 +387,19 @@ bool RaftLog::IsUpToDate(const uint64_t last_index, const uint64_t term) const {
     return term > LastTerm() || (term == LastTerm() && last_index >= LastIndex());
 }
 
-void RaftLog::Restore(const Snapshot& snapshot) {
+Result<void> RaftLog::Restore(const Snapshot& snapshot) {
     SPDLOG_INFO("restore snapshot, {}", IndexTerm(snapshot));
     const uint64_t index = snapshot.metadata().index();
-    ASSERT(index >= committed_);
+    if (index < committed_) {
+        return RaftError(FatalError{fmt::format("index {} < committed_ {}", index, committed_)});
+    }
+
     if (persisted_ > committed_) {
         persisted_ = committed_;
     }
     committed_ = index;
     unstable_.Restore(snapshot);
+    return {};
 }
 
 uint64_t RaftLog::AppliedIndexUpperBound() const {
