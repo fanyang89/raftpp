@@ -130,7 +130,7 @@ bool RaftLog::MaybeCommit(const uint64_t max_index, const uint64_t term) {
 
 Result<RaftLog::MaybeAppendResult> RaftLog::MaybeAppend(
     const uint64_t idx, const uint64_t term, const uint64_t committed,
-    const std::vector<Entry>& entries, const bool panic
+    const std::vector<Entry>& entries
 ) {
     if (!MatchTerm(idx, term)) {
         return MaybeAppendResult{false, 0, 0};
@@ -141,9 +141,6 @@ Result<RaftLog::MaybeAppendResult> RaftLog::MaybeAppend(
     if (conflict_idx == 0) {
         // no conflict
     } else if (conflict_idx <= committed_) {
-        if (panic) {
-            PANIC("entry conflict with committed entry", conflict_idx, committed_);
-        }
         return RaftError(
             FatalError{
                 fmt::format("entry {} conflict with committed entry {}", conflict_idx, committed_)
@@ -175,21 +172,25 @@ uint64_t RaftLog::Append(const std::vector<Entry>& entries) {
     return LastIndex();
 }
 
-void RaftLog::CommitTo(uint64_t to_commit) {
+Result<void> RaftLog::CommitTo(uint64_t to_commit) {
     if (committed_ >= to_commit) {
-        return;
+        return {};
     }
+
     if (LastIndex() < to_commit) {
-        PANIC("to_commit {} is out of range [last_index {}]", to_commit, LastIndex());
+        return RaftError(
+            FatalError{
+                fmt::format("to_commit {} is out of range [last_index {}]", to_commit, LastIndex())
+            }
+        );
     }
+
     committed_ = to_commit;
+    return {};
 }
 
-Result<void> RaftLog::MustCheckOutOfBounds(uint64_t low, uint64_t high, bool panic) const {
+Result<void> RaftLog::MustCheckOutOfBounds(uint64_t low, uint64_t high) const {
     if (low > high) {
-        if (panic) {
-            PANIC("invalid slice", low, high);
-        }
         return RaftError(FatalError{fmt::format("invalid slice {} > {}", low, high)});
     }
 
@@ -204,9 +205,6 @@ Result<void> RaftLog::MustCheckOutOfBounds(uint64_t low, uint64_t high, bool pan
         const auto slice_high = high;
         const auto bound_first_index = first_index;
         const auto bound_last_index = LastIndex();
-        if (panic) {
-            PANIC("slice out of bound", slice_low, slice_high, bound_first_index, bound_last_index);
-        }
         return RaftError(
             FatalError{fmt::format(
                 "slice[{},{}] out of bound[{},{}]", slice_low, slice_high, bound_first_index,
@@ -219,10 +217,9 @@ Result<void> RaftLog::MustCheckOutOfBounds(uint64_t low, uint64_t high, bool pan
 }
 
 Result<std::vector<Entry>, RaftError> RaftLog::Slice(
-    uint64_t low, uint64_t high, std::optional<uint64_t> max_size, const GetEntriesContext& context,
-    const bool panic
+    uint64_t low, uint64_t high, std::optional<uint64_t> max_size, const GetEntriesContext& context
 ) {
-    if (auto r = MustCheckOutOfBounds(low, high, panic); !r) {
+    if (auto r = MustCheckOutOfBounds(low, high); !r) {
         return r.error();
     }
 
@@ -423,10 +420,10 @@ std::optional<std::vector<Entry>> RaftLog::NextEntriesSince(
     if (high > offset) {
         GetEntriesContext ctx;
         ctx.what = GetEntriesFor::GenReady;
-        if (const auto r = Slice(offset, high, max_size, ctx)) {
-            return *r;
-        } else {
+        if (const auto r = Slice(offset, high, max_size, ctx); !r) {
             PANIC("{}", r.error());
+        } else {
+            return *r;
         }
     }
     return {};

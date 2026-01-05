@@ -10,16 +10,12 @@ MemoryStorageCore::MemoryStorageCore()
     : trigger_snapshot_unavailable_(false), trigger_log_unavailable_(false) {}
 
 void MemoryStorageCore::SetHardState(HardState&& hs) {
-    static_assert(
-        std::is_rvalue_reference_v<decltype(hs)>, "hs must be rvalue reference"
-    );
+    static_assert(std::is_rvalue_reference_v<decltype(hs)>, "hs must be rvalue reference");
     raft_state_.hard_state = std::move(hs);
 }
 
 void MemoryStorageCore::CommitTo(uint64_t index) {
-    ASSERT(
-        HasEntryAt(index), "commit_to {} but the entry does not exist", index
-    );
+    ASSERT(HasEntryAt(index), "commit_to {} but the entry does not exist", index);
     const size_t diff = index - entries_[0].index();
     raft_state_.hard_state.set_commit(index);
     raft_state_.hard_state.set_term(entries_[diff].term());
@@ -37,32 +33,34 @@ Result<void> MemoryStorageCore::ApplySnapshot(const Snapshot& snapshot) {
     }
 
     snapshot_metadata_.CopyFrom(meta);
-    raft_state_.hard_state.set_term(
-        std::max(raft_state_.hard_state.term(), meta.term())
-    );
+    raft_state_.hard_state.set_term(std::max(raft_state_.hard_state.term(), meta.term()));
     raft_state_.hard_state.set_commit(index);
     entries_.clear();
     raft_state_.conf_state.CopyFrom(meta.conf_state());
     return {};
 }
 
-void MemoryStorageCore::Compact(uint64_t compact_index) {
+Result<void> MemoryStorageCore::Compact(uint64_t compact_index) {
     if (compact_index <= first_index()) {
-        return;
+        return {};
     }
 
     if (compact_index > last_index() + 1) {
-        PANIC("compact not received raft logs", compact_index, last_index());
+        return RaftError(
+            FatalError{fmt::format(
+                "compact not received raft logs, compact_index={} last_index={}", compact_index,
+                last_index()
+            )}
+        );
     }
 
     if (entries_.empty()) {
-        return;
+        return {};
     }
 
     const uint64_t offset = compact_index - entries_[0].index();
-    entries_.erase(
-        entries_.begin(), entries_.begin() + static_cast<int64_t>(offset)
-    );
+    entries_.erase(entries_.begin(), entries_.begin() + static_cast<int64_t>(offset));
+    return {};
 }
 
 void MemoryStorageCore::Append(const std::vector<Entry>& ents) {
@@ -84,8 +82,8 @@ Result<void, std::string> MemoryStorageCore::MayAppend(
         }
         return std::unexpected(
             fmt::format(
-                "overwrite compacted raft logs, compacted={} new_appended={}",
-                compacted, new_appended
+                "overwrite compacted raft logs, compacted={} new_appended={}", compacted,
+                new_appended
             )
         );
     }
@@ -96,17 +94,14 @@ Result<void, std::string> MemoryStorageCore::MayAppend(
         }
         return std::unexpected(
             fmt::format(
-                "raft logs should be continuous, last_index={} new_appended={}",
-                last_index(), new_appended
+                "raft logs should be continuous, last_index={} new_appended={}", last_index(),
+                new_appended
             )
         );
     }
 
-    if (const uint64_t diff = new_appended - first_index();
-        diff < entries_.size()) {
-        entries_.erase(
-            entries_.begin() + static_cast<int64_t>(diff), entries_.end()
-        );
+    if (const uint64_t diff = new_appended - first_index(); diff < entries_.size()) {
+        entries_.erase(entries_.begin() + static_cast<int64_t>(diff), entries_.end());
     }
     entries_.reserve(entries_.size() + ents.size());
     entries_.insert_range(entries_.end(), ents);
@@ -149,10 +144,7 @@ Snapshot MemoryStorageCore::snapshot() const {
 
     uint64_t term;
     if (meta->index() < snapshot_metadata_.index()) {
-        PANIC(
-            "commit {} < snapshot_metadata.index {}", meta->index(),
-            snapshot_metadata_.index()
-        );
+        PANIC("commit {} < snapshot_metadata.index {}", meta->index(), snapshot_metadata_.index());
     }
     if (meta->index() > snapshot_metadata_.index()) {
         const uint64_t offset = entries_[0].index();
@@ -185,10 +177,7 @@ Result<std::vector<Entry>> MemoryStorage::Entries(
     }
 
     if (high > core_.last_index() + 1) {
-        PANIC(
-            "index out of bound (last: {}, high: {})", core_.last_index() + 1,
-            high
-        );
+        PANIC("index out of bound (last: {}, high: {})", core_.last_index() + 1, high);
     }
 
     if (core_.trigger_log_unavailable_ && context.CanAsync()) {
@@ -200,8 +189,7 @@ Result<std::vector<Entry>> MemoryStorage::Entries(
     const auto lo = static_cast<int64_t>(low - offset);
     const auto hi = static_cast<int64_t>(high - offset);
     std::vector<Entry> entries;
-    for (auto it = core_.entries_.begin() + lo;
-         it != core_.entries_.begin() + hi; ++it) {
+    for (auto it = core_.entries_.begin() + lo; it != core_.entries_.begin() + hi; ++it) {
         entries.emplace_back(*it);
     }
     if (max_size) {
@@ -220,9 +208,9 @@ void MemoryStorage::Append(const std::vector<Entry>& ents) {
     core_.Append(ents);
 }
 
-void MemoryStorage::Compact(const uint64_t idx) {
+Result<void> MemoryStorage::Compact(const uint64_t idx) {
     std::lock_guard lock(mutex_);
-    core_.Compact(idx);
+    return core_.Compact(idx);
 }
 
 void MemoryStorage::SetRaftState(const RaftState& raft_state) {
@@ -245,9 +233,7 @@ std::vector<Entry> MemoryStorage::AllEntries() {
     return core_.entries_;
 }
 
-Result<void, std::string> MemoryStorage::MayAppend(
-    const std::vector<Entry>& entries
-) {
+Result<void, std::string> MemoryStorage::MayAppend(const std::vector<Entry>& entries) {
     std::lock_guard lock(mutex_);
     return core_.MayAppend(entries, false);
 }
@@ -280,9 +266,7 @@ Result<uint64_t> MemoryStorage::LastIndex() {
     return core_.last_index();
 }
 
-Result<Snapshot> MemoryStorage::GetSnapshot(
-    const uint64_t request_index, uint64_t to
-) {
+Result<Snapshot> MemoryStorage::GetSnapshot(const uint64_t request_index, uint64_t to) {
     std::lock_guard lock(mutex_);
     if (core_.trigger_snapshot_unavailable_) {
         core_.trigger_snapshot_unavailable_ = false;

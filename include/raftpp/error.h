@@ -83,6 +83,8 @@ class RaftError {
 
     std::string ToString() const;
 
+    void Unwrap() const;
+
   private:
     RaftErrorInner inner_;
 };

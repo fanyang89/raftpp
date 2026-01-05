@@ -621,24 +621,19 @@ TEST_CASE("raft_log: slice") {
     DOCTEST_VALUE_PARAMETERIZED_DATA_WITH_INDEX(test, tests);
     const auto& [from, to, limit, w, w_panic, test_index] = test;
 
-    auto slice_result = raft_log.Slice(from, to, limit, GetEntriesContext::Empty(false), false);
+    auto slice_result = raft_log.Slice(from, to, limit, GetEntriesContext::Empty(false));
 
     if (w_panic) {
-        if (slice_result) {
+        if (slice_result || !slice_result.error().Is<FatalError>()) {
             FAIL("expected error");
-        }
-        if (!slice_result.error().Is<FatalError>()) {
-            FAIL("expected FatalError, but got: ", slice_result.error());
         }
         return;
     }
 
     // compacted
     if (from <= offset) {
-        if (slice_result) {
-            FAIL("Expected Compacted error, but got OK. size: ", slice_result->size());
-        } else if (!slice_result.error().Is(StorageErrorCode::Compacted)) {
-            FAIL("Expected Compacted error, but got: ", slice_result.error());
+        if (slice_result || !slice_result.error().Is(StorageErrorCode::Compacted)) {
+            FAIL("Expected Compacted error");
         }
         return;
     }
@@ -654,10 +649,10 @@ size_t ents_size(const std::vector<Entry>& ents) {
 }
 
 TEST_CASE("raft_log: scan") {
-    const auto offset = 47;
-    const auto num = 20;
-    const auto last = offset + num;
-    const auto half = offset + num / 2;
+    constexpr auto offset = 47;
+    constexpr auto num = 20;
+    constexpr auto last = offset + num;
+    constexpr auto half = offset + num / 2;
     auto entries = [](uint64_t from, uint64_t to) {
         std::vector<Entry> ents;
         for (uint64_t i = from; i < to; ++i) {
@@ -780,7 +775,7 @@ TEST_CASE("raft_log: maybe append") {
             persist,
             false,
         },
-        // do not increase commit higher than lastnewi
+        // do not increase commit higher than last_new_i
         {
             last_term,
             last_index,
@@ -835,7 +830,7 @@ TEST_CASE("raft_log: maybe append") {
             persist,
             false,
         },
-        // do not increase commit higher than lastnewi
+        // do not increase commit higher than last_new_i
         {
             last_term,
             last_index,
@@ -923,7 +918,7 @@ TEST_CASE("raft_log: maybe append") {
     raft_log.committed() = commit;
     raft_log.persisted() = persist;
 
-    const auto r = raft_log.MaybeAppend(index, log_term, committed, ents, false);
+    const auto r = raft_log.MaybeAppend(index, log_term, committed, ents);
     if (!r) {
         if (!w_panic) {
             FAIL("unexpected error: ", r.error(), ", test_index: ", test_index);
@@ -954,6 +949,94 @@ TEST_CASE("raft_log: maybe append") {
         const auto to = raft_log.LastIndex() + 1;
         const auto g_ents = raft_log.Slice(from, to, std::nullopt, GetEntriesContext::Empty(false));
         REQUIRE_EQ(g_ents, ents);
+    }
+}
+
+TEST_CASE("raft_log: commit to") {
+    const std::vector previous_ents{
+        NewEntry(1, 1),
+        NewEntry(2, 2),
+        NewEntry(3, 3),
+    };
+    constexpr auto previous_commit = 2;
+
+    struct TestParam {
+        uint64_t commit = 0;
+        uint64_t w_commit = 0;
+        bool w_panic = false;
+    };
+
+    TestParam test;
+    const std::vector tests{
+        TestParam{3, 3, false},
+        TestParam{1, 2, false},  // never decrease
+        TestParam{4, 0, true},   // commit out of range -> panic
+    };
+    DOCTEST_VALUE_PARAMETERIZED_DATA(test, tests);
+    const auto [commit, w_commit, w_panic] = test;
+
+    auto store = std::make_unique<MemoryStorage>();
+    RaftLog raft_log(DefaultConfig(), std::move(store));
+    REQUIRE(raft_log.Append(previous_ents));
+    raft_log.committed() = previous_commit;
+
+    const auto r = raft_log.CommitTo(commit);
+    if (w_panic) {
+        if (r || !r.error().Is<FatalError>()) {
+            FAIL("expected fatal error");
+        }
+        return;
+    }
+
+    CHECK_EQ(raft_log.committed(), w_commit);
+}
+
+TEST_CASE("raft_log: compaction") {
+    struct TestParam {
+        uint64_t index = 0;
+        std::vector<uint64_t> compact;
+        std::vector<size_t> w_left;
+        bool should_panic = false;
+    };
+
+    TestParam test;
+    const std::vector tests{
+        // out of upper bound
+        TestParam{1000, {1001}, {0}, true},
+        TestParam{
+            1000,
+            {300, 500, 800, 900},
+            {700, 500, 200, 100},
+            false,
+        },
+        // out of lower bound
+        TestParam{1000, {300, 299}, {700, 700}, false},
+    };
+    DOCTEST_VALUE_PARAMETERIZED_DATA(test, tests);
+    const auto& [index, compact, w_left, should_panic] = test;
+
+    auto store = std::make_unique<MemoryStorage>();
+    auto* store_ptr = store.get();
+    for (size_t i = 1; i < index; ++i) {
+        store->Append({NewEntry(i, 0)});
+    }
+
+    RaftLog raft_log(DefaultConfig(), std::move(store));
+    std::ignore = raft_log.MaybeCommit(index - 1, 0);
+    const auto committed = raft_log.committed();
+    raft_log.AppliedTo(committed);
+
+    for (size_t i = 0; i < compact.size(); ++i) {
+        const auto idx = compact[i];
+        const auto r = store_ptr->Compact(idx);
+        if (should_panic) {
+            if (r || !r.error().Is<FatalError>()) {
+                FAIL("expected fatal error");
+            }
+            return;
+        }
+        const auto l = raft_log.AllEntries().size();
+        REQUIRE_EQ(l, w_left[i]);
     }
 }
 

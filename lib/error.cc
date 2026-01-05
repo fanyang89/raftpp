@@ -62,4 +62,9 @@ std::string RaftError::ToString() const {
     return std::visit(ToStringVisitor{}, inner_);
 }
 
+void RaftError::Unwrap() const {
+    const auto error = ToString();
+    PANIC("unwrap raft error", error);
+}
+
 }  // namespace raftpp

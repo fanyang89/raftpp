@@ -19,9 +19,9 @@ class RaftLog {
     [[nodiscard]] Result<Snapshot> GetSnapshot(
         uint64_t request_index, uint64_t to
     );  // return the current snapshot
-    [[nodiscard]] Result<std::vector<Entry>, RaftError> Slice(
+    [[nodiscard]] Result<std::vector<Entry>> Slice(
         uint64_t low, uint64_t high, std::optional<uint64_t> max_size,
-        const GetEntriesContext& context, bool panic = false
+        const GetEntriesContext& context
     );
     [[nodiscard]] Result<std::vector<Entry>> GetEntries(
         uint64_t idx, std::optional<uint64_t> max_size, const GetEntriesContext& context
@@ -36,8 +36,7 @@ class RaftLog {
     [[nodiscard]] bool MaybePersist(uint64_t index, uint64_t term);
     [[nodiscard]] bool MaybePersistSnapshot(uint64_t index);
     [[nodiscard]] Result<MaybeAppendResult> MaybeAppend(
-        uint64_t idx, uint64_t term, uint64_t committed, const std::vector<Entry>& entries,
-        bool panic = true
+        uint64_t idx, uint64_t term, uint64_t committed, const std::vector<Entry>& entries
     );
     [[nodiscard]] std::optional<std::vector<Entry>> NextEntriesSince(
         uint64_t since_idx, std::optional<uint64_t> max_size
@@ -61,7 +60,7 @@ class RaftLog {
     [[nodiscard]] uint64_t LastTerm() const;
     void AppliedTo(uint64_t idx);
     void AppliedToUnchecked(uint64_t idx);
-    void CommitTo(uint64_t to_commit);
+    Result<void> CommitTo(uint64_t to_commit);
     void Restore(const Snapshot& snapshot);
     void StableEntries(uint64_t index, uint64_t term);
     void StableSnapshot(uint64_t index);
@@ -77,7 +76,7 @@ class RaftLog {
     [[nodiscard]] uint64_t& persisted();
 
   private:
-    [[nodiscard]] Result<void> MustCheckOutOfBounds(uint64_t low, uint64_t high, bool panic) const;
+    [[nodiscard]] Result<void> MustCheckOutOfBounds(uint64_t low, uint64_t high) const;
 
     std::unique_ptr<Storage> store_;
     Unstable unstable_;
