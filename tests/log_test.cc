@@ -306,7 +306,7 @@ TEST_CASE("raft_log: maybe persist with snapshot") {
         const auto [stable_index, stable_term, new_entries, w_persist] = test;
         auto store = std::make_unique<MemoryStorage>();
         auto* store_ptr = store.get();
-        store->ApplySnapshot(NewSnapshot(snap_index, snap_term));
+        REQUIRE(store->ApplySnapshot(NewSnapshot(snap_index, snap_term)));
         RaftLog raft_log(DefaultConfig(), std::move(store));
         REQUIRE_EQ(raft_log.persisted(), snap_index);
         raft_log.Append(new_entries);
