@@ -1,5 +1,3 @@
-#include <variant>
-
 #include <doctest/doctest.h>
 
 #include "raftpp/memory_storage.h"
@@ -48,7 +46,7 @@ TEST_CASE("raft_log: find conflict") {
 
     auto store = std::make_unique<MemoryStorage>();
     RaftLog raft_log(DefaultConfig(), std::move(store));
-    raft_log.Append(previous_entries);
+    REQUIRE(raft_log.Append(previous_entries));
 
     const auto r = raft_log.FindConflict(ents);
     CHECK_EQ(w_conflict, r);
@@ -63,7 +61,7 @@ TEST_CASE("raft_log: is up-to-date") {
 
     auto store = std::make_unique<MemoryStorage>();
     RaftLog raft_log(DefaultConfig(), std::move(store));
-    raft_log.Append(previous_entries);
+    REQUIRE(raft_log.Append(previous_entries));
 
     using TestParam = std::tuple<uint64_t, uint64_t, bool>;
     TestParam test;
@@ -141,9 +139,9 @@ TEST_CASE("raft_log: append") {
 }
 
 TEST_CASE("raft_log: compaction side effects") {
-    const uint64_t last_index = 1000;
-    const uint64_t unstable_index = 750;
-    const uint64_t last_term = last_index;
+    constexpr uint64_t last_index = 1000;
+    constexpr uint64_t unstable_index = 750;
+    constexpr uint64_t last_term = last_index;
 
     auto store = std::make_unique<MemoryStorage>();
     auto store_ptr = store.get();
@@ -154,11 +152,11 @@ TEST_CASE("raft_log: compaction side effects") {
 
     RaftLog raft_log(DefaultConfig(), std::move(store));
     for (uint64_t i = unstable_index; i < last_index; ++i) {
-        raft_log.Append({NewEntry(i + 1, i + 1)});
+        REQUIRE(raft_log.Append({NewEntry(i + 1, i + 1)}));
     }
     CHECK(raft_log.MaybeCommit(last_index, last_term));
 
-    const uint64_t offset = 500;
+    constexpr uint64_t offset = 500;
     store_ptr->Compact(offset);
     CHECK_EQ(last_index, raft_log.LastIndex());
 
@@ -174,7 +172,7 @@ TEST_CASE("raft_log: compaction side effects") {
     }
 
     auto prev = raft_log.LastIndex();
-    raft_log.Append({NewEntry(prev + 1, prev + 1)});
+    REQUIRE(raft_log.Append({NewEntry(prev + 1, prev + 1)}));
     REQUIRE_EQ(prev + 1, raft_log.LastIndex());
 
     prev = raft_log.LastIndex();
@@ -232,7 +230,7 @@ TEST_CASE("raft_log: term") {
 
     RaftLog raft_log(DefaultConfig(), std::move(store));
     for (uint64_t i = 1; i < num; ++i) {
-        raft_log.Append({NewEntry(offset + i, i)});
+        REQUIRE(raft_log.Append({NewEntry(offset + i, i)}));
     }
 
     struct TestParam {
@@ -310,7 +308,7 @@ TEST_CASE("raft_log: maybe persist with snapshot") {
         REQUIRE(store->ApplySnapshot(NewSnapshot(snap_index, snap_term)));
         RaftLog raft_log(DefaultConfig(), std::move(store));
         REQUIRE_EQ(raft_log.persisted(), snap_index);
-        raft_log.Append(new_entries);
+        REQUIRE(raft_log.Append(new_entries));
 
         if (const auto& unstable = raft_log.unstable().entries();
             !unstable.empty()) {
@@ -328,10 +326,10 @@ TEST_CASE("raft_log: maybe persist with snapshot") {
         RaftLog raft_log(DefaultConfig(), std::make_unique<MemoryStorage>());
         raft_log.Restore(NewSnapshot(100, 1));
         CHECK_EQ(raft_log.unstable().offset(), 101);
-        raft_log.Append({NewEntry(101, 1)});
+        REQUIRE(raft_log.Append({NewEntry(101, 1)}));
         CHECK_EQ(raft_log.Term(101), 1);
         CHECK_FALSE(raft_log.MaybePersist(101, 1));
-        raft_log.Append({NewEntry(102, 1)});
+        REQUIRE(raft_log.Append({NewEntry(102, 1)}));
         CHECK_EQ(raft_log.Term(101), 1);
         CHECK_FALSE(raft_log.MaybePersist(102, 1));
     }
@@ -360,9 +358,9 @@ TEST_CASE("raft_log: unstable entries") {
 
     RaftLog raft_log(DefaultConfig(), std::move(store));
     if (unstable - 1 < previous_ents.size()) {
-        raft_log.Append(
+        REQUIRE(raft_log.Append(
             {previous_ents.begin() + unstable - 1, previous_ents.end()}
-        );
+        ));
     }
 
     const auto ents = raft_log.unstable().entries();
@@ -421,7 +419,7 @@ TEST_CASE("raft_log: has next entries and next entries") {
     CHECK(store->ApplySnapshot(NewSnapshot(3, 1)));
 
     RaftLog raft_log(DefaultConfig(), std::move(store));
-    raft_log.Append(ents);
+    REQUIRE(raft_log.Append(ents));
 
     const auto unstable = raft_log.unstable().entries();
     if (!unstable.empty()) {
@@ -430,10 +428,10 @@ TEST_CASE("raft_log: has next entries and next entries") {
         store_ptr->Append(unstable);
     }
 
-    raft_log.MaybePersist(persisted, 1);
+    std::ignore = raft_log.MaybePersist(persisted, 1);
     CHECK_EQ(persisted, raft_log.persisted());
 
-    raft_log.MaybeCommit(committed, 1);
+    std::ignore = raft_log.MaybeCommit(committed, 1);
     CHECK_EQ(committed, raft_log.committed());
 
     raft_log.AppliedTo(applied);
@@ -498,7 +496,7 @@ TEST_CASE("raft_log: has next entries and next entries, 2") {
 
     RaftLog raft_log(DefaultConfig(), std::move(store));
     raft_log.max_apply_unpersisted_log_limit() = limit;
-    raft_log.Append(ents);
+    REQUIRE(raft_log.Append(ents));
 
     const auto unstable = raft_log.unstable().entries();
     if (!unstable.empty()) {
@@ -507,10 +505,10 @@ TEST_CASE("raft_log: has next entries and next entries, 2") {
         store_ptr->Append(unstable);
     }
 
-    raft_log.MaybePersist(persisted, 1);
+    std::ignore = raft_log.MaybePersist(persisted, 1);
     CHECK_EQ(persisted, raft_log.persisted());
 
-    raft_log.MaybeCommit(committed, 1);
+    std::ignore = raft_log.MaybeCommit(committed, 1);
     CHECK_EQ(committed, raft_log.committed());
 
     raft_log.AppliedTo(applied);
@@ -536,7 +534,7 @@ TEST_CASE("raft_log: slice") {
 
     RaftLog raft_log(DefaultConfig(), std::move(store));
     for (uint64_t i = num / 2; i < num; ++i) {
-        raft_log.Append({NewEntry(offset + i, offset + i)});
+        REQUIRE(raft_log.Append({NewEntry(offset + i, offset + i)}));
     }
 
     struct TestParam {
@@ -692,7 +690,7 @@ TEST_CASE("raft_log: scan") {
     REQUIRE(store->ApplySnapshot(NewSnapshot(offset, 0)));
     store->Append(entries(offset + 1, half));
     RaftLog raft_log(DefaultConfig(), std::move(store));
-    raft_log.Append(entries(half, last));
+    REQUIRE(raft_log.Append(entries(half, last)));
 
     size_t page_size = 0;
     const std::vector<size_t> page_sizes{0,   1,          10,
@@ -703,7 +701,7 @@ TEST_CASE("raft_log: scan") {
     for (auto lo = offset + 1; lo <= last; ++lo) {
         for (auto hi = lo; hi <= last; ++hi) {
             std::vector<Entry> got;
-            raft_log.Scan(
+            REQUIRE(raft_log.Scan(
                 lo, hi, page_size, GetEntriesContext::Empty(false),
                 [&got, page_size](const std::vector<Entry>& ents) {
                     const bool ok =
@@ -712,7 +710,7 @@ TEST_CASE("raft_log: scan") {
                     got.insert_range(got.end(), ents);
                     return true;
                 }
-            );
+            ));
             auto want =
                 raft_log.Slice(lo, hi, {}, GetEntriesContext::Empty(false));
             REQUIRE(want);
@@ -746,5 +744,7 @@ TEST_CASE("raft_log: scan") {
         }
     ));
 }
+
+TEST_CASE("raft_log: maybe append") {}
 
 TEST_SUITE_END();
