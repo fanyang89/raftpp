@@ -62,14 +62,16 @@ using RaftErrorInner = std::variant<
     ConfChangeError, FatalError>;
 
 // RaftError is the universal error type in this lib
-class RaftError : public RaftErrorInner {
+class RaftError {
   public:
-    using RaftErrorInner::RaftErrorInner;
-
-    RaftError(StorageErrorCode ec);
+    template <typename... Args>
+    explicit RaftError(Args&&... args);
 
     template <typename T>
-    operator std::expected<T, RaftError>() const;
+    [[nodiscard]] operator std::expected<T, RaftError>() const;
+
+    template <typename T>
+    bool Is() const;
 
     template <typename T>
     bool Is(const T& ec) const;
@@ -78,7 +80,13 @@ class RaftError : public RaftErrorInner {
     bool operator==(const T& ec) const;
 
     bool operator==(const RaftError& other) const;
+
+  private:
+    RaftErrorInner inner_;
 };
+
+template <typename... Args>
+RaftError::RaftError(Args&&... args) : inner_(std::forward<Args>(args)...) {}
 
 template <typename T>
 RaftError::operator std::expected<T, RaftError>() const {
@@ -86,21 +94,16 @@ RaftError::operator std::expected<T, RaftError>() const {
 }
 
 template <typename T>
+bool RaftError::Is() const {
+    return std::holds_alternative<T>(inner_);
+}
+
+template <typename T>
 bool RaftError::Is(const T& ec) const {
-    if constexpr (std::is_same_v<T, StorageErrorCode>) {
-        return std::get<StorageErrorCode>(*this) == ec;
-    } else if constexpr (std::is_same_v<T, StorageErrorOther>) {
-        return std::get<StorageErrorOther>(*this) == ec;
-    } else if constexpr (std::is_same_v<T, RaftErrorCode>) {
-        return std::get<RaftErrorCode>(*this) == ec;
-    } else if constexpr (std::is_same_v<T, InvalidConfigError>) {
-        return std::get<InvalidConfigError>(*this) == ec;
-    } else if constexpr (std::is_same_v<T, ConfChangeError>) {
-        return std::get<ConfChangeError>(*this) == ec;
-    } else {
-        static_assert(!std::is_same_v<T, T>, "unexpected type");
+    if (!Is<T>()) {
         return false;
     }
+    return std::get<T>(inner_) == ec;
 }
 
 template <typename T>
@@ -112,15 +115,18 @@ template <typename R, typename E = RaftError>
 using Result = std::expected<R, E>;
 
 template <class T, class E>
-constexpr T Unwrap(std::expected<T, E> ex) {
+[[nodiscard]] constexpr T Unwrap(const std::expected<T, E>& ex) {
     if (ex.has_value()) {
         return ex.value();
     }
-    PANIC("Unwrap error");
+    const auto& err = ex.error();
+    PANIC("Unwrap", err);
 }
 
 template <class T, class E>
-constexpr T UnwrapOr(std::expected<T, E> ex, T value) {
+[[nodiscard]] constexpr T UnwrapOr(
+    const std::expected<T, E>& ex, const T& value
+) {
     if (ex.has_value()) {
         return ex.value();
     }

@@ -77,7 +77,9 @@ class RaftLog {
     uint64_t persisted() const;
 
   private:
-    Result<void> MustCheckOutOfBounds(uint64_t low, uint64_t high, bool panic) const;
+    Result<void> MustCheckOutOfBounds(
+        uint64_t low, uint64_t high, bool panic
+    ) const;
 
     std::unique_ptr<Storage> store_;
     Unstable unstable_;
@@ -89,7 +91,7 @@ class RaftLog {
 
 template <typename Fn>
 Result<void> RaftLog::Scan(
-    uint64_t low, uint64_t high, uint64_t page_size, GetEntriesContext ctx,
+    uint64_t low, uint64_t high, size_t page_size, const GetEntriesContext ctx,
     Fn scanFn
 ) {
     while (low < high) {

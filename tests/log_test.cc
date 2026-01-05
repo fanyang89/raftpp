@@ -1,5 +1,6 @@
-#include <doctest/doctest.h>
 #include <variant>
+
+#include <doctest/doctest.h>
 
 #include "raftpp/memory_storage.h"
 #include "raftpp/raft_log.h"
@@ -641,7 +642,7 @@ TEST_CASE("raft_log: slice") {
         if (slice_result) {
             FAIL("expected error");
         }
-        if (!std::holds_alternative<FatalError>(slice_result.error())) {
+        if (!slice_result.error().Is<FatalError>()) {
             FAIL("expected FatalError, but got: ", slice_result.error());
         }
         return;
@@ -661,6 +662,77 @@ TEST_CASE("raft_log: slice") {
     }
 
     REQUIRE_EQ(slice_result, w);
+}
+
+size_t ents_size(const std::vector<Entry>& ents) {
+    return std::accumulate(
+        ents.begin(), ents.end(), 0,
+        [](const size_t previous, const Entry& entry) {
+            return previous + entry.ByteSizeLong();
+        }
+    );
+}
+
+TEST_CASE("raft_log: scan") {
+    auto offset = 47;
+    auto num = 20;
+    auto last = offset + num;
+    auto half = offset + num / 2;
+    auto entries = [](uint64_t from, uint64_t to) {
+        std::vector<Entry> ents;
+        for (uint64_t i = from; i < to; ++i) {
+            ents.emplace_back(NewEntry(i, i));
+        }
+        return ents;
+    };
+
+    auto entry_size = ents_size(entries(half, half + 1));
+
+    auto store = std::make_unique<MemoryStorage>();
+    REQUIRE(store->ApplySnapshot(NewSnapshot(offset, 0)));
+    store->Append(entries(offset + 1, half));
+    RaftLog raft_log(DefaultConfig(), std::move(store));
+    raft_log.Append(entries(half, last));
+
+    size_t page_size = 0;
+    const std::vector<size_t> page_sizes{0,   1,          10,
+                                         100, entry_size, entry_size + 1};
+    DOCTEST_VALUE_PARAMETERIZED_DATA(page_size, page_sizes);
+
+    // Test that scan() returns the same entries as slice(), on all inputs.
+    for (auto lo = offset + 1; lo <= last; ++lo) {
+        for (auto hi = lo; hi <= last; ++hi) {
+            std::vector<Entry> got;
+            raft_log.Scan(
+                lo, hi, page_size, GetEntriesContext::Empty(false),
+                [&got, page_size](const std::vector<Entry>& ents) {
+                    const bool ok =
+                        ents.size() == 1 || ents_size(ents) < page_size;
+                    CHECK(ok);
+                    got.insert_range(got.end(), ents);
+                    return true;
+                }
+            );
+            auto want =
+                raft_log.Slice(lo, hi, {}, GetEntriesContext::Empty(false));
+            REQUIRE(want);
+            CHECK_EQ(want, got);
+        }
+    }
+
+    // Test that the callback early return.
+    int iters = 0;
+    raft_log.Scan(
+        offset + 1, half, 0, GetEntriesContext::Empty(false),
+        [&iters](const std::vector<Entry>&) {
+            iters++;
+            if (iters == 2) {
+                return false;
+            }
+            return true;
+        }
+    );
+    REQUIRE_EQ(iters, 2);
 }
 
 TEST_SUITE_END();
