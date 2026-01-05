@@ -8,7 +8,7 @@
 
 using namespace raftpp;
 
-TEST_SUITE_BEGIN("Log");
+TEST_SUITE_BEGIN("raft_log");
 
 TEST_CASE("raft_log: find conflict") {
     const std::vector previous_entries{

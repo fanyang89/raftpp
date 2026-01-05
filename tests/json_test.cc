@@ -6,9 +6,9 @@
 
 using namespace raftpp;
 
-TEST_SUITE_BEGIN("JSON");
+TEST_SUITE_BEGIN("json");
 
-TEST_CASE("Set") {
+TEST_CASE("json: set") {
     Set<int> s;
     s.emplace(1);
     s.emplace(2);
@@ -18,7 +18,7 @@ TEST_CASE("Set") {
     CHECK_EQ(s, s2);
 }
 
-TEST_CASE("Map") {
+TEST_CASE("json: map") {
     Map<int, std::string> s;
     s.emplace(1, "a");
     s.emplace(2, "b");
@@ -28,7 +28,7 @@ TEST_CASE("Map") {
     CHECK_EQ(s, s2);
 }
 
-TEST_CASE("MajorityConfig") {
+TEST_CASE("json: MajorityConfig") {
     MajorityConfig c;
     c.emplace(1);
     c.emplace(2);

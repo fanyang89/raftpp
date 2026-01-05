@@ -38,9 +38,9 @@ std::optional<size_t> InflightsDebug::incoming_capacity() const {
     return incoming_capacity_;
 }
 
-TEST_SUITE_BEGIN("Inflights");
+TEST_SUITE_BEGIN("inflights");
 
-TEST_CASE("Add") {
+TEST_CASE("inflights: Add") {
     InflightsDebug inflight(10);
 
     for (uint64_t i = 0; i < 5; ++i) {
@@ -84,7 +84,7 @@ TEST_CASE("Add") {
     CHECK_EQ(inflight2.incoming_capacity(), std::nullopt);
 }
 
-TEST_CASE("FreeTo") {
+TEST_CASE("inflights: FreeTo") {
     InflightsDebug inflight(10);
     for (uint64_t i = 0; i < 10; ++i) {
         inflight.Add(i);
@@ -123,7 +123,7 @@ TEST_CASE("FreeTo") {
     CHECK_EQ(inflight.incoming_capacity(), std::nullopt);
 }
 
-TEST_CASE("FreeFirstOne") {
+TEST_CASE("inflights: FreeFirstOne") {
     InflightsDebug inflight(10);
     for (uint64_t i = 0; i < 10; ++i) {
         inflight.Add(i);
@@ -137,7 +137,7 @@ TEST_CASE("FreeFirstOne") {
     CHECK_EQ(inflight.incoming_capacity(), std::nullopt);
 }
 
-TEST_CASE("SetCapacity") {
+TEST_CASE("inflights: SetCapacity") {
     int64_t start = 0;
     std::vector<uint64_t> starts{16, 112, 120};
     DOCTEST_VALUE_PARAMETERIZED_DATA(start, starts);

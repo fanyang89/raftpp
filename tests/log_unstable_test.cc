@@ -22,9 +22,9 @@ struct LogUnstableTestParams {
     }
 };
 
-TEST_SUITE_BEGIN("LogUnstableTest");
+TEST_SUITE_BEGIN("unstable_log");
 
-TEST_CASE("Maybe first index") {
+TEST_CASE("unstable_log: maybe first index") {
     LogUnstableTestParams params;
     std::list<LogUnstableTestParams> tests{
         // NoSnapshot

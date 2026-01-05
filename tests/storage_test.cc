@@ -48,9 +48,9 @@ struct fmt::formatter<std::vector<Entry>> : formatter<std::string_view> {
     }
 };
 
-TEST_SUITE_BEGIN("Storage");
+TEST_SUITE_BEGIN("storage");
 
-TEST_CASE("Term") {
+TEST_CASE("storage: term") {
     const std::vector entries{
         NewEntry(3, 3),
         NewEntry(4, 4),
@@ -75,7 +75,7 @@ TEST_CASE("Term") {
     CHECK_EQ(term, wTerm);
 }
 
-TEST_CASE("Entries") {
+TEST_CASE("storage: entries") {
     const std::vector ents{
         NewEntry(3, 3),
         NewEntry(4, 4),
@@ -132,7 +132,7 @@ TEST_CASE("Entries") {
     CHECK_EQ(e, wEntries);
 }
 
-TEST_CASE("LastIndex") {
+TEST_CASE("storage: last index") {
     const std::vector ents{
         NewEntry(3, 3),
         NewEntry(4, 4),
@@ -149,7 +149,7 @@ TEST_CASE("LastIndex") {
     CHECK_EQ(6, result);
 }
 
-TEST_CASE("FirstIndex") {
+TEST_CASE("storage: first index") {
     const std::vector ents{
         NewEntry(3, 3),
         NewEntry(4, 4),
@@ -164,7 +164,7 @@ TEST_CASE("FirstIndex") {
     CHECK_EQ(4, storage.FirstIndex());
 }
 
-TEST_CASE("Compact") {
+TEST_CASE("storage: compact") {
     const std::vector ents{
         NewEntry(3, 3),
         NewEntry(4, 4),
@@ -223,7 +223,7 @@ TEST_CASE("Compact") {
     REQUIRE_EQ(wLen, len);
 }
 
-TEST_CASE("CreateSnapshot") {
+TEST_CASE("storage: create snapshot") {
     const std::vector ents{
         NewEntry(3, 3),
         NewEntry(4, 4),
@@ -263,7 +263,7 @@ TEST_CASE("CreateSnapshot") {
     CHECK_EQ(result, wResult);
 }
 
-TEST_CASE("Append") {
+TEST_CASE("storage: append") {
     const std::vector ents{
         NewEntry(3, 3),
         NewEntry(4, 4),
@@ -325,7 +325,7 @@ TEST_CASE("Append") {
     }
 }
 
-TEST_CASE("ApplySnapshot") {
+TEST_CASE("storage: apply snapshot") {
     const std::vector<uint64_t> nodes{1, 2, 3};
     MemoryStorage storage;
 
