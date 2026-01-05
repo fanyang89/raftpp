@@ -260,11 +260,11 @@ Result<uint64_t> MemoryStorage::Term(const uint64_t idx) {
 
     const auto offset = core_.first_index();
     if (idx < offset) {
-        return std::unexpected(StorageErrorCode::Compacted);
+        return RaftError(StorageErrorCode::Compacted);
     }
 
     if (idx > core_.last_index()) {
-        return std::unexpected(StorageErrorCode::Unavailable);
+        return RaftError(StorageErrorCode::Unavailable);
     }
 
     return core_.entries_[idx - offset].term();
@@ -286,9 +286,7 @@ Result<Snapshot> MemoryStorage::GetSnapshot(
     std::lock_guard lock(mutex_);
     if (core_.trigger_snapshot_unavailable_) {
         core_.trigger_snapshot_unavailable_ = false;
-        return std::unexpected(
-            StorageErrorCode::SnapshotTemporarilyUnavailable
-        );
+        return RaftError(StorageErrorCode::SnapshotTemporarilyUnavailable);
     }
 
     Snapshot snapshot = core_.snapshot();

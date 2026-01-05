@@ -7,19 +7,19 @@ bool StorageErrorOther::operator==(const StorageErrorOther&) const = default;
 bool InvalidConfigError::operator==(const InvalidConfigError&) const = default;
 
 RaftError ConfChangeError::ToError() const {
-    return {*this};
+    return RaftError{*this};
 }
 
 bool ConfChangeError::operator==(const ConfChangeError&) const = default;
 
 RaftError FatalError::ToError() const {
-    return {*this};
+    return RaftError{*this};
 }
 
 bool FatalError::operator==(const FatalError&) const = default;
 
 RaftError InvalidConfigError::ToError() const {
-    return {*this};
+    return RaftError{*this};
 }
 
 bool RaftError::operator==(const RaftError& other) const {

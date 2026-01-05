@@ -722,7 +722,7 @@ TEST_CASE("raft_log: scan") {
 
     // Test that the callback early return.
     int iters = 0;
-    raft_log.Scan(
+    REQUIRE(raft_log.Scan(
         offset + 1, half, 0, GetEntriesContext::Empty(false),
         [&iters](const std::vector<Entry>&) {
             iters++;
@@ -731,8 +731,20 @@ TEST_CASE("raft_log: scan") {
             }
             return true;
         }
-    );
+    ));
     REQUIRE_EQ(iters, 2);
+
+    // Test that we max out the limit, and not just always return a single entry.
+    // NB: this test works only because the requested range length is even.
+    REQUIRE(raft_log.Scan(
+        offset + 1, offset + 11, entry_size * 2,
+        GetEntriesContext::Empty(false),
+        [entry_size](const std::vector<Entry>& ents) {
+            CHECK_EQ(ents.size(), 2);
+            CHECK_EQ(entry_size * 2, ents_size(ents));
+            return true;
+        }
+    ));
 }
 
 TEST_SUITE_END();
