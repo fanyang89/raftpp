@@ -1,4 +1,5 @@
 #include "raftpp/unstable_log.h"
+#include <cstddef>
 
 #include <libassert/assert.hpp>
 #include <spdlog/spdlog.h>
@@ -85,11 +86,7 @@ void Unstable::Restore(const Snapshot& snapshot) {
 }
 
 void Unstable::TruncateAndAppend(const std::vector<Entry>& ents) {
-    return TruncateAndAppend(std::span{ents.begin(), ents.end()});
-}
-
-void Unstable::TruncateAndAppend(std::span<const Entry> ents) {
-    const uint64_t after = ents[0].index();
+    const uint64_t after = ents.front().index();
     if (after == offset_ + entries_.size()) {
         // after is the next index in the self.entries, append directly
     } else if (after <= offset_) {
@@ -147,6 +144,10 @@ uint64_t Unstable::offset() const {
 
 const std::vector<Entry>& Unstable::entries() const {
     return entries_;
+}
+
+size_t Unstable::entries_size() const {
+    return entries_size_;
 }
 
 std::span<const Entry> Unstable::Slice(const uint64_t lo, const uint64_t hi) {
