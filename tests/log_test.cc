@@ -1040,4 +1040,60 @@ TEST_CASE("raft_log: compaction") {
     }
 }
 
+class RaftLogDebug : public RaftLog {
+  public:
+    using RaftLog::RaftLog;
+
+    [[nodiscard]] Result<void> MustCheckOutOfBounds(const uint64_t low, const uint64_t high) const {
+        return RaftLog::MustCheckOutOfBounds(low, high);
+    }
+};
+
+TEST_CASE("raft_log: is out of bounds") {
+    constexpr uint64_t offset = 100;
+    constexpr uint64_t num = 100;
+    constexpr uint64_t first = offset + 1;
+
+    auto store = std::make_unique<MemoryStorage>();
+    REQUIRE(store->ApplySnapshot(NewSnapshot(offset, 0)));
+
+    RaftLogDebug raft_log(DefaultConfig(), std::move(store));
+    for (size_t i = 1; i <= num; ++i) {
+        REQUIRE(raft_log.Append({NewEntry(i + offset, 0)}));
+    }
+
+    struct TestParam {
+        uint64_t lo = 0;
+        uint64_t hi = 0;
+        bool w_panic = false;
+        bool w_err_compacted = false;
+    };
+
+    TestParam test;
+    const std::vector<TestParam> tests{
+        {first - 2, first + 1, false, true},
+        {first - 1, first + 1, false, true},
+        {first, first, false, false},
+        {first + num / 2, first + num / 2, false, false},
+        {first + num - 1, first + num - 1, false, false},
+        {first + num, first + num, false, false},
+        {first + num, first + num + 1, true, false},
+        {first + num + 1, first + num + 1, true, false},
+    };
+    DOCTEST_VALUE_PARAMETERIZED_DATA(test, tests);
+    const auto& [lo, hi, w_panic, w_err_compacted] = test;
+
+    const auto r = raft_log.MustCheckOutOfBounds(lo, hi);
+    if (w_panic) {
+        if (r || !r.error().Is<FatalError>()) {
+            FAIL("expected fatal error");
+        }
+        return;
+    }
+
+    if (w_err_compacted) {
+        REQUIRE(r.error().Is(StorageErrorCode::Compacted));
+    }
+}
+
 TEST_SUITE_END();

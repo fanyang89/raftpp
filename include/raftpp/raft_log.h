@@ -75,9 +75,10 @@ class RaftLog {
     [[nodiscard]] uint64_t persisted() const;
     [[nodiscard]] uint64_t& persisted();
 
-  private:
+  protected:
     [[nodiscard]] Result<void> MustCheckOutOfBounds(uint64_t low, uint64_t high) const;
 
+  private:
     std::unique_ptr<Storage> store_;
     Unstable unstable_;
     uint64_t committed_;

@@ -83,8 +83,6 @@ class RaftError {
 
     std::string ToString() const;
 
-    void Unwrap() const;
-
   private:
     RaftErrorInner inner_;
 };
@@ -120,17 +118,22 @@ using Result = std::expected<R, E>;
 
 template <class T, class E>
 [[nodiscard]] constexpr T Unwrap(const std::expected<T, E>& ex) {
-    if (ex.has_value()) {
-        return ex.value();
+    if (ex) {
+        return *ex;
     }
-    const auto& err = ex.error();
-    PANIC("Unwrap", err);
+    if constexpr (std::is_same_v<E, RaftError>) {
+        const auto& err = ex.error().ToString();
+        PANIC("Unwrap", err);
+    } else {
+        const auto& err = ex.error();
+        PANIC("Unwrap", err);
+    }
 }
 
 template <class T, class E>
 [[nodiscard]] constexpr T UnwrapOr(const std::expected<T, E>& ex, const T& value) {
-    if (ex.has_value()) {
-        return ex.value();
+    if (ex) {
+        return *ex;
     }
     return value;
 }
