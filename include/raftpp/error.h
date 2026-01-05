@@ -58,8 +58,8 @@ struct FatalError {
 };
 
 using RaftErrorInner = std::variant<
-    StorageErrorCode, StorageErrorOther, RaftErrorCode, InvalidConfigError,
-    ConfChangeError, FatalError>;
+    StorageErrorCode, StorageErrorOther, RaftErrorCode, InvalidConfigError, ConfChangeError,
+    FatalError>;
 
 // RaftError is the universal error type in this lib
 class RaftError {
@@ -80,6 +80,8 @@ class RaftError {
     bool operator==(const T& ec) const;
 
     bool operator==(const RaftError& other) const;
+
+    std::string ToString() const;
 
   private:
     RaftErrorInner inner_;
@@ -124,9 +126,7 @@ template <class T, class E>
 }
 
 template <class T, class E>
-[[nodiscard]] constexpr T UnwrapOr(
-    const std::expected<T, E>& ex, const T& value
-) {
+[[nodiscard]] constexpr T UnwrapOr(const std::expected<T, E>& ex, const T& value) {
     if (ex.has_value()) {
         return ex.value();
     }
@@ -134,10 +134,3 @@ template <class T, class E>
 }
 
 }  // namespace raftpp
-
-template <>
-struct fmt::formatter<raftpp::InvalidConfigError> {
-    static format_context::iterator format(
-        const raftpp::InvalidConfigError& value, const format_context& ctx
-    );
-};

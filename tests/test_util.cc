@@ -52,4 +52,15 @@ doctest::String toString(const std::optional<std::vector<Entry>>& entries) {
     return "None";
 }
 
+doctest::String toString(const RaftError& error) {
+    return {error.ToString().c_str()};
+}
+
+doctest::String toString(const std::optional<uint64_t>& value) {
+    if (value) {
+        return fmt::format("{}", *value).c_str();
+    }
+    return "None";
+}
+
 }  // namespace raftpp

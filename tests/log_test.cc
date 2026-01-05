@@ -30,9 +30,7 @@ TEST_CASE("raft_log: find conflict") {
         {{NewEntry(2, 2), NewEntry(3, 3)}, 0},
         {{NewEntry(3, 3)}, 0},
         // no conflict, but has new entries
-        {{NewEntry(1, 1), NewEntry(2, 2), NewEntry(3, 3), NewEntry(4, 4),
-          NewEntry(5, 4)},
-         4},
+        {{NewEntry(1, 1), NewEntry(2, 2), NewEntry(3, 3), NewEntry(4, 4), NewEntry(5, 4)}, 4},
         {{NewEntry(2, 2), NewEntry(3, 3), NewEntry(4, 4), NewEntry(5, 4)}, 4},
         {{NewEntry(3, 3), NewEntry(4, 4), NewEntry(5, 4)}, 4},
         {{NewEntry(4, 4), NewEntry(5, 4)}, 4},
@@ -65,7 +63,7 @@ TEST_CASE("raft_log: is up-to-date") {
 
     using TestParam = std::tuple<uint64_t, uint64_t, bool>;
     TestParam test;
-    std::vector<TestParam> tests{
+    const std::vector<TestParam> tests{
         // greater term, ignore lastIndex
         {raft_log.LastIndex() - 1, 4, true},
         {raft_log.LastIndex(), 4, true},
@@ -129,9 +127,7 @@ TEST_CASE("raft_log: append") {
     const auto index = raft_log.Append(entries);
     REQUIRE_EQ(index, w_index);
 
-    if (const auto ents = raft_log.GetEntries(
-            1, std::nullopt, GetEntriesContext::Empty(false)
-        )) {
+    if (const auto ents = raft_log.GetEntries(1, std::nullopt, GetEntriesContext::Empty(false))) {
         CHECK_EQ(ents, w_entries);
     } else {
         FAIL("GetEntries()");
@@ -144,7 +140,7 @@ TEST_CASE("raft_log: compaction side effects") {
     constexpr uint64_t last_term = last_index;
 
     auto store = std::make_unique<MemoryStorage>();
-    auto store_ptr = store.get();
+    const auto store_ptr = store.get();
     for (uint64_t i = 1; i <= unstable_index; i++) {
         const auto r = store->MayAppend({NewEntry(i, i)});
         CHECK(r);
@@ -176,9 +172,7 @@ TEST_CASE("raft_log: compaction side effects") {
     REQUIRE_EQ(prev + 1, raft_log.LastIndex());
 
     prev = raft_log.LastIndex();
-    const auto ents = raft_log.GetEntries(
-        prev, std::nullopt, GetEntriesContext::Empty(false)
-    );
+    const auto ents = raft_log.GetEntries(prev, std::nullopt, GetEntriesContext::Empty(false));
     REQUIRE(ents);
     REQUIRE_EQ(1, ents->size());
 }
@@ -187,8 +181,7 @@ TEST_CASE("raft_log: term with unstable snapshot") {
     constexpr uint64_t storage_snap_idx = 10064;
     constexpr uint64_t unstable_snap_idx = storage_snap_idx + 5;
     auto store = std::make_unique<MemoryStorage>();
-    if (const auto r = store->ApplySnapshot(NewSnapshot(storage_snap_idx, 1));
-        !r) {
+    if (const auto r = store->ApplySnapshot(NewSnapshot(storage_snap_idx, 1)); !r) {
         FAIL("ApplySnapshot()");
     }
 
@@ -310,8 +303,7 @@ TEST_CASE("raft_log: maybe persist with snapshot") {
         REQUIRE_EQ(raft_log.persisted(), snap_index);
         REQUIRE(raft_log.Append(new_entries));
 
-        if (const auto& unstable = raft_log.unstable().entries();
-            !unstable.empty()) {
+        if (const auto& unstable = raft_log.unstable().entries(); !unstable.empty()) {
             const auto& e = unstable.back();
             raft_log.StableEntries(e.index(), e.term());
             CHECK(store_ptr->MayAppend(unstable));
@@ -351,16 +343,12 @@ TEST_CASE("raft_log: unstable entries") {
     // append unstable entries to raft log
     auto store = std::make_unique<MemoryStorage>();
     if (unstable - 1 > 0) {
-        store->Append(
-            {previous_ents.begin(), previous_ents.begin() + unstable - 1}
-        );
+        store->Append({previous_ents.begin(), previous_ents.begin() + unstable - 1});
     }
 
     RaftLog raft_log(DefaultConfig(), std::move(store));
     if (unstable - 1 < previous_ents.size()) {
-        REQUIRE(raft_log.Append(
-            {previous_ents.begin() + unstable - 1, previous_ents.end()}
-        ));
+        REQUIRE(raft_log.Append({previous_ents.begin() + unstable - 1, previous_ents.end()}));
     }
 
     const auto ents = raft_log.unstable().entries();
@@ -633,8 +621,7 @@ TEST_CASE("raft_log: slice") {
     DOCTEST_VALUE_PARAMETERIZED_DATA_WITH_INDEX(test, tests);
     const auto& [from, to, limit, w, w_panic, test_index] = test;
 
-    auto slice_result =
-        raft_log.Slice(from, to, limit, GetEntriesContext::Empty(false), false);
+    auto slice_result = raft_log.Slice(from, to, limit, GetEntriesContext::Empty(false), false);
 
     if (w_panic) {
         if (slice_result) {
@@ -649,10 +636,7 @@ TEST_CASE("raft_log: slice") {
     // compacted
     if (from <= offset) {
         if (slice_result) {
-            FAIL(
-                "Expected Compacted error, but got OK. size: ",
-                slice_result->size()
-            );
+            FAIL("Expected Compacted error, but got OK. size: ", slice_result->size());
         } else if (!slice_result.error().Is(StorageErrorCode::Compacted)) {
             FAIL("Expected Compacted error, but got: ", slice_result.error());
         }
@@ -665,17 +649,15 @@ TEST_CASE("raft_log: slice") {
 size_t ents_size(const std::vector<Entry>& ents) {
     return std::accumulate(
         ents.begin(), ents.end(), 0,
-        [](const size_t previous, const Entry& entry) {
-            return previous + entry.ByteSizeLong();
-        }
+        [](const size_t previous, const Entry& entry) { return previous + entry.ByteSizeLong(); }
     );
 }
 
 TEST_CASE("raft_log: scan") {
-    auto offset = 47;
-    auto num = 20;
-    auto last = offset + num;
-    auto half = offset + num / 2;
+    const auto offset = 47;
+    const auto num = 20;
+    const auto last = offset + num;
+    const auto half = offset + num / 2;
     auto entries = [](uint64_t from, uint64_t to) {
         std::vector<Entry> ents;
         for (uint64_t i = from; i < to; ++i) {
@@ -693,8 +675,7 @@ TEST_CASE("raft_log: scan") {
     REQUIRE(raft_log.Append(entries(half, last)));
 
     size_t page_size = 0;
-    const std::vector<size_t> page_sizes{0,   1,          10,
-                                         100, entry_size, entry_size + 1};
+    const std::vector<size_t> page_sizes{0, 1, 10, 100, entry_size, entry_size + 1};
     DOCTEST_VALUE_PARAMETERIZED_DATA(page_size, page_sizes);
 
     // Test that scan() returns the same entries as slice(), on all inputs.
@@ -704,15 +685,13 @@ TEST_CASE("raft_log: scan") {
             REQUIRE(raft_log.Scan(
                 lo, hi, page_size, GetEntriesContext::Empty(false),
                 [&got, page_size](const std::vector<Entry>& ents) {
-                    const bool ok =
-                        ents.size() == 1 || ents_size(ents) < page_size;
+                    const bool ok = ents.size() == 1 || ents_size(ents) < page_size;
                     CHECK(ok);
                     got.insert_range(got.end(), ents);
                     return true;
                 }
             ));
-            auto want =
-                raft_log.Slice(lo, hi, {}, GetEntriesContext::Empty(false));
+            auto want = raft_log.Slice(lo, hi, {}, GetEntriesContext::Empty(false));
             REQUIRE(want);
             CHECK_EQ(want, got);
         }
@@ -721,8 +700,7 @@ TEST_CASE("raft_log: scan") {
     // Test that the callback early return.
     int iters = 0;
     REQUIRE(raft_log.Scan(
-        offset + 1, half, 0, GetEntriesContext::Empty(false),
-        [&iters](const std::vector<Entry>&) {
+        offset + 1, half, 0, GetEntriesContext::Empty(false), [&iters](const std::vector<Entry>&) {
             iters++;
             if (iters == 2) {
                 return false;
@@ -735,8 +713,7 @@ TEST_CASE("raft_log: scan") {
     // Test that we max out the limit, and not just always return a single entry.
     // NB: this test works only because the requested range length is even.
     REQUIRE(raft_log.Scan(
-        offset + 1, offset + 11, entry_size * 2,
-        GetEntriesContext::Empty(false),
+        offset + 1, offset + 11, entry_size * 2, GetEntriesContext::Empty(false),
         [entry_size](const std::vector<Entry>& ents) {
             CHECK_EQ(ents.size(), 2);
             CHECK_EQ(entry_size * 2, ents_size(ents));
@@ -745,6 +722,239 @@ TEST_CASE("raft_log: scan") {
     ));
 }
 
-TEST_CASE("raft_log: maybe append") {}
+TEST_CASE("raft_log: maybe append") {
+    const std::vector previous_ents{
+        NewEntry(1, 1),
+        NewEntry(2, 2),
+        NewEntry(3, 3),
+    };
+    constexpr uint64_t last_index = 3;
+    constexpr uint64_t last_term = 3;
+    constexpr uint64_t commit = 1;
+    constexpr uint64_t persist = 3;
+
+    struct TestParam {
+        uint64_t log_term = 0;
+        uint64_t index = 0;
+        uint64_t committed = 0;
+        std::vector<Entry> ents;
+        std::optional<uint64_t> w_last_index;
+        uint64_t w_commit = 0;
+        uint64_t w_persist = 0;
+        bool w_panic = false;
+        int test_index = 0;
+    };
+
+    TestParam test;
+    const auto tests = {
+        // not match: term is different
+        TestParam{
+            last_term - 1,
+            last_index,
+            last_index,
+            {NewEntry(last_index + 1, 4)},
+            std::nullopt,
+            commit,
+            persist,
+            false
+        },
+        // not match: index out of bound
+        {
+            last_term,
+            last_index + 1,
+            last_index,
+            {NewEntry(last_index + 2, 4)},
+            std::nullopt,
+            commit,
+            persist,
+            false,
+        },
+        // match with the last existing entry
+        {
+            last_term,
+            last_index,
+            last_index,
+            {},
+            last_index,
+            last_index,
+            persist,
+            false,
+        },
+        // do not increase commit higher than lastnewi
+        {
+            last_term,
+            last_index,
+            last_index + 1,
+            {},
+            last_index,
+            last_index,
+            persist,
+            false,
+        },
+        // commit up to the commit in the message
+        {
+            last_term,
+            last_index,
+            last_index - 1,
+            {},
+            last_index,
+            last_index - 1,
+            persist,
+            false,
+        },
+        // commit do not decrease
+        {
+            last_term,
+            last_index,
+            0,
+            {},
+            last_index,
+            commit,
+            persist,
+            false,
+        },
+        // commit do not decrease
+        {0, 0, last_index, {}, 0, commit, persist, false},
+        {
+            last_term,
+            last_index,
+            last_index,
+            {NewEntry(last_index + 1, 4)},
+            last_index + 1,
+            last_index,
+            persist,
+            false,
+        },
+        {
+            last_term,
+            last_index,
+            last_index + 1,
+            {NewEntry(last_index + 1, 4)},
+            last_index + 1,
+            last_index + 1,
+            persist,
+            false,
+        },
+        // do not increase commit higher than lastnewi
+        {
+            last_term,
+            last_index,
+            last_index + 2,
+            {NewEntry(last_index + 1, 4)},
+            last_index + 1,
+            last_index + 1,
+            persist,
+            false,
+        },
+        {
+            last_term,
+            last_index,
+            last_index + 2,
+            {NewEntry(last_index + 1, 4), NewEntry(last_index + 2, 4)},
+            last_index + 2,
+            last_index + 2,
+            persist,
+            false,
+        },
+        // match with the entry in the middle
+        {
+            last_term - 1,
+            last_index - 1,
+            last_index,
+            {NewEntry(last_index, 4)},
+            last_index,
+            last_index,
+            std::min(last_index - 1, persist),
+            false,
+        },
+        {
+            last_term - 2,
+            last_index - 2,
+            last_index,
+            {NewEntry(last_index - 1, 4)},
+            last_index - 1,
+            last_index - 1,
+            std::min(last_index - 2, persist),
+            false,
+        },
+        // conflict with existing committed entry
+        {
+            last_term - 3,
+            last_index - 3,
+            last_index,
+            {NewEntry(last_index - 2, 4)},
+            last_index - 2,
+            last_index - 2,
+            std::min(last_index - 3, persist),
+            true,
+        },
+        {
+            last_term - 2,
+            last_index - 2,
+            last_index,
+            {NewEntry(last_index - 1, 4), NewEntry(last_index, 4)},
+            last_index,
+            last_index,
+            std::min(last_index - 2, persist),
+            false,
+        },
+        {
+            last_term - 2,
+            last_index - 2,
+            last_index + 2,
+            {
+                NewEntry(last_index - 1, last_term - 1),
+                NewEntry(last_index, 4),
+                NewEntry(last_index + 1, 4),
+            },
+            last_index + 1,
+            last_index + 1,
+            std::min(last_index - 1, persist),
+            false,
+        },
+    };
+    DOCTEST_VALUE_PARAMETERIZED_DATA_WITH_INDEX(test, tests);
+    const auto& [log_term, index, committed, ents, w_last_index, w_commit, w_persist, w_panic, test_index] =
+        test;
+
+    auto store = std::make_unique<MemoryStorage>();
+    RaftLog raft_log(DefaultConfig(), std::move(store));
+    REQUIRE(raft_log.Append(previous_ents));
+    raft_log.committed() = commit;
+    raft_log.persisted() = persist;
+
+    const auto r = raft_log.MaybeAppend(index, log_term, committed, ents, false);
+    if (!r) {
+        if (!w_panic) {
+            FAIL("unexpected error: ", r.error(), ", test_index: ", test_index);
+            return;
+        }
+        REQUIRE(r.error().Is<FatalError>());
+        return;
+    }
+
+    auto success = r->term_matched;
+    auto g_last_index = r->last_index;
+
+    const uint64_t g_committed = raft_log.committed();
+    const uint64_t g_persisted = raft_log.persisted();
+
+    if (success) {
+        REQUIRE_EQ(g_last_index, w_last_index);
+    } else {
+        // MaybeAppend() failed: term mismatch
+        REQUIRE(!w_last_index.has_value());
+    }
+
+    REQUIRE_EQ(g_committed, w_commit);
+    REQUIRE_EQ(g_persisted, w_persist);
+
+    if (success && !ents.empty()) {
+        const auto from = raft_log.LastIndex() + 1 - ents.size();
+        const auto to = raft_log.LastIndex() + 1;
+        const auto g_ents = raft_log.Slice(from, to, std::nullopt, GetEntriesContext::Empty(false));
+        REQUIRE_EQ(g_ents, ents);
+    }
+}
 
 TEST_SUITE_END();
