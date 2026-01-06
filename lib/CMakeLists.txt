@@ -1,6 +1,5 @@
 add_library(raftpp
   ack_indexer.cc
-  CMakeLists.txt
   conf_changer.cc
   conf_restore.cc
   error.cc
@@ -8,12 +7,12 @@ add_library(raftpp
   joint_conf.cc
   majority_conf.cc
   memory_storage.cc
-  progress.cc
   progress_tracker.cc
-  raft.cc
+  progress.cc
   raft_config.cc
   raft_core.cc
   raft_log.cc
+  raft.cc
   raw_node.cc
   read_only.cc
   storage.cc
