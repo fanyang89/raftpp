@@ -25,7 +25,8 @@ bool UncommittedState::MaybeIncreaseUncommittedSize(std::span<const Entry> entri
     }
 
     const std::size_t size = std::transform_reduce(
-        entries.begin(), entries.end(), std::size_t{0}, std::plus{}, [](const Entry& e) { return e.data().size(); }
+        entries.begin(), entries.end(), std::size_t{0}, std::plus{},
+        [](const Entry& e) { return e.data().size(); }
     );
 
     if (size == 0 || uncommitted_size == 0 || size + uncommitted_size <= max_uncommitted_size) {
@@ -42,8 +43,9 @@ bool UncommittedState::MaybeReduceUncommittedSize(std::span<const Entry> entries
     }
 
     const std::size_t size = std::ranges::fold_left(
-        entries | std::views::drop_while([this](const Entry& e) { return e.index() <= last_log_tail_index; }) |
-            std::views::transform([](const Entry& e) { return e.data().size(); }),
+        entries | std::views::drop_while([this](const Entry& e) {
+            return e.index() <= last_log_tail_index;
+        }) | std::views::transform([](const Entry& e) { return e.data().size(); }),
         std::size_t{0}, std::plus{}
     );
 
@@ -57,16 +59,19 @@ bool UncommittedState::MaybeReduceUncommittedSize(std::span<const Entry> entries
 }
 
 Raft::Raft(const Config& config, std::unique_ptr<Storage> store)
-    : RaftCore(config, std::move(store)), progress_tracker_(config.max_inflight_messages), config_(config) {
+    : RaftCore(config, std::move(store)),
+      progress_tracker_(config.max_inflight_messages),
+      config_(config) {
     if (const auto r = config.Validate(); !r) {
         PANIC(r.error());
     }
-    const auto raft_state = store->InitialState();
-    if (!raft_state) {
-        PANIC(raft_state.error());
+    const auto raft_state_result = raft_log_.GetInitialState();
+    if (!raft_state_result) {
+        PANIC(raft_state_result.error());
     }
+    const auto& raft_state = *raft_state_result;
 
-    auto& conf_state = raft_state->conf_state;
+    auto& conf_state = raft_state.conf_state;
 
     if (const auto r = raftpp::Restore(progress_tracker_, raft_log_.LastIndex(), conf_state); !r) {
         PANIC("Configuration restore failed, err: {}", r.error());
@@ -77,8 +82,10 @@ Raft::Raft(const Config& config, std::unique_ptr<Storage> store)
         PANIC("invalid restore: {} != {}", conf_state.DebugString(), new_cs.DebugString());
     }
 
-    if (!google::protobuf::util::MessageDifferencer::Equals(raft_state->hard_state, HardState::default_instance())) {
-        LoadState(raft_state->hard_state);
+    if (!google::protobuf::util::MessageDifferencer::Equals(
+            raft_state.hard_state, HardState::default_instance()
+        )) {
+        LoadState(raft_state.hard_state);
     }
 
     if (config.applied > 0) {
@@ -89,8 +96,8 @@ Raft::Raft(const Config& config, std::unique_ptr<Storage> store)
 
     RaftLog& log = raft_log_;
     SPDLOG_INFO(
-        "new raft instance, term={}, commit={}, applied={}, last_index={}, last_term={}, peers={}", term_,
-        log.committed(), log.applied(), log.LastIndex(), log.LastTerm(),
+        "new raft instance, term={}, commit={}, applied={}, last_index={}, last_term={}, peers={}",
+        term_, log.committed(), log.applied(), log.LastIndex(), log.LastTerm(),
         fmt::format("{}", progress_tracker_.conf().voters)
     );
 }
@@ -122,7 +129,8 @@ ConfState Raft::PostConfChange() {
     }
 
     if (const auto ctx = read_only_.LastPendingRequestCtx()) {
-        if (const auto acks = read_only_.RecvACK(id_, *ctx); acks && progress_tracker_.HasQuorum(*acks)) {
+        if (const auto acks = read_only_.RecvACK(id_, *ctx);
+            acks && progress_tracker_.HasQuorum(*acks)) {
             for (const auto& rs : read_only_.Advance(*ctx)) {
                 if (auto m = HandleReadyReadIndex(rs.req, rs.index)) {
                     Send(*m, messages_);
@@ -140,7 +148,10 @@ ConfState Raft::PostConfChange() {
 
 void Raft::LoadState(const HardState& hs) {
     if (hs.commit() < raft_log_.committed() || hs.commit() > raft_log_.LastIndex()) {
-        PANIC("hs.commit {} is out of range [{}, {}]", hs.commit(), raft_log_.committed(), raft_log_.LastIndex());
+        PANIC(
+            "hs.commit {} is out of range [{}, {}]", hs.commit(), raft_log_.committed(),
+            raft_log_.LastIndex()
+        );
     }
     raft_log_.committed() = hs.commit();
     term_ = hs.term();
@@ -205,7 +216,10 @@ void Raft::OnPersistEntries(const uint64_t index, const uint64_t term) {
     const bool update = raft_log_.MaybePersist(index, term);
     if (update && state_ == StateRole::Leader) {
         if (term_ != term) {
-            SPDLOG_ERROR("leader's persisted index changed but the term {} is not the same as {}", term, term_);
+            SPDLOG_ERROR(
+                "leader's persisted index changed but the term {} is not the same as {}", term,
+                term_
+            );
         }
 
         const uint64_t self_id = id_;
@@ -349,7 +363,11 @@ void Raft::Hup(const bool transfer_leader) {
     GetEntriesContext ctx;
     ctx.what = GetEntriesFor::TransferLeader;
     if (HasUnappliedConfChanges(low, high, ctx)) {
-        SPDLOG_WARN("cannot campaign at term {} since there are still pending configuration changes to apply", term_);
+        SPDLOG_WARN(
+            "cannot campaign at term {} since there are still pending configuration changes to "
+            "apply",
+            term_
+        );
         return;
     }
 
@@ -398,8 +416,8 @@ void Raft::CommitApplyInternal(uint64_t applied, bool skip_check) {
         raft_log_.AppliedToUnchecked(applied);
     }
 
-    if (progress_tracker_.conf().auto_leave && old_applied <= pending_conf_index_ && applied >= pending_conf_index_ &&
-        state_ == StateRole::Leader) {
+    if (progress_tracker_.conf().auto_leave && old_applied <= pending_conf_index_ &&
+        applied >= pending_conf_index_ && state_ == StateRole::Leader) {
         Entry ent;
         ent.set_entry_type(EntryConfChangeV2);
         if (!AppendEntry(ent)) {
@@ -425,7 +443,8 @@ void Raft::MaybeCommitByVote(const Message& m) {
 
     const auto& log = raft_log_;
     SPDLOG_INFO(
-        "[commit: {}, last_index: {}, last_term: {}] fast-forwarded commit to vote request [index: {}, term: {}]",
+        "[commit: {}, last_index: {}, last_term: {}] fast-forwarded commit to vote request [index: "
+        "{}, term: {}]",
         log.committed(), log.LastIndex(), log.LastTerm(), m.commit(), m.commit_term()
     );
 
@@ -437,7 +456,8 @@ void Raft::MaybeCommitByVote(const Message& m) {
     // Paginate the scan, to avoid a potentially unlimited memory spike.
     const uint64_t low = last_commit + 1;
     const uint64_t high = raft_log_.committed() + 1;
-    if (constexpr auto ctx = GetEntriesContext(GetEntriesFor::CommitByVote); HasUnappliedConfChanges(low, high, ctx)) {
+    if (constexpr auto ctx = GetEntriesContext(GetEntriesFor::CommitByVote);
+        HasUnappliedConfChanges(low, high, ctx)) {
         // The candidate doesn't have to step down in theory, here just for best
         // safety as we assume quorum won't change during election.
         const auto term = term_;
@@ -550,7 +570,9 @@ bool Raft::Restore(const Snapshot& snapshot) {
     }
 
     if (state_ != StateRole::Follower) {
-        SPDLOG_WARN("non-follower attempted to restore snapshot, state={}", magic_enum::enum_name(state_));
+        SPDLOG_WARN(
+            "non-follower attempted to restore snapshot, state={}", magic_enum::enum_name(state_)
+        );
         BecomeFollower(term_ + 1, INVALID_ID);
         return false;
     }
@@ -569,11 +591,15 @@ bool Raft::Restore(const Snapshot& snapshot) {
         cs_ids.insert(voter);
     }
     if (!cs_ids.contains(id_)) {
-        SPDLOG_WARN("attempted to restore snapshot but it is not in the ConfState, cs={}", cs.ShortDebugString());
+        SPDLOG_WARN(
+            "attempted to restore snapshot but it is not in the ConfState, cs={}",
+            cs.ShortDebugString()
+        );
         return false;
     }
 
-    if (pending_request_snapshot_ == INVALID_INDEX && raft_log_.MatchTerm(meta.index(), meta.term())) {
+    if (pending_request_snapshot_ == INVALID_INDEX &&
+        raft_log_.MatchTerm(meta.index(), meta.term())) {
         SPDLOG_INFO("fast-forwarded commit to snapshot");
         raft_log_.CommitTo(meta.index());
         return false;
@@ -722,7 +748,10 @@ Result<void> Raft::StepFollower(Message& m) {
 
         case MsgReadIndexResp: {
             if (m.entries_size() != 1) {
-                SPDLOG_ERROR("invalid format of MsgReadIndexResp from {}, entries_size={}", m.from(), m.entries_size());
+                SPDLOG_ERROR(
+                    "invalid format of MsgReadIndexResp from {}, entries_size={}", m.from(),
+                    m.entries_size()
+                );
                 return {};
             }
 
@@ -862,7 +891,8 @@ void Raft::BroadcastHeartbeat() {
 }
 
 void Raft::SendHeartbeat(
-    const uint64_t to, const Progress& pr, const std::optional<std::string>& ctx, std::vector<Message>& messages
+    const uint64_t to, const Progress& pr, const std::optional<std::string>& ctx,
+    std::vector<Message>& messages
 ) {
     Message m;
     m.set_to(to);
@@ -973,7 +1003,8 @@ Result<void> Raft::Step(Message& m) {
     if (m.term() > term_) {
         if (m.msg_type() == MsgRequestVote || m.msg_type() == MsgRequestPreVote) {
             const bool force = m.context() == CAMPAIGN_TRANSFER;
-            const bool in_lease = check_quorum_ && leader_id_ != INVALID_ID && election_elapsed_ < election_timeout_;
+            const bool in_lease =
+                check_quorum_ && leader_id_ != INVALID_ID && election_elapsed_ < election_timeout_;
 
             if (!force && in_lease) {
                 SPDLOG_INFO("ignored vote from {}: lease is not expired");
@@ -981,12 +1012,14 @@ Result<void> Raft::Step(Message& m) {
             }
         }
 
-        if (m.msg_type() == MsgRequestPreVote || (m.msg_type() == MsgRequestPreVoteResponse && !m.reject())) {
+        if (m.msg_type() == MsgRequestPreVote ||
+            (m.msg_type() == MsgRequestPreVoteResponse && !m.reject())) {
             // For a pre-vote request:
             // Never change our term in response to a pre-vote request.
         } else {
             SPDLOG_INFO("received a message with higher term from {}", m.from());
-            if (m.msg_type() == MsgAppend || m.msg_type() == MsgHeartbeat || m.msg_type() == MsgSnapshot) {
+            if (m.msg_type() == MsgAppend || m.msg_type() == MsgHeartbeat ||
+                m.msg_type() == MsgSnapshot) {
                 BecomeFollower(m.term(), m.from());
             } else {
                 BecomeFollower(m.term(), INVALID_ID);
@@ -996,7 +1029,8 @@ Result<void> Raft::Step(Message& m) {
     }
 
     if (m.term() < term_) {
-        if ((check_quorum_ || pre_vote_) && (m.msg_type() == MsgHeartbeat || m.msg_type() == MsgAppend)) {
+        if ((check_quorum_ || pre_vote_) &&
+            (m.msg_type() == MsgHeartbeat || m.msg_type() == MsgAppend)) {
             Message to_send;
             to_send.set_to(m.from());
             to_send.set_msg_type(MsgAppendResponse);
@@ -1023,7 +1057,8 @@ Result<void> Raft::Step(Message& m) {
 
         case MsgRequestVote:
         case MsgRequestPreVote: {
-            const bool can_vote = (vote_ == m.from()) || (vote_ == INVALID_ID && leader_id_ == INVALID_ID) ||
+            const bool can_vote = (vote_ == m.from()) ||
+                (vote_ == INVALID_ID && leader_id_ == INVALID_ID) ||
                 (m.msg_type() == MsgRequestPreVote && m.term() > term_);
 
             if (can_vote && raft_log_.IsUpToDate(m.index(), m.log_term()) &&
@@ -1094,8 +1129,9 @@ void Raft::HandleAppendEntries(const Message& m) {
     to_send.set_to(m.from());
     to_send.set_msg_type(MsgAppendResponse);
 
-    if (const auto r =
-            raft_log_.MaybeAppend(m.index(), m.log_term(), m.commit(), {m.entries().begin(), m.entries().end()})) {
+    if (const auto r = raft_log_.MaybeAppend(
+            m.index(), m.log_term(), m.commit(), {m.entries().begin(), m.entries().end()}
+        )) {
         to_send.set_index(r->last_index);
     } else {
         const auto [hint_index, hint_term] =
@@ -1213,7 +1249,8 @@ void Raft::ReduceUncommittedSize(const std::vector<Entry>& ents) {
 
     if (!uncommitted_state_.MaybeReduceUncommittedSize(ents)) {
         SPDLOG_WARN(
-            "try to reduce uncommitted size less than 0, first index of pending ents is {}", ents.front().index()
+            "try to reduce uncommitted size less than 0, first index of pending ents is {}",
+            ents.front().index()
         );
     }
 }
@@ -1237,7 +1274,10 @@ Result<void> Raft::RequestSnapshot() {
             SendRequestSnapshot();
             return {};
         }
-        SPDLOG_INFO("mismatched term; dropping request snapshot, term={}, last_term={}", term_, request_index_term);
+        SPDLOG_INFO(
+            "mismatched term; dropping request snapshot, term={}, last_term={}", term_,
+            request_index_term
+        );
     }
     return RaftError(RaftErrorCode::RequestSnapshotDropped);
 }

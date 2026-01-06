@@ -17,6 +17,10 @@ RaftLog::RaftLog(const Config& config, std::unique_ptr<Storage> store)
     max_apply_unpersisted_log_limit_ = config.max_apply_unpersisted_log_limit;
 }
 
+Result<RaftState> RaftLog::GetInitialState() {
+    return store_->InitialState();
+}
+
 uint64_t RaftLog::LastTerm() const {
     if (const auto r = Term(LastIndex())) {
         return r.value();

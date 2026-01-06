@@ -19,6 +19,7 @@ class RaftLog {
     [[nodiscard]] Result<Snapshot> GetSnapshot(
         uint64_t request_index, uint64_t to
     );  // return the current snapshot
+    [[nodiscard]] Result<RaftState> GetInitialState();
     [[nodiscard]] Result<std::vector<Entry>> Slice(
         uint64_t low, uint64_t high, std::optional<uint64_t> max_size,
         const GetEntriesContext& context
