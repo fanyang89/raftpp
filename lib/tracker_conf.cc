@@ -2,9 +2,11 @@
 
 namespace raftpp {
 
-TrackerConfiguration::TrackerConfiguration() = default;
+TrackerConfiguration::TrackerConfiguration() : auto_leave(false) {}
 
-TrackerConfiguration::TrackerConfiguration(const Set<uint64_t>& voters, const Set<uint64_t>& learners)
+TrackerConfiguration::TrackerConfiguration(
+    const Set<uint64_t>& voters, const Set<uint64_t>& learners
+)
     : voters(voters), auto_leave(false) {}
 
 void TrackerConfiguration::Clear() {
