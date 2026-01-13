@@ -16,6 +16,8 @@ add_executable(raftpp-tests
   storage_test.cc
   raft_paper_test.cc
   raft_test.cc
+  raft_snap_test.cc
+  raft_flow_control_test.cc
 )
 
 target_link_libraries(raftpp-tests PRIVATE raftpp)

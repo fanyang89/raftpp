@@ -52,11 +52,14 @@ class Progress {
     uint64_t& matched();
     [[nodiscard]] bool recent_active() const;
     bool& recent_active();
+    [[nodiscard]] uint64_t pending_snapshot() const;
+    uint64_t& pending_snapshot();
     [[nodiscard]] uint64_t pending_request_snapshot() const;
     uint64_t& pending_request_snapshot();
     [[nodiscard]] uint64_t next_idx() const;
     uint64_t& next_idx();
     Inflights& inflights();
+    const Inflights& inflights() const;
     ProgressState state() const;
 
   protected:

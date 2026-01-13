@@ -180,6 +180,14 @@ uint64_t Progress::committed_index() const {
     return committed_index_;
 }
 
+uint64_t Progress::pending_snapshot() const {
+    return pending_snapshot_;
+}
+
+uint64_t& Progress::pending_snapshot() {
+    return pending_snapshot_;
+}
+
 uint64_t& Progress::pending_request_snapshot() {
     return pending_request_snapshot_;
 }
@@ -193,6 +201,10 @@ uint64_t& Progress::next_idx() {
 }
 
 Inflights& Progress::inflights() {
+    return inflights_;
+}
+
+const Inflights& Progress::inflights() const {
     return inflights_;
 }
 

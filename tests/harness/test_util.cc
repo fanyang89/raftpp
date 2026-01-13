@@ -346,4 +346,8 @@ void CommitNoopEntry(Network& network, MemoryStorage& storage, Raft& raft) {
     raft.messages().clear();
 }
 
+Snapshot TestingSnapshot() {
+    return NewSnapshot(11, 11, {1, 2});
+}
+
 }  // namespace raftpp

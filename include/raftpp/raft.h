@@ -87,6 +87,10 @@ class Raft : public RaftCore {
     RaftLog& raft_log();
     uint64_t max_committed_size_per_ready() const;
     uint64_t& max_committed_size_per_ready();
+    size_t max_inflight_messages() const;
+    size_t inflight_buffers_size() const;
+    void maybe_free_inflight_buffers();
+    void adjust_max_inflight_msgs(uint64_t id, size_t max_inflight);
     const std::vector<Message>& messages() const;
     std::vector<Message>& messages();
     std::optional<std::reference_wrapper<Snapshot>> snapshot();

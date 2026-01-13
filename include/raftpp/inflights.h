@@ -13,6 +13,9 @@ class Inflights {
     void SetCapacity(size_t incoming_capacity);
     void Add(uint64_t inflight);
     [[nodiscard]] bool Full() const;
+    [[nodiscard]] size_t Count() const;
+    [[nodiscard]] size_t BufferSize() const;
+    [[nodiscard]] bool buffer_is_allocated() const;
     void Reset();
     void FreeTo(uint64_t to);
     void FreeFirstOne();

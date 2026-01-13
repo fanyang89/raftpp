@@ -253,7 +253,7 @@ void Raft::BecomeCandidate() {
 }
 
 void Raft::BecomeLeader() {
-    ASSERT(state_, StateRole::Follower, "invalid transition [follower -> leader]");
+    ASSERT(state_ != StateRole::Follower, "invalid transition [follower -> leader]");
 
     Reset(term_);
     leader_id_ = id_;
@@ -1471,6 +1471,36 @@ void Raft::BecomeFollower(const uint64_t term, const uint64_t leader_id) {
     raft_log_.max_apply_unpersisted_log_limit() = 0;
 
     SPDLOG_INFO("became follower, term={}, from_role={}", term, magic_enum::enum_name(from_role));
+}
+
+size_t Raft::max_inflight_messages() const {
+    return max_inflight_;
+}
+
+size_t Raft::inflight_buffers_size() const {
+    size_t total = 0;
+    for (const auto& [id, pr] : progress_tracker_.progress_map()) {
+        if (pr.inflights().buffer_is_allocated()) {
+            total += pr.inflights().BufferSize() * sizeof(uint64_t);
+        }
+    }
+    return total;
+}
+
+void Raft::maybe_free_inflight_buffers() {
+    for (auto& [id, pr] : progress_tracker_.progress_map()) {
+        if (pr.inflights().Count() == 0 && pr.inflights().buffer_is_allocated()) {
+            // Free the buffer if this peer has no inflight messages
+            pr.inflights().Reset();
+        }
+    }
+}
+
+void Raft::adjust_max_inflight_msgs(uint64_t id, size_t max_inflight) {
+    auto* pr = progress_tracker_.get(id);
+    if (pr != nullptr) {
+        pr->inflights().SetCapacity(max_inflight);
+    }
 }
 
 }  // namespace raftpp

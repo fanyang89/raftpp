@@ -142,4 +142,16 @@ bool Inflights::Full() const {
     return false;
 }
 
+size_t Inflights::Count() const {
+    return count_;
+}
+
+size_t Inflights::BufferSize() const {
+    return buffer_.size();
+}
+
+bool Inflights::buffer_is_allocated() const {
+    return buffer_.capacity() > 0;
+}
+
 }  // namespace raftpp

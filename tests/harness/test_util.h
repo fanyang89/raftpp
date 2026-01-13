@@ -118,4 +118,7 @@ std::vector<Entry> NextEntries(Raft& r, MemoryStorage& s);
 /// Helper to commit a no-op entry (used in paper tests).
 void CommitNoopEntry(Network& network, MemoryStorage& storage, Raft& raft);
 
+/// Create a testing snapshot.
+Snapshot TestingSnapshot();
+
 }  // namespace raftpp
