@@ -14,7 +14,8 @@ add_executable(raftpp-tests
   progress_test.cc
   raw_node_test.cc
   storage_test.cc
-  network_test.cc
+  raft_paper_test.cc
+  raft_test.cc
 )
 
 target_link_libraries(raftpp-tests PRIVATE raftpp)

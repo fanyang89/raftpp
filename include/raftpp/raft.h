@@ -32,6 +32,7 @@ class Raft : public RaftCore {
     bool TickHeartbeat();
 
     void BecomeCandidate();
+    void BecomeFollower(uint64_t term, uint64_t leader_id);
     void BecomeLeader();
     void BecomePreCandidate();
 
@@ -94,7 +95,6 @@ class Raft : public RaftCore {
   private:
     bool HasUnappliedConfChanges(uint64_t low, uint64_t high, const GetEntriesContext& ctx);
     void AbortLeaderTransfer();
-    void BecomeFollower(uint64_t term, uint64_t leader_id);
     void CommitApplyInternal(uint64_t applied, bool skip_check);
     void Reset(uint64_t term);
     void ResetRandomizedElectionTimeout();

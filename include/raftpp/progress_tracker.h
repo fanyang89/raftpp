@@ -38,6 +38,7 @@ class ProgressTracker {
     const TrackerConfiguration& conf() const;
     const ProgressMap& progress_map() const;
     ProgressMap& progress_map();
+    const Map<uint64_t, bool>& votes() const { return votes_; }
 
   private:
     ProgressMap progress_;
