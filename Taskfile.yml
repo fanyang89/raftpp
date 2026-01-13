@@ -7,6 +7,7 @@ dotenv:
 
 tasks:
   pb:
+    desc: Generate C++ protobuf files from raftpp.proto
     cmds:
       - platforms: [windows]
         cmd: >
@@ -16,11 +17,13 @@ tasks:
           raftpp.proto
 
   vs:
+    desc: Configure CMake for Visual Studio 17 2022
     platforms: [windows]
     cmds:
       - cmake -S . -B vs -G "Visual Studio 17 2022"
 
   fmt:
+    desc: Format all C++ source files with clang-format
     platforms: [linux]
     cmds:
       - >
@@ -28,20 +31,24 @@ tasks:
         $(git ls-files | grep '.cc$\|.h$\|.hpp$' | grep -v 'sqlite3ext\.\|sqlite3\.\|\.pb\.\|generated')
 
   cmake:
+    desc: Configure CMake with dev preset
     cmds:
       - cmake --preset=dev
 
   build-test:
+    desc: Build the raftpp-tests target
     cmds:
       - cmake --build build-dev --target raftpp-tests
 
   list-tests:
+    desc: List all available tests
     deps:
       - build-test
     cmds:
       - ./build-dev/tests/raftpp-tests --gtest_list_tests
 
   test:
+    desc: Run all tests
     deps:
       - build-test
     cmds:
