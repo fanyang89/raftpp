@@ -109,15 +109,17 @@ void RaftCore::Send(Message& m, std::vector<Message>& messages) const {
             }
             break;
         default:
+            if (m.term() != 0) {
+                PANIC("term should not be set when sending {} (was {})", magic_enum::enum_name(m.msg_type()), m.term());
+            }
+            // do not attach term to MsgPropose, MsgReadIndex
+            // proposals are a way to forward to the leader and
+            // should be treated as local message.
+            // MsgReadIndex is also forwarded to leader.
+            if (m.msg_type() != MsgPropose && m.msg_type() != MsgReadIndex) {
+                m.set_term(term_);
+            }
             break;
-    }
-
-    if (m.term() != 0) {
-        PANIC("term should not be set when sending {} (was {})", magic_enum::enum_name(m.msg_type()), m.term());
-    }
-
-    if (m.msg_type() != MsgPropose || m.msg_type() != MsgReadIndex) {
-        m.set_term(term_);
     }
 
     if (m.msg_type() == MsgRequestVote || m.msg_type() == MsgRequestPreVote) {

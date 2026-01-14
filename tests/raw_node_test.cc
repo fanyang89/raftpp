@@ -33,30 +33,12 @@ TEST_CASE("raw_node: is local message") {
     CHECK_FALSE(IsLocalMessage(MsgRequestPreVoteResponse));
 }
 
-TEST_CASE("raw_node: step") {
-    const std::vector<MessageType> msg_types{
-        MsgHup,
-        MsgBeat,
-        MsgPropose,
-        MsgAppend,
-        MsgAppendResponse,
-        MsgRequestVote,
-        MsgRequestVoteResponse,
-        MsgSnapshot,
-        MsgHeartbeat,
-        MsgHeartbeatResponse,
-        MsgUnreachable,
-        MsgSnapStatus,
-        MsgCheckQuorum,
-        MsgTransferLeader,
-        MsgTimeoutNow,
-        MsgReadIndex,
-        MsgReadIndexResp,
-        MsgRequestPreVote,
-        MsgRequestPreVoteResponse
+TEST_CASE("raw_node: step local message ignored") {
+    const std::vector<MessageType> local_msg_types{
+        MsgHup, MsgBeat, MsgUnreachable, MsgSnapStatus, MsgCheckQuorum,
     };
 
-    for (const auto msg_t : msg_types) {
+    for (const auto msg_t : local_msg_types) {
         auto storage = std::make_unique<MemoryStorage>();
         HardState hs;
         hs.set_term(1);
@@ -85,14 +67,71 @@ TEST_CASE("raw_node: step") {
         m.set_to(0);
         m.set_from(0);
         m.set_msg_type(msg_t);
-        m.set_term(0);
+        m.set_term(1);
 
         const auto res = raw_node.Step(m);
+        CHECK_FALSE(res);
+        CHECK(res.error().Is(RaftErrorCode::StepLocalMsg));
+    }
+}
 
-        if (IsLocalMessage(msg_t)) {
-            CHECK_FALSE(res);
-            CHECK(res.error().Is(RaftErrorCode::StepLocalMsg));
+TEST_CASE("raw_node: propose data") {
+    auto storage = std::make_unique<MemoryStorage>();
+
+    Config config = DefaultConfig();
+    config.id = 1;
+    config.election_tick = 10;
+    config.heartbeat_tick = 1;
+
+    ConfState conf_state;
+    conf_state.add_voters(1);
+    HardState hard_state;
+    hard_state.set_commit(0);
+    hard_state.set_term(0);
+    hard_state.set_vote(0);
+    storage->SetRaftState({hard_state, conf_state});
+
+    RawNode raw_node(config, std::move(storage));
+
+    raw_node.Campaign().value();
+
+    while (true) {
+        auto rd = raw_node.GetReady();
+        if (rd.ss.has_value() && rd.ss->leader_id == 1) {
+            raw_node.Advance(rd);
+            break;
         }
+        raw_node.Advance(rd);
+    }
+
+    auto result = raw_node.Propose("", "testdata");
+    CHECK(result);
+
+    auto rd = raw_node.GetReady();
+    CHECK(rd.entries.size() >= 1);
+    CHECK_EQ(rd.entries.back().data(), "testdata");
+    raw_node.Advance(rd);
+}
+
+TEST_CASE("raw_node: set priority") {
+    auto storage = std::make_unique<MemoryStorage>();
+
+    Config config = DefaultConfig();
+    config.id = 1;
+    config.election_tick = 10;
+    config.heartbeat_tick = 1;
+
+    ConfState conf_state;
+    conf_state.add_voters(1);
+    HardState hard_state;
+    hard_state.set_commit(0);
+    storage->SetRaftState({hard_state, conf_state});
+
+    RawNode raw_node(config, std::move(storage));
+
+    std::vector<uint64_t> priorities = {0, 1, 5, 10, 10000};
+    for (const auto p : priorities) {
+        raw_node.SetPriority(p);
     }
 }
 

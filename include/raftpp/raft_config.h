@@ -26,6 +26,7 @@ struct Config {
     uint64_t max_committed_size_per_ready = std::numeric_limits<uint64_t>::max();
     uint64_t max_apply_unpersisted_log_limit;
     bool disable_proposal_forwarding;
+    bool load_state_on_startup = false;
 
     size_t MinElectionTick() const;
     size_t MaxElectionTick() const;

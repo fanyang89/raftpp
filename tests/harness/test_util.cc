@@ -17,10 +17,7 @@ Config NewTestConfig(uint64_t id, size_t election_tick, size_t heartbeat_tick) {
 }
 
 Interface NewTestRaft(
-    uint64_t id,
-    const std::vector<uint64_t>& peers,
-    size_t election,
-    size_t heartbeat,
+    uint64_t id, const std::vector<uint64_t>& peers, size_t election, size_t heartbeat,
     std::shared_ptr<MemoryStorage> storage
 ) {
     Config config = NewTestConfig(id, election, heartbeat);
@@ -39,25 +36,20 @@ Interface NewTestRaft(
         for (uint64_t peer_id : peers) {
             conf_state.add_voters(peer_id);
         }
-        storage->SetRaftState({HardState{}, conf_state});
-
-        // Add a dummy entry at index 1 (this is required for raft to work properly)
-        Entry dummy_entry;
-        dummy_entry.set_index(1);
-        dummy_entry.set_term(0);
-        storage->Append({dummy_entry}).value();
+        // Ensure hard state has commit=0 to match raft-rs behavior
+        HardState hard_state;
+        hard_state.set_commit(0);
+        hard_state.set_term(0);
+        hard_state.set_vote(0);
+        storage->SetRaftState({hard_state, conf_state});
     }
 
     return NewTestRaftWithConfig(config, storage);
 }
 
 Interface NewTestRaftWithPrevote(
-    uint64_t id,
-    const std::vector<uint64_t>& peers,
-    size_t election,
-    size_t heartbeat,
-    std::shared_ptr<MemoryStorage> storage,
-    bool pre_vote
+    uint64_t id, const std::vector<uint64_t>& peers, size_t election, size_t heartbeat,
+    std::shared_ptr<MemoryStorage> storage, bool pre_vote
 ) {
     Config config = NewTestConfig(id, election, heartbeat);
     config.pre_vote = pre_vote;
@@ -81,12 +73,8 @@ Interface NewTestRaftWithPrevote(
 }
 
 Interface NewTestRaftWithLogs(
-    uint64_t id,
-    const std::vector<uint64_t>& peers,
-    size_t election,
-    size_t heartbeat,
-    std::shared_ptr<MemoryStorage> storage,
-    const std::vector<Entry>& logs
+    uint64_t id, const std::vector<uint64_t>& peers, size_t election, size_t heartbeat,
+    std::shared_ptr<MemoryStorage> storage, const std::vector<Entry>& logs
 ) {
     Config config = NewTestConfig(id, election, heartbeat);
 
@@ -117,7 +105,13 @@ Interface NewTestRaftWithConfig(const Config& config, std::shared_ptr<MemoryStor
     // Copy state from shared storage to owned storage
     auto initial_state = storage->InitialState();
     if (initial_state) {
-        owned_storage->SetRaftState({initial_state->hard_state, initial_state->conf_state});
+        // Copy conf state but reset hard state to ensure proper initialization
+        // This matches raft-rs behavior where hard state is loaded separately by Raft
+        HardState hard_state;
+        hard_state.set_commit(0);
+        hard_state.set_term(0);
+        hard_state.set_vote(0);
+        owned_storage->SetRaftState({hard_state, initial_state->conf_state});
     }
 
     // Copy entries
@@ -142,7 +136,9 @@ SoftState MakeSoftState(uint64_t leader_id, StateRole state) {
     return SoftState{leader_id, state};
 }
 
-Message NewMessageWithEntries(uint64_t from, uint64_t to, MessageType type, std::vector<Entry> entries) {
+Message NewMessageWithEntries(
+    uint64_t from, uint64_t to, MessageType type, std::vector<Entry> entries
+) {
     Message m;
     m.set_msg_type(type);
     m.set_to(to);
@@ -217,7 +213,17 @@ ConfChangeV2 MakeAddLearnerCC(uint64_t node_id) {
     return cc;
 }
 
-ConfState MakeConfState(const std::vector<uint64_t>& voters, const std::vector<uint64_t>& learners) {
+ConfChangeV2 MakeConfChangeV2Single(ConfChangeType type, uint64_t node_id) {
+    ConfChangeV2 cc;
+    auto* change = cc.add_changes();
+    change->set_change_type(type);
+    change->set_node_id(node_id);
+    return cc;
+}
+
+ConfState MakeConfState(
+    const std::vector<uint64_t>& voters, const std::vector<uint64_t>& learners
+) {
     ConfState cs;
     for (uint64_t voter : voters) {
         cs.add_voters(voter);
@@ -244,9 +250,7 @@ std::unique_ptr<Interface> NopStepper() {
 }
 
 Interface EntsWithConfig(
-    const std::vector<uint64_t>& terms,
-    bool pre_vote,
-    uint64_t id,
+    const std::vector<uint64_t>& terms, bool pre_vote, uint64_t id,
     const std::vector<uint64_t>& peers
 ) {
     auto storage = std::make_shared<MemoryStorage>();
@@ -278,11 +282,7 @@ Interface EntsWithConfig(
 }
 
 Interface VotedWithConfig(
-    uint64_t vote,
-    uint64_t term,
-    bool pre_vote,
-    uint64_t id,
-    const std::vector<uint64_t>& peers
+    uint64_t vote, uint64_t term, bool pre_vote, uint64_t id, const std::vector<uint64_t>& peers
 ) {
     auto storage = std::make_shared<MemoryStorage>();
 

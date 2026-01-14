@@ -42,8 +42,11 @@ class Interface {
 
     /// Get the underlying raft instance.
     Raft* operator->() { return raft_.get(); }
+
     const Raft* operator->() const { return raft_.get(); }
+
     Raft& operator*() { return *raft_; }
+
     const Raft& operator*() const { return *raft_; }
 
     /// Get the underlying storage.
@@ -51,12 +54,27 @@ class Interface {
 
     /// Accessor methods for testing
     RaftLog& raft_log() { return raft_->raft_log(); }
+
     const RaftLog& raft_log() const { return raft_->raft_log(); }
+
     StateRole state() const { return raft_->state(); }
+
     uint64_t term() const { return raft_->term(); }
+
     ProgressTracker& progress_tracker() { return raft_->progress_tracker(); }
+
     const ProgressTracker& progress_tracker() const { return raft_->progress_tracker(); }
+
     Result<ConfState> ApplyConfChange(const ConfChangeV2& cc) { return raft_->ApplyConfChange(cc); }
+
+    /// Tick the raft (for testing)
+    bool Tick() { return raft_->Tick(); }
+
+    /// Get messages sent by this node
+    std::vector<Message>& msgs() { return raft_->messages(); }
+
+    /// Clear messages
+    void ClearMessages() { raft_->messages().clear(); }
 
   private:
     std::unique_ptr<Raft> raft_;

@@ -8,6 +8,8 @@
 
 #include "harness/interface.h"
 #include "harness/network.h"
+#include "raftpp/raft_core.h"
+#include "raftpp/raft_log.h"
 #include "raftpp/memory_storage.h"
 #include "raftpp/primitives.h"
 #include "raftpp/raft.h"
@@ -23,31 +25,20 @@ Config NewTestConfig(uint64_t id, size_t election_tick, size_t heartbeat_tick);
 
 /// Create a new test raft instance.
 Interface NewTestRaft(
-    uint64_t id,
-    const std::vector<uint64_t>& peers,
-    size_t election,
-    size_t heartbeat,
+    uint64_t id, const std::vector<uint64_t>& peers, size_t election, size_t heartbeat,
     std::shared_ptr<MemoryStorage> storage
 );
 
 /// Create a new test raft instance with prevote option.
 Interface NewTestRaftWithPrevote(
-    uint64_t id,
-    const std::vector<uint64_t>& peers,
-    size_t election,
-    size_t heartbeat,
-    std::shared_ptr<MemoryStorage> storage,
-    bool pre_vote
+    uint64_t id, const std::vector<uint64_t>& peers, size_t election, size_t heartbeat,
+    std::shared_ptr<MemoryStorage> storage, bool pre_vote
 );
 
 /// Create a new test raft with logs.
 Interface NewTestRaftWithLogs(
-    uint64_t id,
-    const std::vector<uint64_t>& peers,
-    size_t election,
-    size_t heartbeat,
-    std::shared_ptr<MemoryStorage> storage,
-    const std::vector<Entry>& logs
+    uint64_t id, const std::vector<uint64_t>& peers, size_t election, size_t heartbeat,
+    std::shared_ptr<MemoryStorage> storage, const std::vector<Entry>& logs
 );
 
 /// Create a new test raft with config.
@@ -60,13 +51,17 @@ HardState MakeHardState(uint64_t term, uint64_t commit, uint64_t vote);
 SoftState MakeSoftState(uint64_t leader_id, StateRole state);
 
 /// Create a message with entries.
-Message NewMessageWithEntries(uint64_t from, uint64_t to, MessageType type, std::vector<Entry> entries);
+Message NewMessageWithEntries(
+    uint64_t from, uint64_t to, MessageType type, std::vector<Entry> entries
+);
 
 /// Create a message with n entries containing "somedata".
 Message NewMessage(uint64_t from, uint64_t to, MessageType type, size_t n = 0);
 
 /// Create an entry.
-Entry NewEntry(uint64_t term, uint64_t index, const std::optional<std::string>& data = std::nullopt);
+Entry NewEntry(
+    uint64_t term, uint64_t index, const std::optional<std::string>& data = std::nullopt
+);
 
 /// Create an empty entry.
 Entry EmptyEntry(uint64_t term, uint64_t index);
@@ -86,8 +81,13 @@ ConfChangeV2 MakeAddNodeCC(uint64_t node_id);
 /// Create a ConfChangeV2 to add a learner.
 ConfChangeV2 MakeAddLearnerCC(uint64_t node_id);
 
+/// Create a ConfChangeV2 with a single change.
+ConfChangeV2 MakeConfChangeV2Single(ConfChangeType type, uint64_t node_id);
+
 /// Create a ConfState.
-ConfState MakeConfState(const std::vector<uint64_t>& voters, const std::vector<uint64_t>& learners = {});
+ConfState MakeConfState(
+    const std::vector<uint64_t>& voters, const std::vector<uint64_t>& learners = {}
+);
 
 /// Convert a RaftLog to string for debugging.
 std::string LogToString(const RaftLog& raft_log);
@@ -97,19 +97,13 @@ std::unique_ptr<Interface> NopStepper();
 
 /// Create entries with given terms (index starts at 1).
 Interface EntsWithConfig(
-    const std::vector<uint64_t>& terms,
-    bool pre_vote,
-    uint64_t id,
+    const std::vector<uint64_t>& terms, bool pre_vote, uint64_t id,
     const std::vector<uint64_t>& peers
 );
 
 /// Create a raft state machine with vote and term set but no log entries.
 Interface VotedWithConfig(
-    uint64_t vote,
-    uint64_t term,
-    bool pre_vote,
-    uint64_t id,
-    const std::vector<uint64_t>& peers
+    uint64_t vote, uint64_t term, bool pre_vote, uint64_t id, const std::vector<uint64_t>& peers
 );
 
 /// Persist committed index and fetch next entries.

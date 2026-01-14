@@ -32,7 +32,7 @@
 
 namespace raftpp {
 
-Entry NewEntry(uint64_t index, uint64_t term);
+Entry NewEntry(uint64_t term, uint64_t index);
 Snapshot NewSnapshot(const uint64_t index, const uint64_t term);
 
 bool operator==(const Entry& e1, const Entry& e2);

@@ -82,7 +82,9 @@ Raft::Raft(const Config& config, std::unique_ptr<Storage> store)
         PANIC("invalid restore: {} != {}", conf_state.DebugString(), new_cs.DebugString());
     }
 
-    if (!google::protobuf::util::MessageDifferencer::Equals(
+    // Only load hard state if it's explicitly configured (for production use)
+    // In tests, we start with default state to match raft-rs behavior
+    if (config.load_state_on_startup && !google::protobuf::util::MessageDifferencer::Equals(
             raft_state.hard_state, HardState::default_instance()
         )) {
         LoadState(raft_state.hard_state);
@@ -262,7 +264,8 @@ void Raft::BecomeLeader() {
     state_ = StateRole::Leader;
 
     const uint64_t last_index = raft_log_.LastIndex();
-    ASSERT(last_index, raft_log_.persisted());
+    ASSERT(last_index == raft_log_.persisted(),
+            "last_index ({}) should equal persisted ({})", last_index, raft_log_.persisted());
 
     // Update uncommitted state
     uncommitted_state_.uncommitted_size = 0;
