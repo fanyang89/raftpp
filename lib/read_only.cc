@@ -9,6 +9,9 @@ namespace raftpp {
 ReadOnly::ReadOnly(const ReadOnlyOption option) : option_(option) {}
 
 std::optional<std::string> ReadOnly::LastPendingRequestCtx() const {
+    if (read_index_queue_.empty()) {
+        return std::nullopt;
+    }
     return read_index_queue_.back();
 }
 

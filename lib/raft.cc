@@ -950,7 +950,14 @@ Result<void> Raft::StepLeader(const Message& m) {
                 }
             }
 
-            break;
+            {
+                std::vector<Entry> entries(m.entries().begin(), m.entries().end());
+                if (!AppendEntry(entries)) {
+                    return RaftError(RaftErrorCode::ProposalDropped);
+                }
+            }
+            BroadcastAppend();
+            return {};
 
         case MsgReadIndex:
             break;
