@@ -248,6 +248,8 @@ void Raft::BecomeCandidate() {
     Reset(term);
     const auto id = id_;
     vote_ = id;
+    progress_tracker_.RecordVote(id, true);
+    promotable_ = progress_tracker_.conf().voters.Contains(id);
     state_ = StateRole::Candidate;
     SPDLOG_INFO("became candidate, term={}", term_);
 }
@@ -1163,17 +1165,12 @@ bool Raft::TickElection() {
     bool has_ready = false;
     if (election_elapsed_ >= election_timeout_) {
         election_elapsed_ = 0;
-        if (check_quorum_) {
-            Message m;
-            m.set_to(INVALID_ID);
-            m.set_msg_type(MsgCheckQuorum);
-            m.set_from(id_);
-            has_ready = true;
-            std::ignore = Step(m);
-        }
-        if (state_ == StateRole::Leader && lead_transferee_.has_value()) {
-            AbortLeaderTransfer();
-        }
+        Message m;
+        m.set_to(INVALID_ID);
+        m.set_msg_type(MsgHup);
+        m.set_from(id_);
+        has_ready = true;
+        std::ignore = Step(m);
     }
 
     if (state_ != StateRole::Leader) {
