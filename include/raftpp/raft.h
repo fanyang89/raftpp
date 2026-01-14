@@ -22,7 +22,7 @@ class Raft : public RaftCore {
 
     VoteResult Poll(uint64_t from, MessageType mt, bool vote);
     bool AppendEntry(const Entry& entry);
-    bool AppendEntry(std::vector<Entry>& entries);
+    bool AppendEntry(std::vector<Entry> entries);
     bool CheckQuorumActive();
     bool HasPendingConf() const;
     bool Restore(const Snapshot& snapshot);
@@ -91,6 +91,7 @@ class Raft : public RaftCore {
     size_t inflight_buffers_size() const;
     void maybe_free_inflight_buffers();
     void adjust_max_inflight_msgs(uint64_t id, size_t max_inflight);
+    static bool ConfStatesEqualIgnoringOrder(const ConfState& a, const ConfState& b);
     const std::vector<Message>& messages() const;
     std::vector<Message>& messages();
     std::optional<std::reference_wrapper<Snapshot>> snapshot();

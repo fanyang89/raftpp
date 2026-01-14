@@ -78,7 +78,7 @@ Raft::Raft(const Config& config, std::unique_ptr<Storage> store)
     }
 
     if (const ConfState new_cs = PostConfChange();
-        !google::protobuf::util::MessageDifferencer::Equals(conf_state, new_cs)) {
+        !ConfStatesEqualIgnoringOrder(conf_state, new_cs)) {
         PANIC("invalid restore: {} != {}", conf_state.DebugString(), new_cs.DebugString());
     }
 
@@ -163,10 +163,10 @@ bool Raft::MaybeIncreaseUncommittedSize(const std::span<const Entry> entries) {
 }
 
 bool Raft::AppendEntry(const Entry& entry) {
-    return AppendEntry({entry});
+    return AppendEntry(std::vector<Entry>{entry});
 }
 
-bool Raft::AppendEntry(std::vector<Entry>& entries) {
+bool Raft::AppendEntry(std::vector<Entry> entries) {
     if (!MaybeIncreaseUncommittedSize(entries)) {
         return false;
     }
@@ -269,7 +269,7 @@ void Raft::BecomeLeader() {
     progress_tracker_.at(id_).BecomeReplicate();
     pending_conf_index_ = last_index;
 
-    if (AppendEntry(Entry())) {
+    if (!AppendEntry(Entry())) {
         PANIC("appending an empty entry should never be dropped");
     }
 
@@ -996,11 +996,8 @@ void Raft::SendAppendAggressively(const uint64_t to) {
 
 Result<void> Raft::Step(Message& m) {
     if (m.term() == 0) {
-        // local message
-        return {};
-    }
-
-    if (m.term() > term_) {
+        // local message - fall through to process based on current state
+    } else if (m.term() > term_) {
         if (m.msg_type() == MsgRequestVote || m.msg_type() == MsgRequestPreVote) {
             const bool force = m.context() == CAMPAIGN_TRANSFER;
             const bool in_lease =
@@ -1025,10 +1022,8 @@ Result<void> Raft::Step(Message& m) {
                 BecomeFollower(m.term(), INVALID_ID);
             }
         }
-        return {};
-    }
-
-    if (m.term() < term_) {
+        // Fall through to process the message
+    } else if (m.term() < term_) {
         if ((check_quorum_ || pre_vote_) &&
             (m.msg_type() == MsgHeartbeat || m.msg_type() == MsgAppend)) {
             Message to_send;
@@ -1501,6 +1496,46 @@ void Raft::adjust_max_inflight_msgs(uint64_t id, size_t max_inflight) {
     if (pr != nullptr) {
         pr->inflights().SetCapacity(max_inflight);
     }
+}
+
+bool Raft::ConfStatesEqualIgnoringOrder(const ConfState& a, const ConfState& b) {
+    // Compare voters
+    if (a.voters().size() != b.voters().size()) {
+        return false;
+    }
+    std::vector<uint64_t> a_voters(a.voters().begin(), a.voters().end());
+    std::vector<uint64_t> b_voters(b.voters().begin(), b.voters().end());
+    std::sort(a_voters.begin(), a_voters.end());
+    std::sort(b_voters.begin(), b_voters.end());
+    if (a_voters != b_voters) {
+        return false;
+    }
+
+    // Compare learners
+    if (a.learners().size() != b.learners().size()) {
+        return false;
+    }
+    std::vector<uint64_t> a_learners(a.learners().begin(), a.learners().end());
+    std::vector<uint64_t> b_learners(b.learners().begin(), b.learners().end());
+    std::sort(a_learners.begin(), a_learners.end());
+    std::sort(b_learners.begin(), b_learners.end());
+    if (a_learners != b_learners) {
+        return false;
+    }
+
+    // Voters outgoing and incoming for joint configs
+    if (a.voters_outgoing().size() != b.voters_outgoing().size()) {
+        return false;
+    }
+    std::vector<uint64_t> a_outgoing(a.voters_outgoing().begin(), a.voters_outgoing().end());
+    std::vector<uint64_t> b_outgoing(b.voters_outgoing().begin(), b.voters_outgoing().end());
+    std::sort(a_outgoing.begin(), a_outgoing.end());
+    std::sort(b_outgoing.begin(), b_outgoing.end());
+    if (a_outgoing != b_outgoing) {
+        return false;
+    }
+
+    return true;
 }
 
 }  // namespace raftpp

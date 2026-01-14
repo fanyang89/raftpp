@@ -33,14 +33,19 @@ Interface NewTestRaft(
             throw std::runtime_error("NewTestRaft with empty peers on initialized store");
         }
     } else if (!peers.empty()) {
-        // Initialize with conf state
-        Snapshot snap;
-        snap.mutable_metadata()->set_index(0);
-        snap.mutable_metadata()->set_term(0);
+        // Initialize with conf state directly (not through ApplySnapshot)
+        // This matches raft-rs's initialize_with_conf_state behavior
+        ConfState conf_state;
         for (uint64_t peer_id : peers) {
-            snap.mutable_metadata()->mutable_conf_state()->add_voters(peer_id);
+            conf_state.add_voters(peer_id);
         }
-        storage->ApplySnapshot(snap).value();
+        storage->SetRaftState({HardState{}, conf_state});
+
+        // Add a dummy entry at index 1 (this is required for raft to work properly)
+        Entry dummy_entry;
+        dummy_entry.set_index(1);
+        dummy_entry.set_term(0);
+        storage->Append({dummy_entry}).value();
     }
 
     return NewTestRaftWithConfig(config, storage);

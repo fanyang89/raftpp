@@ -50,12 +50,38 @@ Result<void> Restore(ProgressTracker& tracker, uint64_t next_idx, const ConfStat
     const auto& [outgoing, incoming] = ToConfChangeSingle(cs);
 
     if (outgoing.empty()) {
-        for (const ConfChangeSingle& i : incoming) {
-            if (const auto r = ConfChanger(tracker).Simple(i)) {
-                tracker.ApplyConf(r->first, r->second, next_idx);
-            } else {
+        // When restoring an initial configuration, use EnterJoint to add all voters at once.
+        // This avoids the "more than one voter changed" error that occurs when adding
+        // multiple voters individually through Simple().
+        auto changer = ConfChanger(tracker);
+        auto result = changer.EnterJoint(false, incoming);
+        if (!result) {
+            // If EnterJoint fails (e.g., already in a joint config), fall back to Simple
+            // but process all voters in a single batch to avoid the diff check
+            auto p = changer.CheckAndCopy();
+            if (!p) {
+                return p.error();
+            }
+
+            // Apply all voter additions to the copy
+            TrackerConfiguration& cfg = p->first;
+            IncrChangeMap& prs = p->second;
+
+            for (const ConfChangeSingle& i : incoming) {
+                if (const auto r = changer.Apply(cfg, prs, std::span{&i, 1}); !r) {
+                    return r.error();
+                }
+            }
+
+            // Now check invariants on the final configuration
+            if (const auto r = CheckInvariants(cfg, prs); !r) {
                 return r.error();
             }
+
+            // Apply the changes
+            tracker.ApplyConf(cfg, prs.ToChanges(), next_idx);
+        } else {
+            tracker.ApplyConf(result->first, result->second, next_idx);
         }
     } else {
         for (const ConfChangeSingle& cc : outgoing) {

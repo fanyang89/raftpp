@@ -36,8 +36,9 @@ class ConfChanger {
 
     static Result<void> Apply(TrackerConfiguration& cfg, IncrChangeMap& prs, std::span<const ConfChangeSingle> ccs);
 
-  private:
     Result<std::pair<TrackerConfiguration, IncrChangeMap>> CheckAndCopy() const;
+
+  private:
 
     static void MakeVoter(TrackerConfiguration& cfg, IncrChangeMap& prs, uint64_t id);
     static void MakeLearner(TrackerConfiguration& cfg, IncrChangeMap& prs, uint64_t id);
