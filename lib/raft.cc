@@ -509,12 +509,15 @@ void Raft::HandleAppendResponse(const Message& m) {
             pr.BecomeReplicate();
             break;
         case ProgressState::Replicate:
+            pr.inflights().FreeTo(m.index());
             if (pr.IsSnapshotCaughtUp()) {
                 pr.BecomeProbe();
             }
             break;
         case ProgressState::Snapshot:
-            pr.inflights().FreeTo(m.index());
+            if (pr.IsSnapshotCaughtUp()) {
+                pr.BecomeProbe();
+            }
             break;
     }
 
