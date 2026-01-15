@@ -88,13 +88,16 @@ Interface NewTestRaftWithLogs(
             throw std::runtime_error("NewTestRaft with empty peers on initialized store");
         }
     } else if (!peers.empty()) {
-        Snapshot snap;
-        snap.mutable_metadata()->set_index(0);
-        snap.mutable_metadata()->set_term(0);
+        // Use SetRaftState instead of ApplySnapshot
+        ConfState conf_state;
         for (uint64_t peer_id : peers) {
-            snap.mutable_metadata()->mutable_conf_state()->add_voters(peer_id);
+            conf_state.add_voters(peer_id);
         }
-        storage->ApplySnapshot(snap).value();
+        HardState hard_state;
+        hard_state.set_commit(0);
+        hard_state.set_term(0);
+        hard_state.set_vote(0);
+        storage->SetRaftState({hard_state, conf_state});
     }
 
     storage->Append(logs).value();
