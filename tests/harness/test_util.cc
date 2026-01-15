@@ -325,6 +325,15 @@ std::vector<Entry> NextEntries(Raft& r, MemoryStorage& s) {
 void CommitNoopEntry(Network& network, MemoryStorage& storage, Raft& raft) {
     // This helper commits the initial no-op entry after leader election
     // by having the leader broadcast and receive responses
+
+    // First append a no-op entry to make LastIndex > 0
+    // This ensures BroadcastAppend will send entries
+    Entry noop_entry;
+    noop_entry.set_term(raft.term());
+    noop_entry.set_index(raft.raft_log().LastIndex() + 1);
+    raft.AppendEntry(noop_entry);
+
+    // Now broadcast append messages (which will include the no-op entry)
     raft.BroadcastAppend();
 
     auto msgs = raft.messages();
