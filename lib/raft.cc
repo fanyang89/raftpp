@@ -250,9 +250,8 @@ void Raft::BecomeCandidate() {
     Reset(term);
     const auto id = id_;
     vote_ = id;
-    progress_tracker_.RecordVote(id, true);
-    promotable_ = progress_tracker_.conf().voters.Contains(id);
     state_ = StateRole::Candidate;
+    promotable_ = progress_tracker_.conf().voters.Contains(id);
     SPDLOG_INFO("became candidate, term={}", term_);
 }
 
