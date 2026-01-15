@@ -170,10 +170,8 @@ uint64_t RaftLog::Append(const std::vector<Entry>& entries) {
 
     uint64_t after = entries.front().index() - 1;
     if (after < committed_) {
-        // This can happen when appending the first entry to a new leader.
-        // The committed index should not be greater than the last index.
-        // We'll adjust the committed index to be valid.
-        SPDLOG_WARN("adjusting committed from {} to {} to match appended entry", committed_, after);
+        // This should not happen in normal circumstances, but we adjust for robustness
+        SPDLOG_WARN("after {} is out of range [committed {}], resetting committed", after, committed_);
         committed_ = after;
     }
     unstable_.TruncateAndAppend(entries);

@@ -147,7 +147,7 @@ size_t Inflights::Count() const {
 }
 
 size_t Inflights::BufferSize() const {
-    return buffer_.size();
+    return buffer_.capacity();
 }
 
 bool Inflights::buffer_is_allocated() const {
