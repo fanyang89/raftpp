@@ -31,14 +31,18 @@ Interface NewTestRaft(
             throw std::runtime_error("NewTestRaft with empty peers on initialized store");
         }
     } else if (!peers.empty()) {
-        // Initialize with conf state using ApplySnapshot (matches raft-rs behavior)
-        Snapshot snap;
-        snap.mutable_metadata()->set_index(0);
-        snap.mutable_metadata()->set_term(0);
+        // Initialize with conf state directly using SetRaftState
+        // This ensures conf_state is properly set in storage
+        ConfState conf_state;
         for (uint64_t peer_id : peers) {
-            snap.mutable_metadata()->mutable_conf_state()->add_voters(peer_id);
+            conf_state.add_voters(peer_id);
         }
-        storage->ApplySnapshot(snap).value();
+        // Ensure hard state has commit=0 to match raft-rs behavior
+        HardState hard_state;
+        hard_state.set_commit(0);
+        hard_state.set_term(0);
+        hard_state.set_vote(0);
+        storage->SetRaftState({hard_state, conf_state});
     }
 
     return NewTestRaftWithConfig(config, storage);
@@ -57,13 +61,16 @@ Interface NewTestRaftWithPrevote(
             throw std::runtime_error("NewTestRaft with empty peers on initialized store");
         }
     } else if (!peers.empty()) {
-        Snapshot snap;
-        snap.mutable_metadata()->set_index(0);
-        snap.mutable_metadata()->set_term(0);
+        // Initialize with conf state directly using SetRaftState
+        ConfState conf_state;
         for (uint64_t peer_id : peers) {
-            snap.mutable_metadata()->mutable_conf_state()->add_voters(peer_id);
+            conf_state.add_voters(peer_id);
         }
-        storage->ApplySnapshot(snap).value();
+        HardState hard_state;
+        hard_state.set_commit(0);
+        hard_state.set_term(0);
+        hard_state.set_vote(0);
+        storage->SetRaftState({hard_state, conf_state});
     }
 
     return NewTestRaftWithConfig(config, storage);
@@ -95,24 +102,17 @@ Interface NewTestRaftWithLogs(
 }
 
 Interface NewTestRaftWithConfig(const Config& config, std::shared_ptr<MemoryStorage> storage) {
-    // For tests that use ApplySnapshot on the storage before calling this function,
-    // we need to ensure the conf_state is preserved
+    // Create a new owned storage and copy state from the shared storage
+    auto owned_storage = std::make_unique<MemoryStorage>();
+
+    // Get the initial state from shared storage (which may have ApplySnapshot applied)
     auto initial_state = storage->InitialState();
     if (initial_state) {
-        // Storage already has state, ensure conf_state is properly set
-        // by calling SetRaftState with the current conf_state
-        auto conf_state = initial_state->conf_state;
-        auto hard_state = initial_state->hard_state;
-        storage->SetRaftState({hard_state, conf_state});
-    }
-
-    // Create a new owned storage but preserve the shared storage's state
-    auto owned_storage = std::make_unique<MemoryStorage>();
-    if (initial_state) {
+        // Preserve both hard_state and conf_state from the shared storage
         owned_storage->SetRaftState({initial_state->hard_state, initial_state->conf_state});
     }
 
-    // Copy entries
+    // Copy entries from shared storage
     auto entries = storage->AllEntries();
     if (!entries.empty()) {
         owned_storage->Append(entries).value();
