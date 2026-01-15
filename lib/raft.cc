@@ -672,8 +672,11 @@ Result<void> Raft::StepCandidate(const Message& m) {
 
         case MsgRequestPreVoteResponse:
         case MsgRequestVoteResponse:
-            if ((state_ == StateRole::PreCandidate && m.msg_type() == MsgRequestPreVoteResponse) ||
-                (state_ == StateRole::Candidate && m.msg_type() == MsgRequestVoteResponse)) {
+            // Only handle vote responses corresponding to our candidacy (while in
+            // state Candidate, we may get stale MsgPreVoteResp messages in this term from
+            // our pre-candidate state).
+            if ((state_ == StateRole::PreCandidate && m.msg_type() != MsgRequestPreVoteResponse) ||
+                (state_ == StateRole::Candidate && m.msg_type() != MsgRequestVoteResponse)) {
                 return {};
             }
             Poll(m.from(), m.msg_type(), !m.reject());
@@ -1412,9 +1415,9 @@ Result<ConfState> Raft::ApplyConfChange(const ConfChangeV2& cc) {
 MessageType Raft::VoteRespMsgType(const MessageType mt) {
     switch (mt) {
         case MsgRequestVote:
-            return MsgRequestPreVote;
+            return MsgRequestVoteResponse;
         case MsgRequestPreVote:
-            return MsgRequestVote;
+            return MsgRequestPreVoteResponse;
         default:
             PANIC("not a vote message: {}", magic_enum::enum_name(mt));
     }

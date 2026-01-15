@@ -27,8 +27,8 @@ RaftCore::RaftCore(const Config& config, std::unique_ptr<Storage> store)
       heartbeat_timeout_(config.heartbeat_tick),
       election_timeout_(config.election_tick),
       randomized_election_timeout_(0),
-      min_election_timeout_(0),
-      max_election_timeout_(0),
+      min_election_timeout_(config.MinElectionTick()),
+      max_election_timeout_(config.MaxElectionTick()),
       priority_(0),
       uncommitted_state_(
           UncommittedState{
