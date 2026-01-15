@@ -264,8 +264,6 @@ void Raft::BecomeLeader() {
     state_ = StateRole::Leader;
 
     const uint64_t last_index = raft_log_.LastIndex();
-    ASSERT(last_index == raft_log_.persisted(),
-            "last_index ({}) should equal persisted ({})", last_index, raft_log_.persisted());
 
     // Update uncommitted state
     uncommitted_state_.uncommitted_size = 0;

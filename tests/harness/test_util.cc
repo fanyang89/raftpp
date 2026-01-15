@@ -13,6 +13,7 @@ Config NewTestConfig(uint64_t id, size_t election_tick, size_t heartbeat_tick) {
     config.heartbeat_tick = heartbeat_tick;
     config.max_size_per_message = NO_LIMIT;
     config.max_inflight_messages = 256;
+    config.load_state_on_startup = true;  // Enable loading initial state for tests
     return config;
 }
 
@@ -30,18 +31,14 @@ Interface NewTestRaft(
             throw std::runtime_error("NewTestRaft with empty peers on initialized store");
         }
     } else if (!peers.empty()) {
-        // Initialize with conf state directly (not through ApplySnapshot)
-        // This matches raft-rs's initialize_with_conf_state behavior
-        ConfState conf_state;
+        // Initialize with conf state using ApplySnapshot (matches raft-rs behavior)
+        Snapshot snap;
+        snap.mutable_metadata()->set_index(0);
+        snap.mutable_metadata()->set_term(0);
         for (uint64_t peer_id : peers) {
-            conf_state.add_voters(peer_id);
+            snap.mutable_metadata()->mutable_conf_state()->add_voters(peer_id);
         }
-        // Ensure hard state has commit=0 to match raft-rs behavior
-        HardState hard_state;
-        hard_state.set_commit(0);
-        hard_state.set_term(0);
-        hard_state.set_vote(0);
-        storage->SetRaftState({hard_state, conf_state});
+        storage->ApplySnapshot(snap).value();
     }
 
     return NewTestRaftWithConfig(config, storage);
@@ -98,20 +95,21 @@ Interface NewTestRaftWithLogs(
 }
 
 Interface NewTestRaftWithConfig(const Config& config, std::shared_ptr<MemoryStorage> storage) {
-    // Create a new MemoryStorage that uses the same underlying data
-    // by first getting all the state from the shared storage
-    auto owned_storage = std::make_unique<MemoryStorage>();
-
-    // Copy state from shared storage to owned storage
+    // For tests that use ApplySnapshot on the storage before calling this function,
+    // we need to ensure the conf_state is preserved
     auto initial_state = storage->InitialState();
     if (initial_state) {
-        // Copy conf state but reset hard state to ensure proper initialization
-        // This matches raft-rs behavior where hard state is loaded separately by Raft
-        HardState hard_state;
-        hard_state.set_commit(0);
-        hard_state.set_term(0);
-        hard_state.set_vote(0);
-        owned_storage->SetRaftState({hard_state, initial_state->conf_state});
+        // Storage already has state, ensure conf_state is properly set
+        // by calling SetRaftState with the current conf_state
+        auto conf_state = initial_state->conf_state;
+        auto hard_state = initial_state->hard_state;
+        storage->SetRaftState({hard_state, conf_state});
+    }
+
+    // Create a new owned storage but preserve the shared storage's state
+    auto owned_storage = std::make_unique<MemoryStorage>();
+    if (initial_state) {
+        owned_storage->SetRaftState({initial_state->hard_state, initial_state->conf_state});
     }
 
     // Copy entries
