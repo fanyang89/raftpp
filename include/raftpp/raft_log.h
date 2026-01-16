@@ -92,7 +92,7 @@ class RaftLog {
 
 template <typename Fn>
 Result<void> RaftLog::Scan(
-    uint64_t low, uint64_t high, size_t page_size, const GetEntriesContext ctx, Fn scanFn
+    uint64_t low, uint64_t high, uint64_t page_size, GetEntriesContext ctx, Fn scanFn
 ) {
     while (low < high) {
         if (const auto ents = Slice(low, high, page_size, ctx); !ents) {
