@@ -196,10 +196,15 @@ Result<std::pair<TrackerConfiguration, MapChange>> ConfChanger::Simple(
             return r.error();
         }
 
+        // set_symmetric_difference requires sorted ranges, but MajorityConfig (absl::flat_hash_set)
+        // is unordered. Convert to sorted vectors first.
+        std::vector<uint64_t> new_voters(cfg.voters.incoming().begin(), cfg.voters.incoming().end());
+        std::vector<uint64_t> old_voters(tracker_.conf().voters.incoming().begin(), tracker_.conf().voters.incoming().end());
+        std::ranges::sort(new_voters);
+        std::ranges::sort(old_voters);
+
         std::vector<uint64_t> diff;
-        std::ranges::set_symmetric_difference(
-            cfg.voters.incoming(), tracker_.conf().voters.incoming(), std::back_inserter(diff)
-        );
+        std::ranges::set_symmetric_difference(new_voters, old_voters, std::back_inserter(diff));
         if (diff.size() > 1) {
             return RaftError(ConfChangeError("more than one voter changed without entering joint config"));
         }
