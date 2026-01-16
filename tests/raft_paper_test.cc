@@ -244,7 +244,7 @@ TEST_CASE("raft paper: leader bcast beat") {
     r->BecomeLeader();
 
     for (size_t i = 0; i < 10; ++i) {
-        std::vector<Entry> entries = {EmptyEntry(0, i + 1)};
+        std::vector<Entry> entries = {EmptyEntry(i + 1, 0)};
         r->AppendEntry(entries);
     }
 
@@ -598,15 +598,15 @@ TEST_CASE("raft paper: voter") {
         // Same logterm
         {{EmptyEntry(1, 1)}, 1, 1, false},
         {{EmptyEntry(1, 1)}, 1, 2, false},
-        {{EmptyEntry(1, 1), EmptyEntry(1, 2)}, 1, 1, true},
+        {{EmptyEntry(1, 1), EmptyEntry(2, 1)}, 1, 1, true},
         // Candidate higher logterm
         {{EmptyEntry(1, 1)}, 2, 1, false},
         {{EmptyEntry(1, 1)}, 2, 2, false},
-        {{EmptyEntry(1, 1), EmptyEntry(1, 2)}, 2, 1, false},
+        {{EmptyEntry(1, 1), EmptyEntry(2, 1)}, 2, 1, false},
         // Voter higher logterm
-        {{EmptyEntry(2, 1)}, 1, 1, true},
-        {{EmptyEntry(2, 1)}, 1, 2, true},
-        {{EmptyEntry(2, 1), EmptyEntry(1, 2)}, 1, 1, true},
+        {{EmptyEntry(1, 2)}, 1, 1, true},
+        {{EmptyEntry(1, 2)}, 1, 2, true},
+        {{EmptyEntry(1, 2), EmptyEntry(2, 1)}, 1, 1, true},
     };
 
     for (size_t i = 0; i < tests.size(); ++i) {

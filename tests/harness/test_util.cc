@@ -187,18 +187,18 @@ Message NewMessage(const uint64_t from, const uint64_t to, const MessageType typ
     return NewMessageWithEntries(from, to, type, std::move(entries));
 }
 
-Entry NewEntry(const uint64_t term, const uint64_t index, const std::optional<std::string>& data) {
+Entry NewEntry(const uint64_t index, const uint64_t term, const std::optional<std::string>& data) {
     Entry e;
-    e.set_term(term);
     e.set_index(index);
+    e.set_term(term);
     if (data.has_value()) {
         e.set_data(*data);
     }
     return e;
 }
 
-Entry EmptyEntry(const uint64_t term, const uint64_t index) {
-    return NewEntry(term, index, std::nullopt);
+Entry EmptyEntry(const uint64_t index, const uint64_t term) {
+    return NewEntry(index, term, std::nullopt);
 }
 
 Snapshot NewSnapshot(

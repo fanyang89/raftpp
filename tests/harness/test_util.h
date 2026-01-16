@@ -61,11 +61,11 @@ Message NewMessage(uint64_t from, uint64_t to, MessageType type, size_t n = 0);
 
 /// Create an entry.
 Entry NewEntry(
-    uint64_t term, uint64_t index, const std::optional<std::string>& data = std::nullopt
+    uint64_t index, uint64_t term, const std::optional<std::string>& data = std::nullopt
 );
 
 /// Create an empty entry.
-Entry EmptyEntry(uint64_t term, uint64_t index);
+Entry EmptyEntry(uint64_t index, uint64_t term);
 
 /// Create a snapshot.
 Snapshot NewSnapshot(uint64_t index, uint64_t term, const std::vector<uint64_t>& voters);
