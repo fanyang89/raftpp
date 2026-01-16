@@ -373,7 +373,7 @@ static std::string TestQuorum(const TestData& data) {
 }
 
 TEST_CASE("quorum datadriven") {
-    RunTest("tests/datadriven/testdata/quorum", TestQuorum);
+    RunTest(TESTDATA_DIR "/quorum", TestQuorum);
 }
 
 }  // namespace test

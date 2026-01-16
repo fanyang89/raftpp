@@ -18,3 +18,8 @@ target_link_libraries(raftpp-datadriven-tests PRIVATE doctest)
 
 target_compile_definitions(raftpp-datadriven-tests PUBLIC DOCTEST_CONFIG_USE_STD_HEADERS=1)
 target_compile_definitions(raftpp-datadriven-tests PUBLIC DOCTEST_CONFIG_SUPER_FAST_ASSERTS=1)
+
+# Define the testdata directory path for tests to locate test files
+target_compile_definitions(raftpp-datadriven-tests PRIVATE
+    TESTDATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/testdata"
+)

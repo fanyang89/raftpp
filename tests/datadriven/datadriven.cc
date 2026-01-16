@@ -388,6 +388,10 @@ static std::vector<std::filesystem::path> GetTestFiles(const std::filesystem::pa
 void RunTest(const std::filesystem::path& path, TestHandler handler, bool rewrite) {
     auto files = GetTestFiles(path);
 
+    if (files.empty()) {
+        throw std::runtime_error("No test files found at: " + path.string());
+    }
+
     for (const auto& file : files) {
         std::ifstream ifs(file);
         if (!ifs) {
@@ -400,8 +404,14 @@ void RunTest(const std::filesystem::path& path, TestHandler handler, bool rewrit
 
         TestDataReader reader(file, content, rewrite);
 
+        size_t test_count = 0;
         while (reader.Next()) {
             reader.RunDirective(handler);
+            test_count++;
+        }
+
+        if (test_count == 0) {
+            throw std::runtime_error("No test cases found in file: " + file.string());
         }
 
         if (rewrite) {

@@ -141,7 +141,7 @@ static std::string FormatProgressState(ProgressState state) {
 }
 
 TEST_CASE("confchange datadriven") {
-    Walk("tests/datadriven/testdata/confchange", [](const std::filesystem::path& path) {
+    Walk(TESTDATA_DIR "/confchange", [](const std::filesystem::path& path) {
         // Create a fresh ProgressTracker for each file
         ProgressTracker tr(10);
         uint64_t idx = 0;
