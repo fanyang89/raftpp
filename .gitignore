@@ -10,3 +10,4 @@
 /build-dev
 /cmake-build-*
 /opencode.json
+/.claude
