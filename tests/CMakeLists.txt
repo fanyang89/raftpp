@@ -17,9 +17,12 @@ add_executable(raftpp-tests
   raft_test.cc
   raft_snap_test.cc
   raft_flow_control_test.cc
+  wal_test.cc
+  rpc_test.cc
 )
 
 target_link_libraries(raftpp-tests PRIVATE raftpp)
+target_link_libraries(raftpp-tests PRIVATE raftpp-rpc)
 target_link_libraries(raftpp-tests PRIVATE raftpp-proto)
 target_link_libraries(raftpp-tests PRIVATE raftpp-test-harness)
 
