@@ -1,0 +1,231 @@
+#include <doctest/doctest.h>
+
+#include "raftpp/rpc/codec.h"
+#include "raftpp/rpc/peer_manager.h"
+
+using namespace raftpp;
+using namespace raftpp::rpc;
+
+TEST_SUITE("rpc") {
+
+TEST_CASE("Codec encode/decode round-trip") {
+    Message msg;
+    msg.set_msg_type(MsgAppend);
+    msg.set_from(1);
+    msg.set_to(2);
+    msg.set_term(5);
+    msg.set_index(100);
+    msg.set_commit(50);
+
+    auto encoded = Codec::Encode(msg);
+
+    // Check header
+    CHECK(encoded.size() >= Codec::kHeaderSize);
+
+    auto result = Codec::Decode(encoded, Codec::kDefaultMaxMessageSize);
+    REQUIRE(result.has_value());
+
+    auto [decoded, consumed] = *result;
+    CHECK(consumed == encoded.size());
+    CHECK(decoded.msg_type() == msg.msg_type());
+    CHECK(decoded.from() == msg.from());
+    CHECK(decoded.to() == msg.to());
+    CHECK(decoded.term() == msg.term());
+    CHECK(decoded.index() == msg.index());
+    CHECK(decoded.commit() == msg.commit());
+}
+
+TEST_CASE("Codec handles incomplete buffer") {
+    Message msg;
+    msg.set_msg_type(MsgHeartbeat);
+    msg.set_from(1);
+    msg.set_to(2);
+
+    auto encoded = Codec::Encode(msg);
+
+    // Only provide partial data
+    std::span<const uint8_t> partial(encoded.data(), Codec::kHeaderSize / 2);
+    auto result = Codec::Decode(partial, Codec::kDefaultMaxMessageSize);
+    REQUIRE(result.has_value());
+    CHECK(result->second == 0);  // Should return 0 bytes consumed
+
+    // Provide header but not full payload
+    std::span<const uint8_t> header_only(encoded.data(), Codec::kHeaderSize + 1);
+    result = Codec::Decode(header_only, Codec::kDefaultMaxMessageSize);
+    REQUIRE(result.has_value());
+    CHECK(result->second == 0);
+}
+
+TEST_CASE("Codec rejects invalid magic") {
+    std::vector<uint8_t> bad_magic = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+
+    auto result = Codec::Decode(bad_magic, Codec::kDefaultMaxMessageSize);
+    REQUIRE(!result.has_value());
+    CHECK(result.error().code == RpcErrorCode::InvalidMagic);
+}
+
+TEST_CASE("Codec rejects oversized message") {
+    Message msg;
+    msg.set_msg_type(MsgSnapshot);
+    msg.set_from(1);
+    msg.set_to(2);
+
+    auto encoded = Codec::Encode(msg);
+
+    // Try to decode with very small max size
+    auto result = Codec::Decode(encoded, 1);  // 1 byte max
+    REQUIRE(!result.has_value());
+    CHECK(result.error().code == RpcErrorCode::MessageTooLarge);
+}
+
+TEST_CASE("Codec handles message with entries") {
+    Message msg;
+    msg.set_msg_type(MsgAppend);
+    msg.set_from(1);
+    msg.set_to(2);
+    msg.set_term(3);
+
+    // Add entries
+    for (int i = 0; i < 10; i++) {
+        auto* entry = msg.add_entries();
+        entry->set_term(3);
+        entry->set_index(i + 1);
+        entry->set_data("test data " + std::to_string(i));
+    }
+
+    auto encoded = Codec::Encode(msg);
+    auto result = Codec::Decode(encoded, Codec::kDefaultMaxMessageSize);
+    REQUIRE(result.has_value());
+
+    auto [decoded, consumed] = *result;
+    CHECK(decoded.entries_size() == 10);
+    CHECK(decoded.entries(5).data() == "test data 5");
+}
+
+TEST_CASE("Handshake encode/decode round-trip") {
+    Handshake hs;
+    hs.node_id = 12345;
+
+    auto encoded = hs.Encode();
+    CHECK(encoded.size() == Handshake::kSize);
+
+    auto result = Handshake::Decode(encoded);
+    REQUIRE(result.has_value());
+    CHECK(result->node_id == 12345);
+}
+
+TEST_CASE("Handshake rejects invalid magic") {
+    std::vector<uint8_t> bad_hs(Handshake::kSize, 0);
+
+    auto result = Handshake::Decode(bad_hs);
+    REQUIRE(!result.has_value());
+    CHECK(result.error().code == RpcErrorCode::InvalidMagic);
+}
+
+TEST_CASE("Handshake rejects incomplete buffer") {
+    std::vector<uint8_t> short_buf(Handshake::kSize - 1, 0);
+
+    auto result = Handshake::Decode(short_buf);
+    REQUIRE(!result.has_value());
+    CHECK(result.error().code == RpcErrorCode::InvalidMessage);
+}
+
+TEST_CASE("PeerManager basic operations") {
+    PeerManager pm;
+
+    pm.AddPeer(1, "192.168.1.1:9000");
+    pm.AddPeer(2, "192.168.1.2:9000");
+    pm.AddPeer(3, "192.168.1.3:9000");
+
+    CHECK(pm.Size() == 3);
+    CHECK(pm.HasPeer(1));
+    CHECK(pm.HasPeer(2));
+    CHECK(pm.HasPeer(3));
+    CHECK(!pm.HasPeer(4));
+
+    auto* peer = pm.GetPeer(1);
+    REQUIRE(peer != nullptr);
+    CHECK(peer->id == 1);
+    CHECK(peer->addr == "192.168.1.1:9000");
+    CHECK(peer->state == PeerState::Disconnected);
+
+    pm.RemovePeer(2);
+    CHECK(pm.Size() == 2);
+    CHECK(!pm.HasPeer(2));
+}
+
+TEST_CASE("PeerManager state transitions") {
+    PeerManager pm;
+    pm.AddPeer(1, "127.0.0.1:9000");
+
+    CHECK(pm.ConnectedCount() == 0);
+
+    pm.UpdateState(1, PeerState::Connecting);
+    CHECK(pm.GetPeer(1)->state == PeerState::Connecting);
+    CHECK(pm.ConnectedCount() == 0);
+
+    pm.UpdateState(1, PeerState::Connected);
+    CHECK(pm.GetPeer(1)->state == PeerState::Connected);
+    CHECK(pm.ConnectedCount() == 1);
+
+    pm.UpdateState(1, PeerState::Disconnected);
+    CHECK(pm.GetPeer(1)->state == PeerState::Disconnected);
+    CHECK(pm.ConnectedCount() == 0);
+}
+
+TEST_CASE("PeerManager reconnection with backoff") {
+    PeerManager pm;
+    pm.AddPeer(1, "127.0.0.1:9000");
+
+    // Initially, peer should be ready for reconnection
+    auto peers = pm.GetPeersToReconnect();
+    CHECK(peers.size() == 1);
+
+    // Record failure - should delay reconnection
+    pm.RecordFailure(1);
+    peers = pm.GetPeersToReconnect();
+    CHECK(peers.empty());  // Not yet time to reconnect
+
+    // After failure, state should be disconnected
+    CHECK(pm.GetPeer(1)->state == PeerState::Disconnected);
+    CHECK(pm.GetPeer(1)->failure_count == 1);
+}
+
+TEST_CASE("PeerManager GetAllPeerIds") {
+    PeerManager pm;
+    pm.AddPeer(1, "a");
+    pm.AddPeer(2, "b");
+    pm.AddPeer(3, "c");
+
+    auto ids = pm.GetAllPeerIds();
+    CHECK(ids.size() == 3);
+
+    // IDs should all be present (order not guaranteed)
+    std::sort(ids.begin(), ids.end());
+    CHECK(ids[0] == 1);
+    CHECK(ids[1] == 2);
+    CHECK(ids[2] == 3);
+}
+
+TEST_CASE("PeerManager failure count reset on connect") {
+    PeerManager pm;
+    pm.AddPeer(1, "127.0.0.1:9000");
+
+    pm.RecordFailure(1);
+    pm.RecordFailure(1);
+    pm.RecordFailure(1);
+    CHECK(pm.GetPeer(1)->failure_count == 3);
+
+    pm.UpdateState(1, PeerState::Connected);
+    CHECK(pm.GetPeer(1)->failure_count == 0);
+}
+
+TEST_CASE("RpcError ToString") {
+    auto err = RpcError::ConnectionFailed("timeout");
+    CHECK(err.ToString() == "ConnectionFailed: timeout");
+
+    auto err2 = RpcError::InvalidMagic();
+    CHECK(err2.ToString() == "InvalidMagic");
+}
+
+}  // TEST_SUITE("rpc")
