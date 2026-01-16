@@ -425,20 +425,13 @@ RawNode NewRawNode(
     config.load_state_on_startup = true;
 
     auto initial_state = storage->InitialState();
-    if (initial_state && !initial_state->conf_state.voters().empty()) {
-        if (peers.empty()) {
-            throw std::runtime_error("NewRawNode with empty peers on initialized store");
-        }
-    } else if (!peers.empty()) {
-        ConfState conf_state;
-        for (uint64_t peer_id : peers) {
-            conf_state.add_voters(peer_id);
-        }
-        HardState hard_state;
-        hard_state.set_commit(0);
-        hard_state.set_term(0);
-        hard_state.set_vote(0);
-        storage->SetRaftState({hard_state, conf_state});
+    bool is_initialized =
+        initial_state && !initial_state->conf_state.voters().empty();
+
+    // If storage is already initialized, just use it as-is (empty peers means use existing config)
+    // If storage is NOT initialized and peers is provided, initialize with snapshot
+    if (!is_initialized && !peers.empty()) {
+        storage->ApplySnapshot(NewSnapshot(1, 1, peers)).value();
     }
 
     return RawNode(config, std::move(storage));
@@ -448,20 +441,13 @@ RawNode NewRawNodeWithConfig(
     const std::vector<uint64_t>& peers, const Config& config, std::shared_ptr<MemoryStorage> storage
 ) {
     auto initial_state = storage->InitialState();
-    if (initial_state && !initial_state->conf_state.voters().empty()) {
-        if (peers.empty()) {
-            throw std::runtime_error("NewRawNodeWithConfig with empty peers on initialized store");
-        }
-    } else if (!peers.empty()) {
-        ConfState conf_state;
-        for (uint64_t peer_id : peers) {
-            conf_state.add_voters(peer_id);
-        }
-        HardState hard_state;
-        hard_state.set_commit(0);
-        hard_state.set_term(0);
-        hard_state.set_vote(0);
-        storage->SetRaftState({hard_state, conf_state});
+    bool is_initialized =
+        initial_state && !initial_state->conf_state.voters().empty();
+
+    // If storage is already initialized, just use it as-is (empty peers means use existing config)
+    // If storage is NOT initialized and peers is provided, initialize with snapshot
+    if (!is_initialized && !peers.empty()) {
+        storage->ApplySnapshot(NewSnapshot(1, 1, peers)).value();
     }
 
     return RawNode(config, std::move(storage));
@@ -474,7 +460,8 @@ bool operator==(const std::optional<HardState>& e1, const std::optional<HardStat
     if (!e1.has_value() && !e2.has_value()) {
         return true;
     }
-    return *e1 == *e2;
+    // Use MessageDifferencer directly to avoid recursive call
+    return google::protobuf::util::MessageDifferencer::Equals(*e1, *e2);
 }
 
 bool operator==(const Snapshot& e1, const Snapshot& e2) {
@@ -510,6 +497,33 @@ bool operator==(Result<Snapshot> e1, Result<Snapshot> e2) {
 
 bool operator==(const HardState& e1, const HardState& e2) {
     return google::protobuf::util::MessageDifferencer::Equals(e1, e2);
+}
+
+bool operator==(const ReadState& e1, const ReadState& e2) {
+    return e1.index == e2.index && e1.request_ctx == e2.request_ctx;
+}
+
+bool operator==(const std::vector<ReadState>& e1, const std::vector<ReadState>& e2) {
+    if (e1.size() != e2.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < e1.size(); ++i) {
+        if (!(e1[i] == e2[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool operator==(const ConfState& e1, const ConfState& e2) {
+    // Use MessageDifferencer with TreatAsSet for repeated fields
+    // because the order of voters/learners may differ
+    google::protobuf::util::MessageDifferencer diff;
+    diff.TreatAsSet(ConfState::descriptor()->FindFieldByName("voters"));
+    diff.TreatAsSet(ConfState::descriptor()->FindFieldByName("learners"));
+    diff.TreatAsSet(ConfState::descriptor()->FindFieldByName("voters_outgoing"));
+    diff.TreatAsSet(ConfState::descriptor()->FindFieldByName("learners_next"));
+    return diff.Compare(e1, e2);
 }
 
 void MustCmpReady(

@@ -151,5 +151,8 @@ bool operator==(const Snapshot& e1, const Snapshot& e2);
 bool operator==(const Entry& e1, const Entry& e2);
 bool operator==(const std::vector<Entry>& e1, const std::vector<Entry>& e2);
 bool operator==(Result<Snapshot> e1, Result<Snapshot> e2);
+bool operator==(const ReadState& e1, const ReadState& e2);
+bool operator==(const std::vector<ReadState>& e1, const std::vector<ReadState>& e2);
+bool operator==(const ConfState& e1, const ConfState& e2);
 
 }  // namespace raftpp
