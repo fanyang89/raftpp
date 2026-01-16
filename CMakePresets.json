@@ -3,7 +3,7 @@
   "configurePresets": [
     {
       "name": "dev",
-      "binaryDir": "${sourceDir}/build-dev",
+      "binaryDir": "${sourceDir}/build",
       "generator": "Ninja",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",

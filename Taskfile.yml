@@ -15,12 +15,14 @@ tasks:
           -I proto
           --cpp_out=proto/generated/raftpp
           raftpp.proto
-
-  vs:
-    desc: Configure CMake for Visual Studio 17 2022
-    platforms: [windows]
-    cmds:
-      - cmake -S . -B vs -G "Visual Studio 17 2022"
+      - platforms:
+          - darwin
+          - linux
+        cmd: >
+          protoc
+          -I proto
+          --cpp_out=proto/generated/raftpp
+          raftpp.proto
 
   fmt:
     desc: Format all C++ source files with clang-format
@@ -35,22 +37,15 @@ tasks:
     cmds:
       - cmake --preset=dev
 
-  build-test:
+  build:
     desc: Build all test targets
     cmds:
-      - cmake --build build-dev --target raftpp-tests raftpp-datadriven-tests
-
-  list-tests:
-    desc: List all available tests
-    deps:
-      - build-test
-    cmds:
-      - ./build-dev/tests/raftpp-tests --list-test-cases
+      - cmake --build build --target raftpp-tests raftpp-datadriven-tests
 
   test:
     desc: Run all tests
     deps:
-      - build-test
+      - build
     cmds:
-      - ./build-dev/tests/raftpp-tests
-      - ./build-dev/tests/datadriven/raftpp-datadriven-tests
+      - ./build/tests/raftpp-tests
+      - ./build/tests/datadriven/raftpp-datadriven-tests
