@@ -1589,4 +1589,42 @@ bool Raft::ConfStatesEqualIgnoringOrder(const ConfState& a, const ConfState& b) 
     return true;
 }
 
+void Raft::EnableGroupCommit(bool enable) {
+    progress_tracker_.EnableGroupCommit(enable);
+    // When disabling group commit on leader, recalculate commit and broadcast
+    if (state_ == StateRole::Leader && !enable && MaybeCommit()) {
+        BroadcastAppend();
+    }
+}
+
+bool Raft::GroupCommit() const {
+    return progress_tracker_.GroupCommit();
+}
+
+void Raft::AssignCommitGroups(const std::vector<std::pair<uint64_t, uint64_t>>& ids) {
+    for (const auto& [peer_id, group_id] : ids) {
+        ASSERT(group_id > 0, "group_id must be > 0");
+        if (auto* pr = progress_tracker_.get(peer_id)) {
+            pr->SetCommitGroupID(group_id);
+        }
+    }
+    // If leader with group commit enabled, try to commit and broadcast
+    if (state_ == StateRole::Leader && GroupCommit() && MaybeCommit()) {
+        BroadcastAppend();
+    }
+}
+
+std::optional<bool> Raft::CheckGroupCommitConsistent() {
+    if (state_ != StateRole::Leader) {
+        return std::nullopt;
+    }
+    // Need to wait for current term's entry to be applied
+    const auto term_result = raft_log_.Term(raft_log_.applied());
+    if (!term_result || *term_result != term_) {
+        return std::nullopt;
+    }
+    auto [index, use_group_commit] = progress_tracker_.MaxCommittedIndex();
+    return use_group_commit && index == raft_log_.committed();
+}
+
 }  // namespace raftpp

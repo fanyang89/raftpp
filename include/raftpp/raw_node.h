@@ -84,6 +84,11 @@ class RawNode {
     void ReportUnreachable(uint64_t id);
     void ReportSnapshot(uint64_t id, SnapshotStatus status);
 
+    /// Get a reference to the internal raft (for testing purposes)
+    Raft& raft() { return raft_; }
+
+    const Raft& raft() const { return raft_; }
+
   private:
     LightReady GetLightReady();
 

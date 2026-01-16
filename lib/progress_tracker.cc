@@ -122,4 +122,12 @@ ProgressMap& ProgressTracker::progress_map() {
     return progress_;
 }
 
+void ProgressTracker::EnableGroupCommit(bool enable) {
+    group_commit_ = enable;
+}
+
+bool ProgressTracker::GroupCommit() const {
+    return group_commit_;
+}
+
 }  // namespace raftpp

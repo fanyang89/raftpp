@@ -166,6 +166,10 @@ uint64_t Progress::CommitGroupID() const {
     return commit_group_id_;
 }
 
+void Progress::SetCommitGroupID(uint64_t group_id) {
+    commit_group_id_ = group_id;
+}
+
 bool& Progress::recent_active() {
     return recent_active_;
 }

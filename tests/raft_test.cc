@@ -2,7 +2,7 @@
 // Core Raft algorithm tests.
 
 #include <algorithm>
-#include <map>
+#include <tuple>
 #include <vector>
 
 #include <doctest/doctest.h>
@@ -341,6 +341,197 @@ TEST_CASE("raft: remove node") {
 
     auto& prs = leader->progress_tracker();
     CHECK(prs.progress_map().find(3) == prs.progress_map().end());
+}
+
+// Tests group commit.
+// 1. Logs should be replicated to at least different groups before committed;
+// 2. all peers are configured to the same group, simple quorum should be used.
+TEST_CASE("raft: group commit") {
+    struct TestCase {
+        std::vector<uint64_t> matches;
+        std::vector<uint64_t> group_ids;
+        uint64_t group_commit_index;   // expected commit with group commit enabled
+        uint64_t quorum_commit_index;  // expected commit with group commit disabled
+    };
+
+    std::vector<TestCase> tests = {
+        // Single
+        {{1}, {0}, 1, 1},
+        {{1}, {1}, 1, 1},
+        // Odd
+        {{2, 2, 1}, {1, 2, 1}, 2, 2},
+        {{2, 2, 1}, {1, 1, 2}, 1, 2},
+        {{2, 2, 1}, {1, 0, 1}, 1, 2},
+        {{2, 2, 1}, {0, 0, 0}, 1, 2},
+        // Even
+        {{4, 2, 1, 3}, {0, 0, 0, 0}, 1, 2},
+        {{4, 2, 1, 3}, {1, 0, 0, 0}, 1, 2},
+        {{4, 2, 1, 3}, {0, 1, 0, 2}, 2, 2},
+        {{4, 2, 1, 3}, {0, 2, 1, 0}, 1, 2},
+        {{4, 2, 1, 3}, {1, 1, 1, 1}, 2, 2},
+        {{4, 2, 1, 3}, {1, 1, 2, 1}, 1, 2},
+        {{4, 2, 1, 3}, {1, 2, 1, 1}, 2, 2},
+        {{4, 2, 1, 3}, {4, 3, 2, 1}, 2, 2},
+    };
+
+    for (size_t i = 0; i < tests.size(); i++) {
+        const auto& tc = tests[i];
+
+        // Create storage with initial conf state
+        auto storage = std::make_shared<MemoryStorage>();
+
+        // Add log entries
+        uint64_t min_index = *std::min_element(tc.matches.begin(), tc.matches.end());
+        uint64_t max_index = *std::max_element(tc.matches.begin(), tc.matches.end());
+        std::vector<Entry> logs;
+        for (uint64_t idx = min_index; idx <= max_index; idx++) {
+            logs.push_back(EmptyEntry(idx, 1));
+        }
+        std::ignore = storage->Append(logs);
+
+        // Set hard state and conf state
+        HardState hs;
+        hs.set_term(1);
+        storage->SetRaftState({hs, MakeConfState({1})});
+
+        // Create raft instance
+        Config cfg = NewTestConfig(1, 5, 1);
+        auto sm = NewTestRaftWithConfig(cfg, storage);
+
+        // Add peers and set up progress
+        std::vector<std::pair<uint64_t, uint64_t>> groups;
+        for (size_t j = 0; j < tc.matches.size(); j++) {
+            uint64_t id = j + 1;
+            uint64_t m = tc.matches[j];
+            uint64_t g = tc.group_ids[j];
+
+            if (sm->progress_tracker().get(id) == nullptr) {
+                auto cc = MakeAddNodeCC(id);
+                sm->ApplyConfChange(cc);
+            }
+            auto* pr = sm->progress_tracker().get(id);
+            pr->matched() = m;
+            pr->next_idx() = m + 1;
+
+            if (g != 0) {
+                groups.emplace_back(id, g);
+            }
+        }
+
+        // Enable group commit and assign groups (as follower, should not commit)
+        sm->EnableGroupCommit(true);
+        sm->AssignCommitGroups(groups);
+        CHECK_MESSAGE(
+            sm->raft_log().committed() == 0, "test #", i, ": follower group committed ",
+            sm->raft_log().committed(), ", want 0"
+        );
+
+        // Set state to leader directly (like raft-rs does: sm.state = StateRole::Leader)
+        // This avoids term changes that would prevent MaybeCommit from working
+        sm.SetState(StateRole::Leader);
+        sm->AssignCommitGroups(groups);
+        CHECK_MESSAGE(
+            sm->raft_log().committed() == tc.group_commit_index, "test #", i,
+            ": leader group committed ", sm->raft_log().committed(), ", want ",
+            tc.group_commit_index
+        );
+
+        // Disable group commit - should use simple quorum
+        sm->EnableGroupCommit(false);
+        CHECK_MESSAGE(
+            sm->raft_log().committed() == tc.quorum_commit_index, "test #", i, ": quorum committed ",
+            sm->raft_log().committed(), ", want ", tc.quorum_commit_index
+        );
+    }
+}
+
+TEST_CASE("raft: group commit consistent") {
+    // Create logs: entries 1-5 at term 1, entries 6-8 at term 2
+    std::vector<Entry> logs;
+    for (uint64_t i = 1; i <= 5; i++) {
+        logs.push_back(EmptyEntry(i, 1));
+    }
+    for (uint64_t i = 6; i <= 8; i++) {
+        logs.push_back(EmptyEntry(i, 2));
+    }
+
+    struct TestCase {
+        std::vector<uint64_t> matches;
+        std::vector<uint64_t> group_ids;
+        uint64_t committed;
+        uint64_t applied;
+        StateRole state;
+        std::optional<bool> expected;
+    };
+
+    std::vector<TestCase> tests = {
+        // Single node is not using group commit
+        {{8}, {0}, 8, 6, StateRole::Leader, false},
+        {{8}, {1}, 8, 5, StateRole::Leader, std::nullopt},
+        {{8}, {1}, 8, 6, StateRole::Follower, std::nullopt},
+        // Not commit to current term should return None
+        {{8, 2, 0}, {1, 2, 1}, 2, 2, StateRole::Leader, std::nullopt},
+        {{8, 2, 6}, {1, 1, 2}, 6, 6, StateRole::Leader, true},
+        // Not apply to current term should return None
+        {{8, 2, 6}, {1, 1, 2}, 6, 5, StateRole::Leader, std::nullopt},
+        // It should be false when not using group commit
+        {{8, 6, 6}, {0, 0, 0}, 6, 6, StateRole::Leader, false},
+        // It should be false when there is only one group
+        {{8, 6, 6}, {1, 1, 1}, 6, 6, StateRole::Leader, false},
+        {{8, 6, 6}, {1, 1, 0}, 6, 6, StateRole::Leader, false},
+        // Only leader knows what's the current state
+        {{8, 2, 6}, {1, 1, 2}, 6, 6, StateRole::Follower, std::nullopt},
+    };
+
+    for (size_t i = 0; i < tests.size(); i++) {
+        const auto& tc = tests[i];
+
+        // Create storage with logs
+        auto storage = std::make_shared<MemoryStorage>();
+        std::ignore = storage->Append(logs);
+
+        HardState hs;
+        hs.set_term(2);
+        hs.set_commit(tc.committed);
+        storage->SetRaftState({hs, MakeConfState({1})});
+
+        Config cfg = NewTestConfig(1, 5, 1);
+        cfg.applied = tc.applied;
+        auto sm = NewTestRaftWithConfig(cfg, storage);
+
+        // Add peers and set up progress
+        std::vector<std::pair<uint64_t, uint64_t>> groups;
+        for (size_t j = 0; j < tc.matches.size(); j++) {
+            uint64_t id = j + 1;
+            uint64_t m = tc.matches[j];
+            uint64_t g = tc.group_ids[j];
+
+            if (sm->progress_tracker().get(id) == nullptr) {
+                auto cc = MakeAddNodeCC(id);
+                sm->ApplyConfChange(cc);
+            }
+            auto* pr = sm->progress_tracker().get(id);
+            pr->matched() = m;
+            pr->next_idx() = m + 1;
+
+            if (g != 0) {
+                groups.emplace_back(id, g);
+            }
+        }
+
+        sm->EnableGroupCommit(true);
+        sm->AssignCommitGroups(groups);
+
+        // Set state directly (like raft-rs does: sm.state = role)
+        sm.SetState(tc.state);
+
+        auto result = sm->CheckGroupCommitConsistent();
+        CHECK_MESSAGE(
+            result == tc.expected, "test #", i, ": got ",
+            (result.has_value() ? (result.value() ? "true" : "false") : "nullopt"), ", want ",
+            (tc.expected.has_value() ? (tc.expected.value() ? "true" : "false") : "nullopt")
+        );
+    }
 }
 
 TEST_SUITE_END();

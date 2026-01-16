@@ -56,6 +56,8 @@ class RaftCore {
     void Send(Message& m, std::vector<Message>& messages) const;
 
   protected:
+    friend class Interface;  // For testing access to protected members
+
     bool PrepareSendSnapshot(Message& m, Progress& pr, uint64_t to);
 
     uint64_t term_;

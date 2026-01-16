@@ -41,6 +41,9 @@ class ProgressTracker {
 
     const Map<uint64_t, bool>& votes() const { return votes_; }
 
+    void EnableGroupCommit(bool enable);
+    [[nodiscard]] bool GroupCommit() const;
+
   private:
     ProgressMap progress_;
     TrackerConfiguration conf_;

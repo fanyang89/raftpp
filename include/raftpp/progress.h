@@ -34,6 +34,7 @@ class Progress {
     bool MaybeDecTo(uint64_t rejected, uint64_t match_hint, uint64_t request_snapshot);
     bool MaybeUpdate(uint64_t n);
     [[nodiscard]] uint64_t CommitGroupID() const;
+    void SetCommitGroupID(uint64_t group_id);
     [[nodiscard]] uint64_t Matched() const;
     void BecomeProbe();
     void BecomeReplicate();

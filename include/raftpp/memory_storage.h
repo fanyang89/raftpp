@@ -54,6 +54,8 @@ class MemoryStorage final : public Storage {
     void SetRaftState(const RaftState& raft_state);
     void SetConfState(const ConfState& conf_state);
     void TriggerSnapshotUnavailable();
+    void TriggerLogUnavailable(bool enable);
+    [[nodiscard]] std::optional<GetEntriesContext> TakeGetEntriesContext();
     [[nodiscard]] Result<void> ApplySnapshot(const Snapshot& snapshot);
     [[nodiscard]] std::vector<Entry> AllEntries();
     [[nodiscard]] Result<void> Append(const std::vector<Entry>& ents);

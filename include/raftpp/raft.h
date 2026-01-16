@@ -75,6 +75,12 @@ class Raft : public RaftCore {
     void CommitApply(uint64_t applied);
     Result<void> RequestSnapshot();
 
+    // Group commit API
+    void EnableGroupCommit(bool enable);
+    [[nodiscard]] bool GroupCommit() const;
+    void AssignCommitGroups(const std::vector<std::pair<uint64_t, uint64_t>>& ids);
+    [[nodiscard]] std::optional<bool> CheckGroupCommitConsistent();
+
     ProgressTracker& progress_tracker();
     const ProgressTracker& progress_tracker() const;
     HardState hard_state() const;

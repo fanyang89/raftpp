@@ -220,6 +220,16 @@ void MemoryStorage::TriggerSnapshotUnavailable() {
     core_.TriggerSnapshotUnavailable();
 }
 
+void MemoryStorage::TriggerLogUnavailable(bool enable) {
+    std::lock_guard lock(mutex_);
+    core_.trigger_log_unavailable_ = enable;
+}
+
+std::optional<GetEntriesContext> MemoryStorage::TakeGetEntriesContext() {
+    std::lock_guard lock(mutex_);
+    return core_.TakeGetEntriesContext();
+}
+
 Result<void> MemoryStorage::ApplySnapshot(const Snapshot& snapshot) {
     std::lock_guard lock(mutex_);
     return core_.ApplySnapshot(snapshot);

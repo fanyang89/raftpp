@@ -86,4 +86,16 @@ void Interface::Persist() {
     }
 }
 
+void Interface::SetState(StateRole state) {
+    if (raft_) {
+        raft_->state_ = state;
+    }
+}
+
+void Interface::SetTerm(uint64_t term) {
+    if (raft_) {
+        raft_->term_ = term;
+    }
+}
+
 }  // namespace raftpp

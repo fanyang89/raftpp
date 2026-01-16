@@ -75,6 +75,10 @@ class Interface {
     /// Clear messages
     void ClearMessages() { raft_->messages().clear(); }
 
+    // Testing-only methods
+    void SetState(StateRole state);
+    void SetTerm(uint64_t term);
+
   private:
     std::unique_ptr<Raft> raft_;
     std::shared_ptr<MemoryStorage> storage_;
