@@ -5,7 +5,8 @@
 namespace raftpp {
 
 Inflights::Inflights(const size_t capacity) : start_(0), count_(0), capacity_(capacity) {
-    buffer_.reserve(capacity);
+    // Don't pre-allocate buffer - it will be allocated on first Add()
+    // This matches raft-rs behavior where buffer is lazily allocated
 }
 
 void Inflights::SetCapacity(size_t incoming_capacity) {
@@ -41,7 +42,7 @@ void Inflights::SetCapacity(size_t incoming_capacity) {
         if (buffer_.capacity() > 0) {
             std::vector<uint64_t> buffer;
             buffer.reserve(incoming_capacity);
-            buffer_ = buffer;
+            buffer_ = std::move(buffer);
         }
     } else {
         incoming_capacity_ = incoming_capacity;
@@ -93,7 +94,8 @@ void Inflights::FreeTo(const uint64_t to) {
             capacity_ = incoming_cap;
             std::vector<uint64_t> buf;
             buf.reserve(capacity_);
-            buffer_ = buf;
+            buffer_ = std::move(buf);
+            incoming_capacity_ = std::nullopt;
         }
     }
 }
@@ -116,7 +118,7 @@ void Inflights::Add(const uint64_t inflight) {
         DEBUG_ASSERT(!incoming_capacity_.has_value());
         std::vector<uint64_t> buf;
         buf.reserve(capacity_);
-        buffer_ = buf;
+        buffer_ = std::move(buf);
     }
 
     auto next = start_ + count_;
