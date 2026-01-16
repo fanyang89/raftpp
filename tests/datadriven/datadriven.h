@@ -1,5 +1,7 @@
 #pragma once
 
+#include <doctest/doctest.h>
+
 #include <filesystem>
 #include <functional>
 #include <optional>

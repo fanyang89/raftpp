@@ -4,6 +4,8 @@ add_library(raftpp-datadriven STATIC
 
 target_include_directories(raftpp-datadriven PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_features(raftpp-datadriven PUBLIC cxx_std_20)
+target_link_libraries(raftpp-datadriven PUBLIC doctest)
+target_compile_definitions(raftpp-datadriven PUBLIC DOCTEST_CONFIG_USE_STD_HEADERS=1)
 
 add_executable(raftpp-datadriven-tests
     test_main.cc

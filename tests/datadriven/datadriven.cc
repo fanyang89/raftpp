@@ -239,11 +239,10 @@ class TestDataReader {
         }
 
         if (!rewrite_) {
-            // Test mode: compare actual vs expected
-            if (actual != data_.expected) {
-                throw std::runtime_error("Test failed at " + data_.pos + "\nExpected:\n" + data_.expected +
-                                         "\nActual:\n" + actual);
-            }
+            // Test mode: compare actual vs expected using doctest
+            INFO("Test case at " << data_.pos);
+            REQUIRE_MESSAGE(actual == data_.expected,
+                "Expected:\n" << data_.expected << "\nActual:\n" << actual);
         } else {
             // Rewrite mode
             Emit("----");
@@ -388,15 +387,12 @@ static std::vector<std::filesystem::path> GetTestFiles(const std::filesystem::pa
 void RunTest(const std::filesystem::path& path, TestHandler handler, bool rewrite) {
     auto files = GetTestFiles(path);
 
-    if (files.empty()) {
-        throw std::runtime_error("No test files found at: " + path.string());
-    }
+    REQUIRE_MESSAGE(!files.empty(), "No test files found at: " << path.string());
 
     for (const auto& file : files) {
+        CAPTURE(file);
         std::ifstream ifs(file);
-        if (!ifs) {
-            throw std::runtime_error("Failed to open file: " + file.string());
-        }
+        REQUIRE_MESSAGE(ifs.good(), "Failed to open file: " << file.string());
 
         std::stringstream buffer;
         buffer << ifs.rdbuf();
@@ -410,9 +406,7 @@ void RunTest(const std::filesystem::path& path, TestHandler handler, bool rewrit
             test_count++;
         }
 
-        if (test_count == 0) {
-            throw std::runtime_error("No test cases found in file: " + file.string());
-        }
+        REQUIRE_MESSAGE(test_count > 0, "No test cases found in file: " << file.string());
 
         if (rewrite) {
             auto rewrite_data = reader.GetRewriteBuffer();
