@@ -41,7 +41,7 @@ const std::vector<Message>& Ready::Messages() const {
     return empty;
 }
 
-RawNode::RawNode(const Config& config, std::unique_ptr<Storage> store)
+RawNode::RawNode(const Config& config, const std::shared_ptr<Storage>& store)
     : raft_(config, std::move(store)), max_number_(0), commit_since_index_(config.applied) {
     ASSERT(config.id, "config.id must not be zero");
     prev_hs_ = raft_.hard_state();
@@ -298,7 +298,8 @@ LightReady RawNode::GetLightReady() {
     LightReady rd;
     const auto max_size = raft_.max_committed_size_per_ready();
 
-    if (const auto committed_entries = raft_.raft_log().NextEntriesSince(commit_since_index_, max_size)) {
+    if (const auto committed_entries =
+            raft_.raft_log().NextEntriesSince(commit_since_index_, max_size)) {
         rd.committed_entries = *committed_entries;
     }
 

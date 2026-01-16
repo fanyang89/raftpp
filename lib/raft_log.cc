@@ -7,8 +7,8 @@
 
 namespace raftpp {
 
-RaftLog::RaftLog(const Config& config, std::unique_ptr<Storage> store)
-    : store_(std::move(store)), unstable_(Unwrap(store_->LastIndex()) + 1) {
+RaftLog::RaftLog(const Config& config, const std::shared_ptr<Storage>& store)
+    : store_(store), unstable_(Unwrap(store_->LastIndex()) + 1) {
     const uint64_t first_index = Unwrap(store_->FirstIndex());
     const uint64_t last_index = Unwrap(store_->LastIndex());
     committed_ = first_index - 1;
@@ -172,7 +172,9 @@ uint64_t RaftLog::Append(const std::vector<Entry>& entries) {
     uint64_t after = entries.front().index() - 1;
     if (after < committed_) {
         // This should not happen in normal circumstances, but we adjust for robustness
-        SPDLOG_WARN("after {} is out of range [committed {}], resetting committed", after, committed_);
+        SPDLOG_WARN(
+            "after {} is out of range [committed {}], resetting committed", after, committed_
+        );
         committed_ = after;
     }
     unstable_.TruncateAndAppend(entries);

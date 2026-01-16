@@ -35,5 +35,7 @@ void from_json(const nlohmann::json& j, JointConfiguration& p);
 
 template <>
 struct fmt::formatter<raftpp::JointConfiguration> : formatter<std::string_view> {
-    static format_context::iterator format(const raftpp::JointConfiguration& value, const format_context& ctx);
+    static format_context::iterator format(
+        const raftpp::JointConfiguration& value, const format_context& ctx
+    );
 };

@@ -25,7 +25,9 @@ void Inflights::SetCapacity(size_t incoming_capacity) {
             std::vector<uint64_t> buffer;
             buffer.reserve(incoming_capacity);
             buffer.insert(buffer.end(), buffer_.begin() + start_, buffer_.end());
-            buffer.insert(buffer.end(), buffer_.begin(), buffer_.begin() + count_ - (capacity_ - start_));
+            buffer.insert(
+                buffer.end(), buffer_.begin(), buffer_.begin() + count_ - (capacity_ - start_)
+            );
             buffer_ = std::move(buffer);
             start_ = 0;
         }

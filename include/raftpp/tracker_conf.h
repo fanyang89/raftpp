@@ -26,5 +26,7 @@ void from_json(const nlohmann::json& j, TrackerConfiguration& p);
 
 template <>
 struct fmt::formatter<raftpp::TrackerConfiguration> : formatter<std::string_view> {
-    static format_context::iterator format(const raftpp::TrackerConfiguration& value, const format_context& ctx);
+    static format_context::iterator format(
+        const raftpp::TrackerConfiguration& value, const format_context& ctx
+    );
 };

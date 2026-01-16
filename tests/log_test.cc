@@ -534,8 +534,6 @@ TEST_CASE("raft_log: slice") {
         size_t test_index = 0;
     };
 
-    constexpr auto NO_LIMIT = std::numeric_limits<uint64_t>::max();
-
     TestParam test;
     const std::vector<TestParam> tests{
         // test no limit

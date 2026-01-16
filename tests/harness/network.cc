@@ -1,8 +1,9 @@
 #include "harness/network.h"
-#include <spdlog/spdlog.h>
-#include <magic_enum/magic_enum.hpp>
 
 #include <cassert>
+
+#include <magic_enum/magic_enum.hpp>
+#include <spdlog/spdlog.h>
 
 #include "harness/test_util.h"
 
@@ -29,7 +30,9 @@ Network Network::Create(std::vector<std::unique_ptr<Interface>> peers) {
     return CreateWithConfig(std::move(peers), config);
 }
 
-Network Network::CreateWithConfig(std::vector<std::unique_ptr<Interface>> peers, const Config& config) {
+Network Network::CreateWithConfig(
+    std::vector<std::unique_ptr<Interface>> peers, const Config& config
+) {
     Network network;
 
     std::vector<uint64_t> peer_ids;
@@ -110,8 +113,10 @@ std::vector<Message> Network::ReadMessages() {
     std::vector<Message> all_msgs;
     for (auto& [id, peer] : peers_) {
         auto msgs = peer.ReadMessages();
-        all_msgs.insert(all_msgs.end(), std::make_move_iterator(msgs.begin()),
-                        std::make_move_iterator(msgs.end()));
+        all_msgs.insert(
+            all_msgs.end(), std::make_move_iterator(msgs.begin()),
+            std::make_move_iterator(msgs.end())
+        );
     }
     return all_msgs;
 }
@@ -121,7 +126,10 @@ void Network::Send(std::vector<Message> msgs) {
         std::vector<Message> new_msgs;
 
         for (auto& m : msgs) {
-            SPDLOG_INFO("Network::Send: type={}, from={}, to={}", magic_enum::enum_name(m.msg_type()), m.from(), m.to());
+            SPDLOG_INFO(
+                "Network::Send: type={}, from={}, to={}", magic_enum::enum_name(m.msg_type()),
+                m.from(), m.to()
+            );
             auto it = peers_.find(m.to());
             if (it == peers_.end()) {
                 continue;
@@ -135,8 +143,10 @@ void Network::Send(std::vector<Message> msgs) {
 
             auto resp = peer.ReadMessages();
             auto filtered = Filter(std::move(resp));
-            new_msgs.insert(new_msgs.end(), std::make_move_iterator(filtered.begin()),
-                           std::make_move_iterator(filtered.end()));
+            new_msgs.insert(
+                new_msgs.end(), std::make_move_iterator(filtered.begin()),
+                std::make_move_iterator(filtered.end())
+            );
         }
 
         msgs = std::move(new_msgs);

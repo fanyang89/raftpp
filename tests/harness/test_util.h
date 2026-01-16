@@ -9,13 +9,13 @@
 
 #include "harness/interface.h"
 #include "harness/network.h"
-#include "raftpp/raft_core.h"
-#include "raftpp/raft_log.h"
 #include "raftpp/memory_storage.h"
-#include "raftpp/primitives.h"
 #include "raftpp/raft.h"
 #include "raftpp/raft_config.h"
+#include "raftpp/raft_core.h"
+#include "raftpp/raft_log.h"
 #include "raftpp/raftpp.pb.h"
+#include "raftpp/raw_node.h"
 
 namespace raftpp {
 
@@ -115,5 +115,41 @@ void CommitNoopEntry(Network& network, MemoryStorage& storage, Raft& raft);
 
 /// Create a testing snapshot.
 Snapshot TestingSnapshot();
+
+// ============================================================================
+// Raw Node Test Helpers
+// ============================================================================
+
+/// Create a RawNode for testing.
+RawNode NewRawNode(
+    uint64_t id, const std::vector<uint64_t>& peers, size_t election_tick, size_t heartbeat_tick,
+    std::shared_ptr<MemoryStorage> storage
+);
+
+/// Create a RawNode with custom config.
+RawNode NewRawNodeWithConfig(
+    const std::vector<uint64_t>& peers, const Config& config, std::shared_ptr<MemoryStorage> storage
+);
+
+/// Compare Ready with expected values.
+void MustCmpReady(
+    const Ready& rd, const std::optional<SoftState>& ss, const std::optional<HardState>& hs,
+    const std::vector<Entry>& entries, const std::vector<Entry>& committed_entries,
+    const std::optional<Snapshot>& snapshot, bool msg_is_empty, bool persisted_msg_is_empty,
+    bool must_sync
+);
+
+/// Create ConfState for joint config.
+ConfState MakeConfStateV2(
+    const std::vector<uint64_t>& voters, const std::vector<uint64_t>& learners,
+    const std::vector<uint64_t>& voters_outgoing, const std::vector<uint64_t>& learners_next,
+    bool auto_leave
+);
+
+bool operator==(const std::optional<HardState>& e1, const std::optional<HardState>& e2);
+bool operator==(const Snapshot& e1, const Snapshot& e2);
+bool operator==(const Entry& e1, const Entry& e2);
+bool operator==(const std::vector<Entry>& e1, const std::vector<Entry>& e2);
+bool operator==(Result<Snapshot> e1, Result<Snapshot> e2);
 
 }  // namespace raftpp

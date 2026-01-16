@@ -17,11 +17,15 @@ Result<void> CheckInvariants(const TrackerConfiguration& cfg, const IncrChangeMa
         }
 
         if (cfg.voters.outgoing().contains(id)) {
-            return RaftError(ConfChangeError(fmt::format("{} is in learners and outgoing voters", id)));
+            return RaftError(
+                ConfChangeError(fmt::format("{} is in learners and outgoing voters", id))
+            );
         }
 
         if (cfg.voters.incoming().contains(id)) {
-            return RaftError(ConfChangeError(fmt::format("{} is in learners and incoming voters", id)));
+            return RaftError(
+                ConfChangeError(fmt::format("{} is in learners and incoming voters", id))
+            );
         }
     }
 
@@ -31,7 +35,9 @@ Result<void> CheckInvariants(const TrackerConfiguration& cfg, const IncrChangeMa
         }
 
         if (!cfg.voters.outgoing().contains(id)) {
-            return RaftError(ConfChangeError(fmt::format("{} is in learners_next and outgoing voters", id)));
+            return RaftError(
+                ConfChangeError(fmt::format("{} is in learners_next and outgoing voters", id))
+            );
         }
     }
 
@@ -53,7 +59,8 @@ bool IncrChangeMap::Contains(uint64_t id) const {
     const auto f = [&id](const auto& p) {
         return p.first == id;
     };
-    if (const auto it = std::find_if(changes_.rbegin(), changes_.rend(), f); it != changes_.rend()) {
+    if (const auto it = std::find_if(changes_.rbegin(), changes_.rend(), f);
+        it != changes_.rend()) {
         switch (it->second) {
             case MapChangeType::Add:
                 return true;
@@ -173,7 +180,9 @@ Result<void> ConfChanger::Apply(
     return {};
 }
 
-Result<std::pair<TrackerConfiguration, MapChange>> ConfChanger::Simple(const ConfChangeSingle& ccs) const {
+Result<std::pair<TrackerConfiguration, MapChange>> ConfChanger::Simple(
+    const ConfChangeSingle& ccs
+) const {
     std::vector<ConfChangeSingle> v;
     v.emplace_back(ccs);
     return Simple(std::span{v.begin(), v.end()});
@@ -198,15 +207,21 @@ Result<std::pair<TrackerConfiguration, MapChange>> ConfChanger::Simple(
 
         // set_symmetric_difference requires sorted ranges, but MajorityConfig (absl::flat_hash_set)
         // is unordered. Convert to sorted vectors first.
-        std::vector<uint64_t> new_voters(cfg.voters.incoming().begin(), cfg.voters.incoming().end());
-        std::vector<uint64_t> old_voters(tracker_.conf().voters.incoming().begin(), tracker_.conf().voters.incoming().end());
+        std::vector<uint64_t> new_voters(
+            cfg.voters.incoming().begin(), cfg.voters.incoming().end()
+        );
+        std::vector<uint64_t> old_voters(
+            tracker_.conf().voters.incoming().begin(), tracker_.conf().voters.incoming().end()
+        );
         std::ranges::sort(new_voters);
         std::ranges::sort(old_voters);
 
         std::vector<uint64_t> diff;
         std::ranges::set_symmetric_difference(new_voters, old_voters, std::back_inserter(diff));
         if (diff.size() > 1) {
-            return RaftError(ConfChangeError("more than one voter changed without entering joint config"));
+            return RaftError(
+                ConfChangeError("more than one voter changed without entering joint config")
+            );
         }
 
         if (const auto r = CheckInvariants(cfg, prs); !r) {
@@ -224,7 +239,9 @@ Result<std::pair<TrackerConfiguration, IncrChangeMap>> ConfChanger::CheckAndCopy
     return std::make_pair(TrackerConfiguration(tracker_.conf()), prs);
 }
 
-void ConfChanger::InitProgress(TrackerConfiguration& cfg, IncrChangeMap& prs, uint64_t id, const bool is_learner) {
+void ConfChanger::InitProgress(
+    TrackerConfiguration& cfg, IncrChangeMap& prs, uint64_t id, const bool is_learner
+) {
     if (!is_learner) {
         cfg.voters.incoming().insert(id);
     } else {

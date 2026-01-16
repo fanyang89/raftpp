@@ -69,5 +69,7 @@ bool operator!=(const google::protobuf::Message& lhs, const google::protobuf::Me
 
 template <>
 struct fmt::formatter<raftpp::IndexTerm> : formatter<std::string_view> {
-    static format_context::iterator format(const raftpp::IndexTerm& value, const format_context& ctx);
+    static format_context::iterator format(
+        const raftpp::IndexTerm& value, const format_context& ctx
+    );
 };

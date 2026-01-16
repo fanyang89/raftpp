@@ -1,8 +1,8 @@
 #include "raftpp/progress.h"
 
 #include <libassert/assert.hpp>
-#include <spdlog/spdlog.h>
 #include <magic_enum/magic_enum.hpp>
+#include <spdlog/spdlog.h>
 
 #include "raftpp/primitives.h"
 
@@ -119,9 +119,13 @@ bool Progress::IsPaused() const {
     }
 }
 
-bool Progress::MaybeDecTo(const uint64_t rejected, uint64_t match_hint, const uint64_t request_snapshot) {
-    SPDLOG_INFO("MaybeDecTo: rejected={}, match_hint={}, request_snapshot={}, state={}, matched={}",
-                rejected, match_hint, request_snapshot, magic_enum::enum_name(state_), matched_);
+bool Progress::MaybeDecTo(
+    const uint64_t rejected, uint64_t match_hint, const uint64_t request_snapshot
+) {
+    SPDLOG_INFO(
+        "MaybeDecTo: rejected={}, match_hint={}, request_snapshot={}, state={}, matched={}",
+        rejected, match_hint, request_snapshot, magic_enum::enum_name(state_), matched_
+    );
     if (state_ == ProgressState::Replicate) {
         if (rejected < matched_ || (rejected == matched_ && request_snapshot == INVALID_INDEX)) {
             SPDLOG_INFO("MaybeDecTo: returning false (stale reject in Replicate)");

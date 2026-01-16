@@ -17,7 +17,9 @@ MajorityConfig::MajorityConfig(const Set<uint64_t>& voters) {
     insert(voters.begin(), voters.end());
 }
 
-std::pair<uint64_t, bool> MajorityConfig::CommittedIndex(const bool use_group_commit, const AckedIndexer& l) const {
+std::pair<uint64_t, bool> MajorityConfig::CommittedIndex(
+    const bool use_group_commit, const AckedIndexer& l
+) const {
     if (empty()) {
         return std::make_pair(std::numeric_limits<uint64_t>::max(), true);
     }
@@ -29,7 +31,9 @@ std::pair<uint64_t, bool> MajorityConfig::CommittedIndex(const bool use_group_co
         // Use default value (0, 0) if no acked index is available
         matched.emplace_back(x.value_or(Index{0, 0}));
     }
-    std::ranges::sort(matched, [](const Index lhs, const Index rhs) { return lhs.index > rhs.index; });
+    std::ranges::sort(matched, [](const Index lhs, const Index rhs) {
+        return lhs.index > rhs.index;
+    });
 
     const size_t quorum = majority(matched.size());
     const auto quorum_index = matched[quorum - 1];
@@ -61,7 +65,9 @@ std::pair<uint64_t, bool> MajorityConfig::CommittedIndex(const bool use_group_co
     return std::make_pair(matched.back().index, false);
 }
 
-VoteResult MajorityConfig::GetVoteResult(const std::function<std::optional<bool>(uint64_t)>& check) const {
+VoteResult MajorityConfig::GetVoteResult(
+    const std::function<std::optional<bool>(uint64_t)>& check
+) const {
     if (empty()) {
         return VoteResult::Won;
     }

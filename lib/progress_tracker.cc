@@ -4,7 +4,8 @@
 
 namespace raftpp {
 
-ProgressTracker::ProgressTracker(const size_t max_inflight) : max_inflight_(max_inflight), group_commit_(false) {}
+ProgressTracker::ProgressTracker(const size_t max_inflight)
+    : max_inflight_(max_inflight), group_commit_(false) {}
 
 VoteResult ProgressTracker::GetVoteResult(const Map<uint64_t, bool>& votes) const {
     return conf_.voters.GetVoteResult([&votes](const uint64_t id) -> std::optional<bool> {
@@ -34,7 +35,9 @@ ProgressTracker::CountVoteResult ProgressTracker::CountVotes() {
     return {granted, rejected, r};
 }
 
-void ProgressTracker::ApplyConf(const TrackerConfiguration& conf, const MapChange& changes, const uint64_t next_idx) {
+void ProgressTracker::ApplyConf(
+    const TrackerConfiguration& conf, const MapChange& changes, const uint64_t next_idx
+) {
     conf_ = conf;
 
     for (const auto& change : changes) {

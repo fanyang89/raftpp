@@ -31,7 +31,7 @@ void Interface::Persist() {
     }
 
     auto& raft_log = raft_->raft_log();
-    
+
     // Get the internal storage from raft (need to cast to MemoryStorage for Append/ApplySnapshot)
     auto* internal_storage = dynamic_cast<MemoryStorage*>(raft_log.storage());
 
@@ -42,7 +42,7 @@ void Interface::Persist() {
         // Make a copy of snapshot BEFORE calling StableSnapshot, which clears it
         const Snapshot snap = *snapshot_opt;
         const uint64_t index = snap.metadata().index();
-        
+
         // First apply to storage, then mark as stable
         if (internal_storage) {
             auto result = internal_storage->ApplySnapshot(snap);
@@ -68,7 +68,7 @@ void Interface::Persist() {
         const auto& last_entry = entries_to_persist.back();
         const uint64_t last_idx = last_entry.index();
         const uint64_t last_term = last_entry.term();
-        
+
         // First append to storage, then mark as stable
         if (internal_storage) {
             auto result = internal_storage->Append(entries_to_persist);

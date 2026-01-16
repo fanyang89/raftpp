@@ -4,7 +4,9 @@
 
 namespace raftpp {
 
-std::pair<std::vector<ConfChangeSingle>, std::vector<ConfChangeSingle>> ToConfChangeSingle(const ConfState& cs) {
+std::pair<std::vector<ConfChangeSingle>, std::vector<ConfChangeSingle>> ToConfChangeSingle(
+    const ConfState& cs
+) {
     std::vector<ConfChangeSingle> outgoing;
     std::vector<ConfChangeSingle> incoming;
 

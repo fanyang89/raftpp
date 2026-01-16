@@ -1,11 +1,11 @@
 // Port of raft-rs harness/tests/integration_cases/test_raft.rs
 // Core Raft algorithm tests.
 
-#include <doctest/doctest.h>
-
 #include <algorithm>
 #include <map>
 #include <vector>
+
+#include <doctest/doctest.h>
 
 #include "harness/network.h"
 #include "harness/test_util.h"
@@ -15,11 +15,21 @@ using namespace raftpp;
 namespace {
 
 void AssertRaftLog(
-    const std::string& prefix, const RaftLog& raft_log, uint64_t committed, uint64_t applied, uint64_t last
+    const std::string& prefix, const RaftLog& raft_log, uint64_t committed, uint64_t applied,
+    uint64_t last
 ) {
-    CHECK_MESSAGE(raft_log.committed() == committed, prefix, "committed = ", raft_log.committed(), ", want = ", committed);
-    CHECK_MESSAGE(raft_log.applied() == applied, prefix, "applied = ", raft_log.applied(), ", want = ", applied);
-    CHECK_MESSAGE(raft_log.LastIndex() == last, prefix, "last_index = ", raft_log.LastIndex(), ", want = ", last);
+    CHECK_MESSAGE(
+        raft_log.committed() == committed, prefix, "committed = ", raft_log.committed(),
+        ", want = ", committed
+    );
+    CHECK_MESSAGE(
+        raft_log.applied() == applied, prefix, "applied = ", raft_log.applied(),
+        ", want = ", applied
+    );
+    CHECK_MESSAGE(
+        raft_log.LastIndex() == last, prefix, "last_index = ", raft_log.LastIndex(),
+        ", want = ", last
+    );
 }
 
 }  // namespace

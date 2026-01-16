@@ -1,11 +1,12 @@
 #include "raftpp/raft_core.h"
 
 #include <spdlog/spdlog.h>
+
 #include "raftpp/util.h"
 
 namespace raftpp {
 
-RaftCore::RaftCore(const Config& config, std::unique_ptr<Storage> store)
+RaftCore::RaftCore(const Config& config, const std::shared_ptr<Storage>& store)
     : term_(0),
       vote_(0),
       id_(config.id),
@@ -41,7 +42,8 @@ RaftCore::RaftCore(const Config& config, std::unique_ptr<Storage> store)
       max_committed_size_per_ready_(config.max_committed_size_per_ready) {}
 
 bool RaftCore::TryBatching(
-    const uint64_t to, std::vector<Message>& messages, Progress& pr, const std::vector<Entry>& entries
+    const uint64_t to, std::vector<Message>& messages, Progress& pr,
+    const std::vector<Entry>& entries
 ) const {
     bool is_batched = false;
     for (auto& msg : messages) {
@@ -111,7 +113,10 @@ void RaftCore::Send(Message& m, std::vector<Message>& messages) const {
             break;
         default:
             if (m.term() != 0) {
-                PANIC("term should not be set when sending {} (was {})", magic_enum::enum_name(m.msg_type()), m.term());
+                PANIC(
+                    "term should not be set when sending {} (was {})",
+                    magic_enum::enum_name(m.msg_type()), m.term()
+                );
             }
             // do not attach term to MsgPropose, MsgReadIndex
             // proposals are a way to forward to the leader and
@@ -137,7 +142,8 @@ bool RaftCore::PrepareSendSnapshot(Message& m, Progress& pr, uint64_t to) {
 
     m.set_msg_type(MsgSnapshot);
 
-    if (const auto snapshot_r = raft_log_.GetSnapshot(pr.pending_request_snapshot(), to); !snapshot_r) {
+    if (const auto snapshot_r = raft_log_.GetSnapshot(pr.pending_request_snapshot(), to);
+        !snapshot_r) {
         if (snapshot_r.error() == StorageErrorCode::SnapshotTemporarilyUnavailable) {
             return false;
         }

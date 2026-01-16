@@ -40,13 +40,17 @@ struct UncommittedState {
 
 class RaftCore {
   public:
-    RaftCore(const Config& config, std::unique_ptr<Storage> store);
+    RaftCore(const Config& config, const std::shared_ptr<Storage>& store);
 
     bool TryBatching(
         uint64_t to, std::vector<Message>& messages, Progress& pr, const std::vector<Entry>& entries
     ) const;
-    void PrepareSendEntries(Message& message, Progress& pr, uint64_t term, const std::vector<Entry>& entries) const;
-    bool MaybeSendAppend(uint64_t to, Progress& pr, bool allow_empty, std::vector<Message>& messages);
+    void PrepareSendEntries(
+        Message& message, Progress& pr, uint64_t term, const std::vector<Entry>& entries
+    ) const;
+    bool MaybeSendAppend(
+        uint64_t to, Progress& pr, bool allow_empty, std::vector<Message>& messages
+    );
     void SendAppend(uint64_t to, Progress& pr, std::vector<Message>& messages);
     void SendAppendAggressively(uint64_t to, Progress& pr, std::vector<Message>& messages);
     void Send(Message& m, std::vector<Message>& messages) const;

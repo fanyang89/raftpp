@@ -18,7 +18,8 @@ std::string CmdArg::ToString() const {
     }
     std::string result = key + "=(";
     for (size_t i = 0; i < vals.size(); ++i) {
-        if (i > 0) result += ",";
+        if (i > 0)
+            result += ",";
         result += vals[i];
     }
     result += ")";
@@ -64,7 +65,8 @@ std::vector<std::string> TestData::GetValues(const std::string& k) const {
 // Regex pattern for parsing directive tokens
 // Matches: argument, argument=value, argument=(val1,val2,...)
 static const std::regex kDirectiveRegex(
-    R"(^ *[-a-zA-Z0-9/_,.]+(|=[-a-zA-Z0-9_@=+/,.]*|=\([^)]*\))( |$))");
+    R"(^ *[-a-zA-Z0-9/_,.]+(|=[-a-zA-Z0-9_@=+/,.]*|=\([^)]*\))( |$))"
+);
 
 static std::vector<std::string> SplitDirectives(const std::string& line) {
     std::vector<std::string> result;
@@ -82,8 +84,10 @@ static std::vector<std::string> SplitDirectives(const std::string& line) {
             }
             remaining = remaining.substr(match[0].length());
         } else {
-            throw std::runtime_error("cannot parse directive at column " +
-                                     std::to_string(line.length() - remaining.length() + 1) + ": " + line);
+            throw std::runtime_error(
+                "cannot parse directive at column " +
+                std::to_string(line.length() - remaining.length() + 1) + ": " + line
+            );
         }
     }
     return result;
@@ -146,7 +150,9 @@ static bool HasBlankLine(const std::string& str) {
 
 class TestDataReader {
   public:
-    TestDataReader(const std::filesystem::path& source_name, const std::string& content, bool rewrite)
+    TestDataReader(
+        const std::filesystem::path& source_name, const std::string& content, bool rewrite
+    )
         : source_name_(source_name), content_(content), rewrite_(rewrite), pos_(0), line_num_(0) {}
 
     bool Next() {
@@ -241,8 +247,12 @@ class TestDataReader {
         if (!rewrite_) {
             // Test mode: compare actual vs expected using doctest
             INFO("Test case at " << data_.pos);
-            REQUIRE_MESSAGE(actual == data_.expected,
-                "Expected:\n" << data_.expected << "\nActual:\n" << actual);
+            REQUIRE_MESSAGE(
+                actual == data_.expected,
+                "Expected:\n"
+                    << data_.expected << "\nActual:\n"
+                    << actual
+            );
         } else {
             // Rewrite mode
             Emit("----");
@@ -418,7 +428,9 @@ void RunTest(const std::filesystem::path& path, TestHandler handler, bool rewrit
     }
 }
 
-void Walk(const std::filesystem::path& path, const std::function<void(const std::filesystem::path&)>& fn) {
+void Walk(
+    const std::filesystem::path& path, const std::function<void(const std::filesystem::path&)>& fn
+) {
     auto files = GetTestFiles(path);
     for (const auto& file : files) {
         fn(file);

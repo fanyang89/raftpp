@@ -1,12 +1,12 @@
 #pragma once
 
-#include <doctest/doctest.h>
-
 #include <filesystem>
 #include <functional>
 #include <optional>
 #include <string>
 #include <vector>
+
+#include <doctest/doctest.h>
 
 namespace raftpp {
 namespace test {
@@ -74,7 +74,9 @@ void RunTest(const std::filesystem::path& path, TestHandler handler, bool rewrit
 
 /// Walk iterates through all .txt files in a directory and calls the
 /// given function for each file path.
-void Walk(const std::filesystem::path& path, const std::function<void(const std::filesystem::path&)>& fn);
+void Walk(
+    const std::filesystem::path& path, const std::function<void(const std::filesystem::path&)>& fn
+);
 
 }  // namespace test
 }  // namespace raftpp

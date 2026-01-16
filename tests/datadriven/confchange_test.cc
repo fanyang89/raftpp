@@ -1,7 +1,7 @@
-#include <doctest/doctest.h>
-
 #include <algorithm>
 #include <sstream>
+
+#include <doctest/doctest.h>
 
 #include "datadriven.h"
 #include "raftpp/conf_changer.h"
@@ -71,7 +71,8 @@ static std::string FormatConfiguration(const TrackerConfiguration& cfg) {
         std::sort(incoming.begin(), incoming.end());
         oss << "voters=(";
         for (size_t i = 0; i < incoming.size(); ++i) {
-            if (i > 0) oss << " ";
+            if (i > 0)
+                oss << " ";
             oss << incoming[i];
         }
         oss << ")";
@@ -84,12 +85,14 @@ static std::string FormatConfiguration(const TrackerConfiguration& cfg) {
 
         oss << "voters=(";
         for (size_t i = 0; i < incoming.size(); ++i) {
-            if (i > 0) oss << " ";
+            if (i > 0)
+                oss << " ";
             oss << incoming[i];
         }
         oss << ")&&(";
         for (size_t i = 0; i < outgoing.size(); ++i) {
-            if (i > 0) oss << " ";
+            if (i > 0)
+                oss << " ";
             oss << outgoing[i];
         }
         oss << ")";
@@ -101,7 +104,8 @@ static std::string FormatConfiguration(const TrackerConfiguration& cfg) {
         std::sort(learners.begin(), learners.end());
         oss << " learners=(";
         for (size_t i = 0; i < learners.size(); ++i) {
-            if (i > 0) oss << " ";
+            if (i > 0)
+                oss << " ";
             oss << learners[i];
         }
         oss << ")";
@@ -113,7 +117,8 @@ static std::string FormatConfiguration(const TrackerConfiguration& cfg) {
         std::sort(learners_next.begin(), learners_next.end());
         oss << " learners_next=(";
         for (size_t i = 0; i < learners_next.size(); ++i) {
-            if (i > 0) oss << " ";
+            if (i > 0)
+                oss << " ";
             oss << learners_next[i];
         }
         oss << ")";
@@ -193,11 +198,13 @@ TEST_CASE("confchange datadriven") {
                 for (const auto& [id, pr] : tr.progress_map()) {
                     prs.emplace_back(id, &pr);
                 }
-                std::sort(prs.begin(), prs.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+                std::sort(prs.begin(), prs.end(), [](const auto& a, const auto& b) {
+                    return a.first < b.first;
+                });
 
                 for (const auto& [id, pr] : prs) {
-                    buf << id << ": " << FormatProgressState(pr->state()) << " match=" << pr->matched()
-                        << " next=" << pr->next_idx();
+                    buf << id << ": " << FormatProgressState(pr->state())
+                        << " match=" << pr->matched() << " next=" << pr->next_idx();
 
                     // Add learner marker
                     if (tr.conf().learners.contains(id)) {
@@ -208,7 +215,8 @@ TEST_CASE("confchange datadriven") {
 
                 return buf.str();
             },
-            false);
+            false
+        );
     });
 }
 

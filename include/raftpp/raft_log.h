@@ -8,7 +8,7 @@ namespace raftpp {
 
 class RaftLog {
   public:
-    RaftLog(const Config& config, std::unique_ptr<Storage> store);
+    RaftLog(const Config& config, const std::shared_ptr<Storage>& store);
 
     struct MaybeAppendResult {
         bool term_matched = false;
@@ -82,7 +82,7 @@ class RaftLog {
     [[nodiscard]] Result<void> MustCheckOutOfBounds(uint64_t low, uint64_t high) const;
 
   private:
-    std::unique_ptr<Storage> store_;
+    std::shared_ptr<Storage> store_;
     Unstable unstable_;
     uint64_t committed_;
     uint64_t persisted_;

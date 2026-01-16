@@ -26,24 +26,33 @@ class ConfChanger {
   public:
     explicit ConfChanger(ProgressTracker& tracker);
 
-    Result<std::pair<TrackerConfiguration, MapChange>> EnterJoint(bool auto_leave, std::span<const ConfChangeSingle>);
+    Result<std::pair<TrackerConfiguration, MapChange>> EnterJoint(
+        bool auto_leave, std::span<const ConfChangeSingle>
+    );
 
-    Result<std::pair<TrackerConfiguration, std::vector<std::pair<uint64_t, MapChangeType>>>, RaftError> LeaveJoint();
+    Result<
+        std::pair<TrackerConfiguration, std::vector<std::pair<uint64_t, MapChangeType>>>, RaftError>
+    LeaveJoint();
 
     Result<std::pair<TrackerConfiguration, MapChange>> Simple(const ConfChangeSingle& ccs) const;
 
-    Result<std::pair<TrackerConfiguration, MapChange>> Simple(std::span<const ConfChangeSingle> ccs) const;
+    Result<std::pair<TrackerConfiguration, MapChange>> Simple(
+        std::span<const ConfChangeSingle> ccs
+    ) const;
 
-    static Result<void> Apply(TrackerConfiguration& cfg, IncrChangeMap& prs, std::span<const ConfChangeSingle> ccs);
+    static Result<void> Apply(
+        TrackerConfiguration& cfg, IncrChangeMap& prs, std::span<const ConfChangeSingle> ccs
+    );
 
     Result<std::pair<TrackerConfiguration, IncrChangeMap>> CheckAndCopy() const;
 
   private:
-
     static void MakeVoter(TrackerConfiguration& cfg, IncrChangeMap& prs, uint64_t id);
     static void MakeLearner(TrackerConfiguration& cfg, IncrChangeMap& prs, uint64_t id);
     static void Remove(TrackerConfiguration& cfg, IncrChangeMap& prs, uint64_t id);
-    static void InitProgress(TrackerConfiguration& cfg, IncrChangeMap& prs, uint64_t id, bool is_learner);
+    static void InitProgress(
+        TrackerConfiguration& cfg, IncrChangeMap& prs, uint64_t id, bool is_learner
+    );
 
     ProgressTracker& tracker_;
 };

@@ -1,11 +1,11 @@
 // Port of raft-rs harness/tests/integration_cases/test_raft_paper.rs
 // Tests that verify the implementation against the Raft paper.
 
-#include <doctest/doctest.h>
-
 #include <algorithm>
 #include <map>
 #include <vector>
+
+#include <doctest/doctest.h>
 
 #include "harness/network.h"
 #include "harness/test_util.h"
@@ -338,12 +338,8 @@ TEST_CASE("raft paper: follower vote") {
     };
 
     std::vector<TestCase> tests = {
-        {INVALID_ID, 1, false},
-        {INVALID_ID, 2, false},
-        {1, 1, false},
-        {2, 2, false},
-        {1, 2, true},
-        {2, 1, true},
+        {INVALID_ID, 1, false}, {INVALID_ID, 2, false}, {1, 1, false},
+        {2, 2, false},          {1, 2, true},           {2, 1, true},
     };
 
     for (size_t i = 0; i < tests.size(); ++i) {

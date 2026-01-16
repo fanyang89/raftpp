@@ -58,7 +58,7 @@ bool UncommittedState::MaybeReduceUncommittedSize(std::span<const Entry> entries
     return true;
 }
 
-Raft::Raft(const Config& config, std::unique_ptr<Storage> store)
+Raft::Raft(const Config& config, const std::shared_ptr<Storage>& store)
     : RaftCore(config, std::move(store)),
       progress_tracker_(config.max_inflight_messages),
       config_(config) {
@@ -84,7 +84,8 @@ Raft::Raft(const Config& config, std::unique_ptr<Storage> store)
 
     // Only load hard state if it's explicitly configured (for production use)
     // In tests, we start with default state to match raft-rs behavior
-    if (config.load_state_on_startup && !google::protobuf::util::MessageDifferencer::Equals(
+    if (config.load_state_on_startup &&
+        !google::protobuf::util::MessageDifferencer::Equals(
             raft_state.hard_state, HardState::default_instance()
         )) {
         LoadState(raft_state.hard_state);
@@ -489,11 +490,16 @@ void Raft::HandleAppendResponse(const Message& m) {
 
     Progress& pr = *p;
     pr.recent_active() = true;
-    SPDLOG_INFO("HandleAppendResponse: from={}, index={}, reject={}", m.from(), m.index(), m.reject());
+    SPDLOG_INFO(
+        "HandleAppendResponse: from={}, index={}, reject={}", m.from(), m.index(), m.reject()
+    );
     pr.UpdateCommitted(m.commit());
 
     if (m.reject()) {
-        SPDLOG_INFO("HandleAppendResponse: reject from {}, index={}, reject_hint={}, log_term={}", m.from(), m.index(), m.reject_hint(), m.log_term());
+        SPDLOG_INFO(
+            "HandleAppendResponse: reject from {}, index={}, reject_hint={}, log_term={}", m.from(),
+            m.index(), m.reject_hint(), m.log_term()
+        );
         if (pr.MaybeDecTo(m.index(), next_probe_index, m.request_snapshot())) {
             if (pr.state() == ProgressState::Replicate) {
                 pr.BecomeProbe();
@@ -796,7 +802,9 @@ void Raft::HandleHeartbeatResponse(const Message& m) {
     // update followers committed index via heartbeat response
     pr.UpdateCommitted(m.commit());
     pr.recent_active() = true;
-    SPDLOG_INFO("HandleAppendResponse: from={}, index={}, reject={}", m.from(), m.index(), m.reject());
+    SPDLOG_INFO(
+        "HandleAppendResponse: from={}, index={}, reject={}", m.from(), m.index(), m.reject()
+    );
     pr.Resume();
 
     if (pr.state() == ProgressState::Replicate && pr.inflights().Full()) {
@@ -804,7 +812,10 @@ void Raft::HandleHeartbeatResponse(const Message& m) {
     }
 
     // Does it request snapshot?
-    SPDLOG_INFO("HandleHeartbeatResp check: from={}, matched={}, next={}, last_index={}", m.from(), pr.matched(), pr.next_idx(), raft_log_.LastIndex());
+    SPDLOG_INFO(
+        "HandleHeartbeatResp check: from={}, matched={}, next={}, last_index={}", m.from(),
+        pr.matched(), pr.next_idx(), raft_log_.LastIndex()
+    );
     if (pr.matched() < raft_log_.LastIndex() || pr.pending_request_snapshot() != INVALID_INDEX) {
         SPDLOG_INFO("HandleHeartbeatResp: sending append to {}", m.from());
         RaftCore::SendAppend(m.from(), pr, messages_);
@@ -840,7 +851,10 @@ void Raft::HandleSnapshotStatus(const Message& m) {
     }
 
     if (m.reject()) {
-        SPDLOG_INFO("HandleAppendResponse: reject from {}, index={}, reject_hint={}, log_term={}", m.from(), m.index(), m.reject_hint(), m.log_term());
+        SPDLOG_INFO(
+            "HandleAppendResponse: reject from {}, index={}, reject_hint={}, log_term={}", m.from(),
+            m.index(), m.reject_hint(), m.log_term()
+        );
         pr.SnapshotFailure();
         pr.BecomeProbe();
     } else {
@@ -1146,7 +1160,10 @@ void Raft::HandleAppendEntries(const Message& m) {
     to_send.set_to(m.from());
     to_send.set_msg_type(MsgAppendResponse);
 
-    SPDLOG_INFO("HandleAppendEntries: index={}, log_term={}, commit={}, num_entries={}", m.index(), m.log_term(), m.commit(), m.entries_size());
+    SPDLOG_INFO(
+        "HandleAppendEntries: index={}, log_term={}, commit={}, num_entries={}", m.index(),
+        m.log_term(), m.commit(), m.entries_size()
+    );
     const auto r = raft_log_.MaybeAppend(
         m.index(), m.log_term(), m.commit(), {m.entries().begin(), m.entries().end()}
     );
@@ -1422,7 +1439,9 @@ Result<ConfState> Raft::ApplyConfChange(const ConfChangeV2& cc) {
         const auto& changes = r->second;
         SPDLOG_INFO("ApplyConfChange: success, num_changes={}", changes.size());
         for (const auto& [id, change_type] : changes) {
-            SPDLOG_INFO("  change: id={}, type={}", id, change_type == MapChangeType::Add ? "Add" : "Remove");
+            SPDLOG_INFO(
+                "  change: id={}, type={}", id, change_type == MapChangeType::Add ? "Add" : "Remove"
+            );
         }
         progress_tracker_.ApplyConf(cfg, changes, raft_log_.LastIndex());
     } else {

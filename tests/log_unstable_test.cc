@@ -1,4 +1,3 @@
-#include <cstdint>
 #include <numeric>
 #include <optional>
 #include <vector>
@@ -6,7 +5,6 @@
 #include <doctest/doctest.h>
 #include <spdlog/fmt/fmt.h>
 
-#include "absl/status/internal/statusor_internal.h"
 #include "raftpp/raftpp.pb.h"
 #include "raftpp/unstable_log.h"
 #include "raftpp/util.h"

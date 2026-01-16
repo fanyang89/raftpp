@@ -1,4 +1,5 @@
 #include "raftpp/unstable_log.h"
+
 #include <cstddef>
 
 #include <libassert/assert.hpp>
@@ -62,14 +63,17 @@ void Unstable::StableEntries(uint64_t index, uint32_t term) {
     ASSERT(!snapshot_.has_value(), "the snapshot must be stabled before entries");
 
     if (entries_.empty()) {
-        PANIC("unstable.slice is empty, expect its last one's index and term are {} and {}", index, term);
+        PANIC(
+            "unstable.slice is empty, expect its last one's index and term are {} and {}", index,
+            term
+        );
     }
 
     const auto& entry = entries_.back();
     if (entry.index() != index || entry.term() != term) {
         PANIC(
-            "the last one of unstable.slice has different index {} and term {}, expect {} {}", entry.index(),
-            entry.term(), index, term
+            "the last one of unstable.slice has different index {} and term {}, expect {} {}",
+            entry.index(), entry.term(), index, term
         );
     }
 
@@ -112,7 +116,10 @@ void Unstable::TruncateAndAppend(const std::vector<Entry>& ents) {
 void Unstable::StableSnapshot(const uint64_t index) {
     if (const auto snapshot = snapshot_) {
         if (snapshot->metadata().index() != index) {
-            PANIC("unstable.snap has different index {}, expect {}", snapshot->metadata().index(), index);
+            PANIC(
+                "unstable.snap has different index {}, expect {}", snapshot->metadata().index(),
+                index
+            );
         }
         snapshot_ = {};
     } else {
@@ -124,7 +131,10 @@ void Unstable::MustCheckOutOfBounds(uint64_t lo, uint64_t hi) {
     ASSERT(lo <= hi, "invalid unstable.slice {} > {}", lo, hi);
 
     const uint64_t upper = offset_ + entries_.size();
-    ASSERT(offset_ <= lo && hi <= upper, "unstable.slice[{}, {}] out of bound[{}, {}]", lo, hi, offset_, upper);
+    ASSERT(
+        offset_ <= lo && hi <= upper, "unstable.slice[{}, {}] out of bound[{}, {}]", lo, hi,
+        offset_, upper
+    );
 }
 
 std::optional<std::reference_wrapper<Snapshot>> Unstable::snapshot() {

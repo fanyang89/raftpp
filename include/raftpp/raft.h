@@ -10,7 +10,7 @@ namespace raftpp {
 
 class Raft : public RaftCore {
   public:
-    Raft(const Config& config, std::unique_ptr<Storage> store);
+    Raft(const Config& config, const std::shared_ptr<Storage>& store);
 
     ConfState PostConfChange();
     Result<ConfState> ApplyConfChange(const ConfChangeV2& cc);
@@ -65,7 +65,8 @@ class Raft : public RaftCore {
     void SendAppend(uint64_t to);
     void SendAppendAggressively(uint64_t to);
     void SendHeartbeat(
-        uint64_t to, const Progress& pr, const std::optional<std::string>& ctx, std::vector<Message>& messages
+        uint64_t to, const Progress& pr, const std::optional<std::string>& ctx,
+        std::vector<Message>& messages
     );
     void SendRequestSnapshot();
     void SendTimeoutNow(uint64_t to);

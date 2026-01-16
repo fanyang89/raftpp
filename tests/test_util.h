@@ -2,7 +2,9 @@
 
 #include <doctest/doctest.h>
 
+#include "harness/test_util.h"
 #include "raftpp/error.h"
+#include "raftpp/raft_core.h"
 #include "raftpp/raftpp.pb.h"
 
 #define DOCTEST_VALUE_PARAMETERIZED_DATA(data, data_container)                           \
@@ -32,11 +34,10 @@
 
 namespace raftpp {
 
-Entry NewEntry(uint64_t term, uint64_t index);
-Snapshot NewSnapshot(const uint64_t index, const uint64_t term);
+Snapshot NewSnapshot(uint64_t index, uint64_t term);
 
 bool operator==(const Entry& e1, const Entry& e2);
-bool operator==(const Snapshot& e1, const Snapshot& e2);
+bool operator==(const HardState& e1, const HardState& e2);
 
 doctest::String toString(const std::vector<Entry>& entries);
 doctest::String toString(const std::optional<std::vector<Entry>>& entries);

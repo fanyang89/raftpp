@@ -4,28 +4,16 @@
 #include <google/protobuf/util/message_differencer.h>
 #include <spdlog/fmt/fmt.h>
 
-namespace raftpp {
+#include "raftpp/raft_core.h"
+#include "raftpp/raftpp.pb.h"
 
-Entry NewEntry(const uint64_t index, const uint64_t term) {
-    Entry ent;
-    ent.set_term(term);
-    ent.set_index(index);
-    return ent;
-}
+namespace raftpp {
 
 Snapshot NewSnapshot(const uint64_t index, const uint64_t term) {
     Snapshot snap;
     snap.mutable_metadata()->set_index(index);
     snap.mutable_metadata()->set_term(term);
     return snap;
-}
-
-bool operator==(const Entry& e1, const Entry& e2) {
-    return google::protobuf::util::MessageDifferencer::Equals(e1, e2);
-}
-
-bool operator==(const Snapshot& e1, const Snapshot& e2) {
-    return google::protobuf::util::MessageDifferencer::Equals(e1, e2);
 }
 
 doctest::String toString(const std::vector<Entry>& entries) {

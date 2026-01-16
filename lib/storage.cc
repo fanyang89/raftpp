@@ -19,7 +19,8 @@ bool GetEntriesContext::CanAsync() const {
 
 GetEntriesContext GetEntriesContext::Empty(const bool can_async) {
     return GetEntriesContext{
-        .what = GetEntriesFor::Empty, .payload = GetEntriesForPayload{.empty = {.can_async = can_async}}
+        .what = GetEntriesFor::Empty,
+        .payload = GetEntriesForPayload{.empty = {.can_async = can_async}}
     };
 }
 

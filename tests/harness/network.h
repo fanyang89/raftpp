@@ -54,7 +54,9 @@ class Network {
     static Network Create(std::vector<std::unique_ptr<Interface>> peers);
 
     /// Create a network with explicit config.
-    static Network CreateWithConfig(std::vector<std::unique_ptr<Interface>> peers, const Config& config);
+    static Network CreateWithConfig(
+        std::vector<std::unique_ptr<Interface>> peers, const Config& config
+    );
 
     /// Ignore a given MessageType.
     void IgnoreMessageType(MessageType type);
@@ -99,6 +101,7 @@ class Network {
 
     /// Access peers map directly (for iteration).
     std::unordered_map<uint64_t, Interface>& peers() { return peers_; }
+
     const std::unordered_map<uint64_t, Interface>& peers() const { return peers_; }
 
   private:

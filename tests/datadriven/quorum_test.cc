@@ -1,9 +1,9 @@
-#include <doctest/doctest.h>
-
 #include <algorithm>
 #include <iomanip>
 #include <limits>
 #include <sstream>
+
+#include <doctest/doctest.h>
 
 #include "datadriven.h"
 #include "raftpp/joint_conf.h"
@@ -29,7 +29,9 @@ class TestAckIndexer final : public AckedIndexer {
     bool Contains(uint64_t id) const { return data_.contains(id); }
 
     void Retain(const std::function<bool(uint64_t, Index)>& predicate) {
-        absl::erase_if(data_, [&predicate](const auto& kv) { return !predicate(kv.first, kv.second); });
+        absl::erase_if(data_, [&predicate](const auto& kv) {
+            return !predicate(kv.first, kv.second);
+        });
     }
 
   private:
@@ -86,7 +88,8 @@ static std::string DescribeMajorityConfig(const MajorityConfig& cfg, const TestA
     std::sort(info.begin(), info.end(), [](const Tup& a, const Tup& b) {
         uint64_t ai = a.idx ? a.idx->index : 0;
         uint64_t bi = b.idx ? b.idx->index : 0;
-        if (ai != bi) return ai < bi;
+        if (ai != bi)
+            return ai < bi;
         return a.id < b.id;
     });
 
@@ -223,15 +226,15 @@ static std::string TestQuorum(const TestData& data) {
     size_t voters_count = jc.IDs().size();
 
     if (voters_count != input_len) {
-        return "error: mismatched input (explicit or _) for voters " + std::to_string(voters_count) + ": " +
-               std::to_string(input_len) + "\n";
+        return "error: mismatched input (explicit or _) for voters " +
+            std::to_string(voters_count) + ": " + std::to_string(input_len) + "\n";
     }
 
     // Verify group ids length
     if (!gids.empty()) {
         if (gids.size() != voters_count) {
-            return "error: mismatched input (explicit or _) for group ids " + std::to_string(voters_count) + ": " +
-                   std::to_string(gids.size()) + "\n";
+            return "error: mismatched input (explicit or _) for group ids " +
+                std::to_string(voters_count) + ": " + std::to_string(gids.size()) + "\n";
         }
         // Assign group ids
         for (size_t i = 0; i < idxs.size() && i < gids.size(); ++i) {
@@ -284,7 +287,8 @@ static std::string TestQuorum(const TestData& data) {
                     l.Insert(id, {iidx->index - 1, iidx->group_id});
                     a_idx = c.CommittedIndex(use_group_commit, l);
                     if (a_idx.first != idx.first) {
-                        buf << a_idx.first << " <-- overlaying " << id << "->" << (iidx->index - 1) << "\n";
+                        buf << a_idx.first << " <-- overlaying " << id << "->" << (iidx->index - 1)
+                            << "\n";
                     }
 
                     // Try 0

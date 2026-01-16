@@ -35,7 +35,8 @@ Result<void> Config::Validate() const {
     if (min_timeout < election_tick) {
         return InvalidConfigError(
                    fmt::format(
-                       "min election tick {} must not be less than election_tick {}", min_timeout, election_tick
+                       "min election tick {} must not be less than election_tick {}", min_timeout,
+                       election_tick
                    )
         )
             .ToError();
@@ -44,7 +45,8 @@ Result<void> Config::Validate() const {
     if (min_timeout >= max_timeout) {
         return InvalidConfigError(
                    fmt::format(
-                       "min election tick {} should be less than max election tick {}", min_timeout, max_timeout
+                       "min election tick {} should be less than max election tick {}", min_timeout,
+                       max_timeout
                    )
         )
             .ToError();
@@ -55,11 +57,13 @@ Result<void> Config::Validate() const {
     }
 
     if (read_only_option == ReadOnlyOption::LeaseBased && !check_quorum) {
-        return InvalidConfigError("read_only_option == LeaseBased requires check_quorum == true").ToError();
+        return InvalidConfigError("read_only_option == LeaseBased requires check_quorum == true")
+            .ToError();
     }
 
     if (max_uncommitted_size < max_size_per_message) {
-        return InvalidConfigError("max uncommitted size should greater than max_size_per_msg").ToError();
+        return InvalidConfigError("max uncommitted size should greater than max_size_per_msg")
+            .ToError();
     }
 
     return {};

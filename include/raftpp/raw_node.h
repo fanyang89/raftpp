@@ -57,7 +57,7 @@ struct ReadyRecord {
 
 class RawNode {
   public:
-    RawNode(const Config& config, std::unique_ptr<Storage> store);
+    RawNode(const Config& config, const std::shared_ptr<Storage>& store);
 
     LightReady Advance(const Ready& rd);
     LightReady AdvanceAppend(const Ready& rd);
