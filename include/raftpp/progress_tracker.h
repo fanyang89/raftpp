@@ -30,6 +30,7 @@ class ProgressTracker {
     void RecordVote(uint64_t id, bool vote);
     bool HasQuorum(const Set<uint64_t>& potential_quorum) const;
     bool QuorumRecentlyActive(uint64_t perspective_of);
+    bool IsSingleton() const;
 
     Progress* get(uint64_t id);
     Progress& at(uint64_t id);

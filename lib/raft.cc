@@ -791,6 +791,11 @@ bool Raft::CheckQuorumActive() {
     return progress_tracker_.QuorumRecentlyActive(id_);
 }
 
+bool Raft::CommitToCurrentTerm() const {
+    const auto term_result = raft_log_.Term(raft_log_.committed());
+    return term_result && *term_result == term_;
+}
+
 void Raft::HandleHeartbeatResponse(const Message& m) {
     Progress* p;
     if (p = progress_tracker_.get(m.from()); p == nullptr) {
@@ -987,8 +992,39 @@ Result<void> Raft::StepLeader(const Message& m) {
             BroadcastAppend();
             return {};
 
-        case MsgReadIndex:
-            break;
+        case MsgReadIndex: {
+            if (!CommitToCurrentTerm()) {
+                // Reject read only request when this leader has not committed any log entry
+                // in its term.
+                SPDLOG_INFO("leader has not yet committed in its term; dropping read index msg");
+                return {};
+            }
+
+            if (progress_tracker_.IsSingleton()) {
+                const auto read_index = raft_log_.committed();
+                if (auto resp = HandleReadyReadIndex(m, read_index)) {
+                    Send(*resp, messages_);
+                }
+                return {};
+            }
+
+            switch (read_only_.option()) {
+                case ReadOnlyOption::Safe: {
+                    const std::string ctx = m.entries(0).data();
+                    read_only_.AddRequest(raft_log_.committed(), m, id_);
+                    BroadcastHeartbeat(ctx);
+                    break;
+                }
+                case ReadOnlyOption::LeaseBased: {
+                    const auto read_index = raft_log_.committed();
+                    if (auto resp = HandleReadyReadIndex(m, read_index)) {
+                        Send(*resp, messages_);
+                    }
+                    break;
+                }
+            }
+            return {};
+        }
 
         default:
             break;

@@ -24,6 +24,7 @@ class Raft : public RaftCore {
     bool AppendEntry(const Entry& entry);
     bool AppendEntry(std::vector<Entry> entries);
     bool CheckQuorumActive();
+    bool CommitToCurrentTerm() const;
     bool HasPendingConf() const;
     bool Restore(const Snapshot& snapshot);
     bool ShouldBroadcastCommit() const;

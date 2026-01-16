@@ -88,6 +88,10 @@ bool ProgressTracker::QuorumRecentlyActive(const uint64_t perspective_of) {
     return HasQuorum(active);
 }
 
+bool ProgressTracker::IsSingleton() const {
+    return conf_.voters.IsSingleton();
+}
+
 Progress* ProgressTracker::get(const uint64_t id) {
     const auto it = progress_.find(id);
     if (it == progress_.end()) {

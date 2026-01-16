@@ -16,6 +16,7 @@ class JointConfiguration {
     VoteResult GetVoteResult(const std::function<std::optional<bool>(uint64_t)>& check) const;
     void Clear();
     bool Contains(uint64_t id) const;
+    bool IsSingleton() const;
     Set<uint64_t> IDs() const;
 
     MajorityConfig& outgoing();

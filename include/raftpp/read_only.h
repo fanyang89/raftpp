@@ -25,6 +25,7 @@ class ReadOnly {
   public:
     explicit ReadOnly(ReadOnlyOption option);
 
+    void AddRequest(uint64_t index, const Message& req, uint64_t self_id);
     std::optional<std::string> LastPendingRequestCtx() const;
     size_t PendingReadCount() const;
     std::optional<Set<uint64_t>> RecvACK(uint64_t id, const std::string& ctx);

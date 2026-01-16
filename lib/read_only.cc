@@ -8,6 +8,18 @@ namespace raftpp {
 
 ReadOnly::ReadOnly(const ReadOnlyOption option) : option_(option) {}
 
+void ReadOnly::AddRequest(const uint64_t index, const Message& req, const uint64_t self_id) {
+    const std::string ctx = req.entries(0).data();
+    if (pending_read_index_.contains(ctx)) {
+        return;
+    }
+    Set<uint64_t> acks;
+    acks.insert(self_id);
+    ReadIndexStatus status{req, index, std::move(acks)};
+    pending_read_index_.emplace(ctx, std::move(status));
+    read_index_queue_.push_back(ctx);
+}
+
 std::optional<std::string> ReadOnly::LastPendingRequestCtx() const {
     if (read_index_queue_.empty()) {
         return std::nullopt;

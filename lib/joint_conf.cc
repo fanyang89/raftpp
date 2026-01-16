@@ -43,6 +43,10 @@ bool JointConfiguration::Contains(const uint64_t id) const {
     return incoming_.contains(id) || outgoing_.contains(id);
 }
 
+bool JointConfiguration::IsSingleton() const {
+    return outgoing_.empty() && incoming_.size() == 1;
+}
+
 Set<uint64_t> JointConfiguration::IDs() const {
     Set<uint64_t> ids(incoming());
     ids.insert(outgoing_.begin(), outgoing_.end());

@@ -71,7 +71,7 @@ TEST_CASE("raw_node: step local message ignored") {
 
 /// Test that RawNode.read_index sends MsgReadIndex and ReadState can be read out.
 /// TODO: This test may need adjustment based on raftpp's read index implementation
-TEST_CASE("raw_node: read index" * doctest::skip(true)) {
+TEST_CASE("raw_node: read index") {
     const std::string request_ctx = "somedata";
     const std::vector<ReadState> wrs = {ReadState{2, request_ctx}};
 
@@ -151,7 +151,7 @@ TEST_CASE("raw_node: start") {
 
 /// Test node restart.
 /// TODO: This test may need adjustment - raftpp may have different behavior for committed entries on restart
-TEST_CASE("raw_node: restart" * doctest::skip(true)) {
+TEST_CASE("raw_node: restart") {
     // raft-rs: empty_entry(term=1, index=1), new_entry(term=1, index=2)
     // raftpp: EmptyEntry(index, term), NewEntry(index, term)
     const std::vector<Entry> entries = {EmptyEntry(1, 1), NewEntry(2, 1, "foo")};
@@ -169,6 +169,7 @@ TEST_CASE("raw_node: restart" * doctest::skip(true)) {
     config.id = 1;
     config.election_tick = 10;
     config.heartbeat_tick = 1;
+    config.load_state_on_startup = true;
 
     RawNode raw_node(config, storage);
 
@@ -183,7 +184,7 @@ TEST_CASE("raw_node: restart" * doctest::skip(true)) {
 
 /// Test node restart from snapshot.
 /// TODO: This test may need adjustment - raftpp may have different behavior for committed entries on restart
-TEST_CASE("raw_node: restart from snapshot" * doctest::skip(true)) {
+TEST_CASE("raw_node: restart from snapshot") {
     // raft-rs: new_snapshot(index=2, term=1, voters)
     // raftpp: NewSnapshot(index, term, voters) ✓
     auto snap = NewSnapshot(2, 1, {1, 2});
@@ -205,6 +206,7 @@ TEST_CASE("raw_node: restart from snapshot" * doctest::skip(true)) {
     config.id = 1;
     config.election_tick = 10;
     config.heartbeat_tick = 1;
+    config.load_state_on_startup = true;
 
     RawNode raw_node(config, storage);
 
@@ -344,9 +346,9 @@ TEST_CASE("raw_node: propose add learner node") {
 }
 
 /// Test that MsgReadIndex to old leader gets forwarded to the new leader.
-/// TODO: This test needs adjustment - Network::Send auto-processes messages,
-/// so msgs() is empty after Send. Need to use different approach.
-TEST_CASE("raw_node: read index to old leader" * doctest::skip(true)) {
+/// This test verifies that followers forward MsgReadIndex to the leader,
+/// and that an old leader (now follower) forwards pending MsgReadIndex to the new leader.
+TEST_CASE("raw_node: read index to old leader") {
     const std::string request_ctx = "testdata";
 
     auto storage1 = std::make_shared<MemoryStorage>();
@@ -385,32 +387,42 @@ TEST_CASE("raw_node: read index to old leader" * doctest::skip(true)) {
     // Elect r1 as leader
     network.Send({NewMessage(1, 1, MessageType::MsgHup)});
 
-    // Send read index request to r2 (follower)
+    // Create test entry with request context
     Entry test_entry;
     test_entry.set_data(request_ctx);
-    network.Send({NewMessageWithEntries(2, 2, MessageType::MsgReadIndex, {test_entry})});
 
-    // Verify r2 forwards to r1 (current leader)
+    // Send read index request to r2 (follower) using Step directly (not Send)
+    // so messages stay in msgs() for inspection
+    auto msg_to_r2 = NewMessageWithEntries(2, 2, MessageType::MsgReadIndex, {test_entry});
+    network.GetPeer(2)->Step(msg_to_r2).value();
+
+    // Verify r2 forwards to r1 (current leader) with term not set
     CHECK_EQ(network.GetPeer(2)->msgs().size(), 1);
     CHECK_EQ(network.GetPeer(2)->msgs()[0].msg_type(), MessageType::MsgReadIndex);
     CHECK_EQ(network.GetPeer(2)->msgs()[0].to(), 1);
 
-    // Send read index request to r3 (follower)
-    network.Send({NewMessageWithEntries(3, 3, MessageType::MsgReadIndex, {test_entry})});
+    // Save this message for later
+    auto read_index_msg1 = network.GetPeer(2)->msgs()[0];
 
-    // Verify r3 forwards to r1 as well
+    // Send read index request to r3 (follower) using Step directly
+    auto msg_to_r3 = NewMessageWithEntries(3, 3, MessageType::MsgReadIndex, {test_entry});
+    network.GetPeer(3)->Step(msg_to_r3).value();
+
+    // Verify r3 forwards to r1 as well with term not set
     CHECK_EQ(network.GetPeer(3)->msgs().size(), 1);
     CHECK_EQ(network.GetPeer(3)->msgs()[0].msg_type(), MessageType::MsgReadIndex);
     CHECK_EQ(network.GetPeer(3)->msgs()[0].to(), 1);
+
+    // Save this message for later
+    auto read_index_msg2 = network.GetPeer(3)->msgs()[0];
 
     // Now elect r3 as new leader
     network.Send({NewMessage(3, 3, MessageType::MsgHup)});
 
     // Let r1 step the two messages previously from r2, r3
-    auto msg2 = network.GetPeer(2)->msgs()[0];
-    auto msg3 = network.GetPeer(3)->msgs()[0];
-    network.GetPeer(1)->Step(msg2).value();
-    network.GetPeer(1)->Step(msg3).value();
+    // r1 is now a follower, so it should forward these to the new leader (r3)
+    network.GetPeer(1)->Step(read_index_msg1).value();
+    network.GetPeer(1)->Step(read_index_msg2).value();
 
     // Verify r1 (now follower) forwards these messages again to r3 (new leader)
     CHECK_EQ(network.GetPeer(1)->msgs().size(), 2);
