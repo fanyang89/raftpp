@@ -137,6 +137,7 @@ Result<RaftLog::MaybeAppendResult> RaftLog::MaybeAppend(
     const std::vector<Entry>& entries
 ) {
     if (!MatchTerm(idx, term)) {
+        SPDLOG_INFO("MaybeAppend failed: idx={}, term={}, last_index={}", idx, term, LastIndex());
         return MaybeAppendResult{false, 0, 0};
     }
 
@@ -328,7 +329,7 @@ std::pair<uint64_t, std::optional<uint64_t>> RaftLog::FindConflictByTerm(
             if (*t > term) {
                 conflict_index -= 1;
             } else {
-                return {conflict_index, {}};
+                return {conflict_index, *t};  // Return the actual term found
             }
         } else {
             return {conflict_index, {}};
@@ -379,6 +380,14 @@ uint64_t& RaftLog::max_apply_unpersisted_log_limit() {
 
 uint64_t RaftLog::max_apply_unpersisted_log_limit() const {
     return max_apply_unpersisted_log_limit_;
+}
+
+Storage* RaftLog::storage() {
+    return store_.get();
+}
+
+const Storage* RaftLog::storage() const {
+    return store_.get();
 }
 
 std::pair<uint64_t, uint64_t> RaftLog::CommitInfo() const {

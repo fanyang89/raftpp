@@ -489,9 +489,11 @@ void Raft::HandleAppendResponse(const Message& m) {
 
     Progress& pr = *p;
     pr.recent_active() = true;
+    SPDLOG_INFO("HandleAppendResponse: from={}, index={}, reject={}", m.from(), m.index(), m.reject());
     pr.UpdateCommitted(m.commit());
 
     if (m.reject()) {
+        SPDLOG_INFO("HandleAppendResponse: reject from {}, index={}, reject_hint={}, log_term={}", m.from(), m.index(), m.reject_hint(), m.log_term());
         if (pr.MaybeDecTo(m.index(), next_probe_index, m.request_snapshot())) {
             if (pr.state() == ProgressState::Replicate) {
                 pr.BecomeProbe();
@@ -794,6 +796,7 @@ void Raft::HandleHeartbeatResponse(const Message& m) {
     // update followers committed index via heartbeat response
     pr.UpdateCommitted(m.commit());
     pr.recent_active() = true;
+    SPDLOG_INFO("HandleAppendResponse: from={}, index={}, reject={}", m.from(), m.index(), m.reject());
     pr.Resume();
 
     if (pr.state() == ProgressState::Replicate && pr.inflights().Full()) {
@@ -801,7 +804,9 @@ void Raft::HandleHeartbeatResponse(const Message& m) {
     }
 
     // Does it request snapshot?
+    SPDLOG_INFO("HandleHeartbeatResp check: from={}, matched={}, next={}, last_index={}", m.from(), pr.matched(), pr.next_idx(), raft_log_.LastIndex());
     if (pr.matched() < raft_log_.LastIndex() || pr.pending_request_snapshot() != INVALID_INDEX) {
+        SPDLOG_INFO("HandleHeartbeatResp: sending append to {}", m.from());
         RaftCore::SendAppend(m.from(), pr, messages_);
     }
 
@@ -835,6 +840,7 @@ void Raft::HandleSnapshotStatus(const Message& m) {
     }
 
     if (m.reject()) {
+        SPDLOG_INFO("HandleAppendResponse: reject from {}, index={}, reject_hint={}, log_term={}", m.from(), m.index(), m.reject_hint(), m.log_term());
         pr.SnapshotFailure();
         pr.BecomeProbe();
     } else {
@@ -976,6 +982,7 @@ Result<void> Raft::StepLeader(const Message& m) {
 
     switch (m.msg_type()) {
         case MsgAppendResponse:
+            SPDLOG_INFO("StepLeader: received MsgAppendResponse from {}", m.from());
             HandleAppendResponse(m);
             break;
         case MsgHeartbeatResponse:
@@ -1139,9 +1146,14 @@ void Raft::HandleAppendEntries(const Message& m) {
     to_send.set_to(m.from());
     to_send.set_msg_type(MsgAppendResponse);
 
-    if (const auto r = raft_log_.MaybeAppend(
-            m.index(), m.log_term(), m.commit(), {m.entries().begin(), m.entries().end()}
-        )) {
+    SPDLOG_INFO("HandleAppendEntries: index={}, log_term={}, commit={}, num_entries={}", m.index(), m.log_term(), m.commit(), m.entries_size());
+    const auto r = raft_log_.MaybeAppend(
+        m.index(), m.log_term(), m.commit(), {m.entries().begin(), m.entries().end()}
+    );
+    if (!r) {
+        // Fatal error (e.g., conflict with committed entry)
+        PANIC("MaybeAppend returned error: {}", r.error());
+    } else if (r->term_matched) {
         to_send.set_index(r->last_index);
     } else {
         const auto [hint_index, hint_term] =
@@ -1166,7 +1178,7 @@ bool Raft::TickElection() {
     election_elapsed_ += 1;
 
     bool has_ready = false;
-    if (election_elapsed_ >= election_timeout_) {
+    if (election_elapsed_ >= randomized_election_timeout_) {
         election_elapsed_ = 0;
         Message m;
         m.set_to(INVALID_ID);
@@ -1198,7 +1210,7 @@ bool Raft::TickHeartbeat() {
     election_elapsed_ += 1;
 
     bool has_ready = false;
-    if (election_elapsed_ >= election_timeout_) {
+    if (election_elapsed_ >= randomized_election_timeout_) {
         election_elapsed_ = 0;
         if (check_quorum_) {
             Message m;
@@ -1392,12 +1404,15 @@ Result<ConfState> Raft::ApplyConfChange(const ConfChangeV2& cc) {
 
     Result<std::pair<TrackerConfiguration, MapChange>> r;
     if (LeaveJoint(cc)) {
+        SPDLOG_INFO("ApplyConfChange: LeaveJoint");
         r = changer.LeaveJoint();
     } else {
         std::vector ccs(cc.changes().begin(), cc.changes().end());
         if (const auto auto_leave = EnterJoint(cc)) {
+            SPDLOG_INFO("ApplyConfChange: EnterJoint, auto_leave={}", *auto_leave);
             r = changer.EnterJoint(*auto_leave, ccs);
         } else {
+            SPDLOG_INFO("ApplyConfChange: Simple, num_changes={}", ccs.size());
             r = changer.Simple(ccs);
         }
     }
@@ -1405,7 +1420,13 @@ Result<ConfState> Raft::ApplyConfChange(const ConfChangeV2& cc) {
     if (r) {
         const auto& cfg = r->first;
         const auto& changes = r->second;
+        SPDLOG_INFO("ApplyConfChange: success, num_changes={}", changes.size());
+        for (const auto& [id, change_type] : changes) {
+            SPDLOG_INFO("  change: id={}, type={}", id, change_type == MapChangeType::Add ? "Add" : "Remove");
+        }
         progress_tracker_.ApplyConf(cfg, changes, raft_log_.LastIndex());
+    } else {
+        SPDLOG_ERROR("ApplyConfChange: failed, error={}", r.error().ToString());
     }
 
     return PostConfChange();
@@ -1425,7 +1446,8 @@ MessageType Raft::VoteRespMsgType(const MessageType mt) {
 void Raft::ResetRandomizedElectionTimeout() {
     static std::random_device rd;
     static std::mt19937 gen(rd());
-    std::uniform_int_distribution dist(min_election_timeout_, max_election_timeout_);
+    // Range is [min_election_timeout, max_election_timeout - 1] to match raft-rs
+    std::uniform_int_distribution dist(min_election_timeout_, max_election_timeout_ - 1);
     const size_t timeout = dist(gen);
     size_t prev_timeout = randomized_election_timeout_;
     randomized_election_timeout_ = timeout;
