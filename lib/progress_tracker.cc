@@ -7,9 +7,12 @@ namespace raftpp {
 ProgressTracker::ProgressTracker(const size_t max_inflight) : max_inflight_(max_inflight), group_commit_(false) {}
 
 VoteResult ProgressTracker::GetVoteResult(const Map<uint64_t, bool>& votes) const {
-    return conf_.voters.GetVoteResult([&votes](const uint64_t id) -> bool {
+    return conf_.voters.GetVoteResult([&votes](const uint64_t id) -> std::optional<bool> {
         auto it = votes.find(id);
-        return it != votes.end() && it->second;
+        if (it == votes.end()) {
+            return std::nullopt;  // Vote not received yet
+        }
+        return it->second;
     });
 }
 
