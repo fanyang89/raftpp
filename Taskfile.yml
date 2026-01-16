@@ -20,7 +20,7 @@ tasks:
           - darwin
           - linux
         cmd: >
-          protoc
+          ./build/_deps/protobuf-build/protoc
           -I proto
           --cpp_out=proto/generated/raftpp
           raftpp.proto
