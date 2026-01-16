@@ -377,7 +377,7 @@ struct TcpTransport::Impl {
                 return;
             }
 
-            auto [msg, consumed] = std::move(*decode_result);
+            auto [header, msg, consumed] = std::move(*decode_result);
             if (consumed == 0) {
                 break;  // Should not happen after FrameSize check
             }
