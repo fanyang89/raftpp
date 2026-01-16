@@ -36,16 +36,16 @@ tasks:
       - cmake --preset=dev
 
   build-test:
-    desc: Build the raftpp-tests target
+    desc: Build all test targets
     cmds:
-      - cmake --build build-dev --target raftpp-tests
+      - cmake --build build-dev --target raftpp-tests raftpp-datadriven-tests
 
   list-tests:
     desc: List all available tests
     deps:
       - build-test
     cmds:
-      - ./build-dev/tests/raftpp-tests --gtest_list_tests
+      - ./build-dev/tests/raftpp-tests --list-test-cases
 
   test:
     desc: Run all tests
@@ -53,3 +53,4 @@ tasks:
       - build-test
     cmds:
       - ./build-dev/tests/raftpp-tests
+      - ./build-dev/tests/datadriven/raftpp-datadriven-tests

@@ -115,11 +115,30 @@ Interface NewTestRaftWithConfig(const Config& config, std::shared_ptr<MemoryStor
     auto first_idx = storage->FirstIndex().value();
     uint64_t snapshot_index = first_idx - 1;  // first_index = snapshot.index + 1
 
-    // Reset hard state but preserve commit if there's a snapshot
-    // Commit should never be less than snapshot index
+    // If there's a snapshot, we need to apply it to owned_storage first
+    if (snapshot_index > 0) {
+        Snapshot snap;
+        snap.mutable_metadata()->set_index(snapshot_index);
+        // Get term for snapshot index from storage
+        auto term = storage->Term(snapshot_index);
+        if (term) {
+            snap.mutable_metadata()->set_term(term.value());
+        }
+        // Copy conf state
+        if (initial_state) {
+            snap.mutable_metadata()->mutable_conf_state()->CopyFrom(initial_state->conf_state);
+        }
+        owned_storage->ApplySnapshot(snap).value();
+    }
+
+    // Set raft state - ensure commit is at least snapshot_index
     if (initial_state) {
-        // Preserve both hard_state and conf_state from the shared storage
-        owned_storage->SetRaftState({initial_state->hard_state, initial_state->conf_state});
+        HardState hard_state = initial_state->hard_state;
+        // Commit should never be less than snapshot index
+        if (hard_state.commit() < snapshot_index) {
+            hard_state.set_commit(snapshot_index);
+        }
+        owned_storage->SetRaftState({hard_state, initial_state->conf_state});
     }
 
     // Copy entries from shared storage
