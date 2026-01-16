@@ -40,6 +40,15 @@ if (MSVC)
   add_compile_options(/MP)
 endif ()
 
+# On macOS with Homebrew LLVM, ensure we link against Homebrew's libc++
+if (APPLE AND CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+  get_filename_component(LLVM_BIN_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
+  get_filename_component(LLVM_DIR "${LLVM_BIN_DIR}" DIRECTORY)
+  if (EXISTS "${LLVM_DIR}/lib/c++/libc++.dylib")
+    add_link_options("-L${LLVM_DIR}/lib/c++" "-Wl,-rpath,${LLVM_DIR}/lib/c++")
+  endif ()
+endif ()
+
 include(cmake/CPM.cmake)
 add_subdirectory(third_party)
 add_subdirectory(lib)
