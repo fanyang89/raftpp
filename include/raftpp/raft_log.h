@@ -75,6 +75,8 @@ class RaftLog {
     [[nodiscard]] uint64_t& max_apply_unpersisted_log_limit();
     [[nodiscard]] uint64_t persisted() const;
     [[nodiscard]] uint64_t& persisted();
+    [[nodiscard]] Storage* storage();
+    [[nodiscard]] const Storage* storage() const;
 
   protected:
     [[nodiscard]] Result<void> MustCheckOutOfBounds(uint64_t low, uint64_t high) const;

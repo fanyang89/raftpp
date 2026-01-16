@@ -52,6 +52,7 @@ class MemoryStorage final : public Storage {
     void SetEntries(const std::vector<Entry>& entries);
     [[nodiscard]] Result<void> Compact(uint64_t idx);
     void SetRaftState(const RaftState& raft_state);
+    void SetConfState(const ConfState& conf_state);
     void TriggerSnapshotUnavailable();
     [[nodiscard]] Result<void> ApplySnapshot(const Snapshot& snapshot);
     [[nodiscard]] std::vector<Entry> AllEntries();

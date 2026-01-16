@@ -210,6 +210,11 @@ void MemoryStorage::SetRaftState(const RaftState& raft_state) {
     core_.raft_state_ = raft_state;
 }
 
+void MemoryStorage::SetConfState(const ConfState& conf_state) {
+    std::lock_guard lock(mutex_);
+    core_.raft_state_.conf_state.CopyFrom(conf_state);
+}
+
 void MemoryStorage::TriggerSnapshotUnavailable() {
     std::lock_guard lock(mutex_);
     core_.TriggerSnapshotUnavailable();
