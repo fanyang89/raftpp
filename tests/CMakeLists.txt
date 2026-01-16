@@ -1,4 +1,5 @@
 add_subdirectory(harness)
+add_subdirectory(datadriven)
 
 add_executable(raftpp-tests
   test_main.cc

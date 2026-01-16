@@ -168,7 +168,7 @@ Result<void> ConfChanger::Apply(
     }
 
     if (cfg.voters.incoming().empty()) {
-        return RaftError(ConfChangeError("remove all voters"));
+        return RaftError(ConfChangeError("removed all voters"));
     }
     return {};
 }

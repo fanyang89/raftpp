@@ -26,8 +26,8 @@ std::pair<uint64_t, bool> MajorityConfig::CommittedIndex(const bool use_group_co
     matched.reserve(size());
     for (const auto voter : *this) {
         auto x = l.AckedIndex(voter);
-        ASSERT(x.has_value());
-        matched.emplace_back(*x);
+        // Use default value (0, 0) if no acked index is available
+        matched.emplace_back(x.value_or(Index{0, 0}));
     }
     std::ranges::sort(matched, [](const Index lhs, const Index rhs) { return lhs.index > rhs.index; });
 
