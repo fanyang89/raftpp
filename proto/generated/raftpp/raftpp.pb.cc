@@ -26,6 +26,64 @@ namespace _pbi = ::google::protobuf::internal;
 namespace _fl = ::google::protobuf::internal::field_layout;
 namespace raftpp {
 
+inline constexpr RpcHeader::Impl_::Impl_(
+    ::_pbi::ConstantInitialized) noexcept
+      : _cached_size_{0},
+        from_node_{::uint64_t{0u}},
+        to_node_{::uint64_t{0u}},
+        version_{0u},
+        compression_{static_cast< ::raftpp::CompressionType >(0)},
+        request_id_{::uint64_t{0u}},
+        payload_size_{0u},
+        msg_type_{static_cast< ::raftpp::MessageType >(0)} {}
+
+template <typename>
+PROTOBUF_CONSTEXPR RpcHeader::RpcHeader(::_pbi::ConstantInitialized)
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+    : ::google::protobuf::Message(RpcHeader_class_data_.base()),
+#else   // PROTOBUF_CUSTOM_VTABLE
+    : ::google::protobuf::Message(),
+#endif  // PROTOBUF_CUSTOM_VTABLE
+      _impl_(::_pbi::ConstantInitialized()) {
+}
+struct RpcHeaderDefaultTypeInternal {
+  PROTOBUF_CONSTEXPR RpcHeaderDefaultTypeInternal() : _instance(::_pbi::ConstantInitialized{}) {}
+  ~RpcHeaderDefaultTypeInternal() {}
+  union {
+    RpcHeader _instance;
+  };
+};
+
+PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
+    PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 RpcHeaderDefaultTypeInternal _RpcHeader_default_instance_;
+
+inline constexpr RpcHandshake::Impl_::Impl_(
+    ::_pbi::ConstantInitialized) noexcept
+      : _cached_size_{0},
+        node_id_{::uint64_t{0u}},
+        cluster_id_{::uint64_t{0u}},
+        version_{0u} {}
+
+template <typename>
+PROTOBUF_CONSTEXPR RpcHandshake::RpcHandshake(::_pbi::ConstantInitialized)
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+    : ::google::protobuf::Message(RpcHandshake_class_data_.base()),
+#else   // PROTOBUF_CUSTOM_VTABLE
+    : ::google::protobuf::Message(),
+#endif  // PROTOBUF_CUSTOM_VTABLE
+      _impl_(::_pbi::ConstantInitialized()) {
+}
+struct RpcHandshakeDefaultTypeInternal {
+  PROTOBUF_CONSTEXPR RpcHandshakeDefaultTypeInternal() : _instance(::_pbi::ConstantInitialized{}) {}
+  ~RpcHandshakeDefaultTypeInternal() {}
+  union {
+    RpcHandshake _instance;
+  };
+};
+
+PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
+    PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 RpcHandshakeDefaultTypeInternal _RpcHandshake_default_instance_;
+
 inline constexpr HardState::Impl_::Impl_(
     ::_pbi::ConstantInitialized) noexcept
       : _cached_size_{0},
@@ -301,7 +359,7 @@ PROTOBUF_ATTRIBUTE_NO_DESTROY PROTOBUF_CONSTINIT
     PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 MessageDefaultTypeInternal _Message_default_instance_;
 }  // namespace raftpp
 static const ::_pb::EnumDescriptor* PROTOBUF_NONNULL
-    file_level_enum_descriptors_raftpp_2eproto[4];
+    file_level_enum_descriptors_raftpp_2eproto[5];
 static constexpr const ::_pb::ServiceDescriptor* PROTOBUF_NONNULL* PROTOBUF_NULLABLE
     file_level_service_descriptors_raftpp_2eproto = nullptr;
 const ::uint32_t
@@ -418,6 +476,32 @@ const ::uint32_t
         2,
         0,
         1,
+        0x081, // bitmap
+        PROTOBUF_FIELD_OFFSET(::raftpp::RpcHeader, _impl_._has_bits_),
+        10, // hasbit index offset
+        PROTOBUF_FIELD_OFFSET(::raftpp::RpcHeader, _impl_.version_),
+        PROTOBUF_FIELD_OFFSET(::raftpp::RpcHeader, _impl_.from_node_),
+        PROTOBUF_FIELD_OFFSET(::raftpp::RpcHeader, _impl_.to_node_),
+        PROTOBUF_FIELD_OFFSET(::raftpp::RpcHeader, _impl_.request_id_),
+        PROTOBUF_FIELD_OFFSET(::raftpp::RpcHeader, _impl_.compression_),
+        PROTOBUF_FIELD_OFFSET(::raftpp::RpcHeader, _impl_.payload_size_),
+        PROTOBUF_FIELD_OFFSET(::raftpp::RpcHeader, _impl_.msg_type_),
+        2,
+        0,
+        1,
+        4,
+        3,
+        5,
+        6,
+        0x081, // bitmap
+        PROTOBUF_FIELD_OFFSET(::raftpp::RpcHandshake, _impl_._has_bits_),
+        6, // hasbit index offset
+        PROTOBUF_FIELD_OFFSET(::raftpp::RpcHandshake, _impl_.version_),
+        PROTOBUF_FIELD_OFFSET(::raftpp::RpcHandshake, _impl_.node_id_),
+        PROTOBUF_FIELD_OFFSET(::raftpp::RpcHandshake, _impl_.cluster_id_),
+        2,
+        0,
+        1,
 };
 
 static const ::_pbi::MigrationSchema
@@ -431,6 +515,8 @@ static const ::_pbi::MigrationSchema
         {84, sizeof(::raftpp::ConfChange)},
         {95, sizeof(::raftpp::ConfChangeSingle)},
         {102, sizeof(::raftpp::ConfChangeV2)},
+        {111, sizeof(::raftpp::RpcHeader)},
+        {128, sizeof(::raftpp::RpcHandshake)},
 };
 static const ::_pb::Message* PROTOBUF_NONNULL const file_default_instances[] = {
     &::raftpp::_Entry_default_instance_._instance,
@@ -442,6 +528,8 @@ static const ::_pb::Message* PROTOBUF_NONNULL const file_default_instances[] = {
     &::raftpp::_ConfChange_default_instance_._instance,
     &::raftpp::_ConfChangeSingle_default_instance_._instance,
     &::raftpp::_ConfChangeV2_default_instance_._instance,
+    &::raftpp::_RpcHeader_default_instance_._instance,
+    &::raftpp::_RpcHandshake_default_instance_._instance,
 };
 const char descriptor_table_protodef_raftpp_2eproto[] ABSL_ATTRIBUTE_SECTION_VARIABLE(
     protodesc_cold) = {
@@ -472,34 +560,43 @@ const char descriptor_table_protodef_raftpp_2eproto[] ABSL_ATTRIBUTE_SECTION_VAR
     "\007node_id\030\002 \001(\004\"|\n\014ConfChangeV2\0220\n\ntransi"
     "tion\030\001 \001(\0162\034.raftpp.ConfChangeTransition"
     "\022)\n\007changes\030\002 \003(\0132\030.raftpp.ConfChangeSin"
-    "gle\022\017\n\007context\030\003 \001(\014*H\n\tEntryType\022\017\n\013Ent"
-    "ryNormal\020\000\022\023\n\017EntryConfChange\020\001\022\025\n\021Entry"
-    "ConfChangeV2\020\002*\214\003\n\013MessageType\022\n\n\006MsgHup"
-    "\020\000\022\013\n\007MsgBeat\020\001\022\016\n\nMsgPropose\020\002\022\r\n\tMsgAp"
-    "pend\020\003\022\025\n\021MsgAppendResponse\020\004\022\022\n\016MsgRequ"
-    "estVote\020\005\022\032\n\026MsgRequestVoteResponse\020\006\022\017\n"
-    "\013MsgSnapshot\020\007\022\020\n\014MsgHeartbeat\020\010\022\030\n\024MsgH"
-    "eartbeatResponse\020\t\022\022\n\016MsgUnreachable\020\n\022\021"
-    "\n\rMsgSnapStatus\020\013\022\022\n\016MsgCheckQuorum\020\014\022\025\n"
-    "\021MsgTransferLeader\020\r\022\021\n\rMsgTimeoutNow\020\016\022"
-    "\020\n\014MsgReadIndex\020\017\022\024\n\020MsgReadIndexResp\020\020\022"
-    "\025\n\021MsgRequestPreVote\020\021\022\035\n\031MsgRequestPreV"
-    "oteResponse\020\022*<\n\024ConfChangeTransition\022\010\n"
-    "\004Auto\020\000\022\014\n\010Implicit\020\001\022\014\n\010Explicit\020\002*A\n\016C"
-    "onfChangeType\022\013\n\007AddNode\020\000\022\016\n\nRemoveNode"
-    "\020\001\022\022\n\016AddLearnerNode\020\002b\006proto3"
+    "gle\022\017\n\007context\030\003 \001(\014\"\277\001\n\tRpcHeader\022\017\n\007ve"
+    "rsion\030\001 \001(\r\022\021\n\tfrom_node\030\002 \001(\004\022\017\n\007to_nod"
+    "e\030\003 \001(\004\022\022\n\nrequest_id\030\004 \001(\004\022,\n\013compressi"
+    "on\030\005 \001(\0162\027.raftpp.CompressionType\022\024\n\014pay"
+    "load_size\030\006 \001(\r\022%\n\010msg_type\030\007 \001(\0162\023.raft"
+    "pp.MessageType\"D\n\014RpcHandshake\022\017\n\007versio"
+    "n\030\001 \001(\r\022\017\n\007node_id\030\002 \001(\004\022\022\n\ncluster_id\030\003"
+    " \001(\004*H\n\tEntryType\022\017\n\013EntryNormal\020\000\022\023\n\017En"
+    "tryConfChange\020\001\022\025\n\021EntryConfChangeV2\020\002*\214"
+    "\003\n\013MessageType\022\n\n\006MsgHup\020\000\022\013\n\007MsgBeat\020\001\022"
+    "\016\n\nMsgPropose\020\002\022\r\n\tMsgAppend\020\003\022\025\n\021MsgApp"
+    "endResponse\020\004\022\022\n\016MsgRequestVote\020\005\022\032\n\026Msg"
+    "RequestVoteResponse\020\006\022\017\n\013MsgSnapshot\020\007\022\020"
+    "\n\014MsgHeartbeat\020\010\022\030\n\024MsgHeartbeatResponse"
+    "\020\t\022\022\n\016MsgUnreachable\020\n\022\021\n\rMsgSnapStatus\020"
+    "\013\022\022\n\016MsgCheckQuorum\020\014\022\025\n\021MsgTransferLead"
+    "er\020\r\022\021\n\rMsgTimeoutNow\020\016\022\020\n\014MsgReadIndex\020"
+    "\017\022\024\n\020MsgReadIndexResp\020\020\022\025\n\021MsgRequestPre"
+    "Vote\020\021\022\035\n\031MsgRequestPreVoteResponse\020\022*<\n"
+    "\024ConfChangeTransition\022\010\n\004Auto\020\000\022\014\n\010Impli"
+    "cit\020\001\022\014\n\010Explicit\020\002*A\n\016ConfChangeType\022\013\n"
+    "\007AddNode\020\000\022\016\n\nRemoveNode\020\001\022\022\n\016AddLearner"
+    "Node\020\002*R\n\017CompressionType\022\024\n\020COMPRESSION"
+    "_NONE\020\000\022\023\n\017COMPRESSION_LZ4\020\001\022\024\n\020COMPRESS"
+    "ION_ZSTD\020\002b\006proto3"
 };
 static ::absl::once_flag descriptor_table_raftpp_2eproto_once;
 PROTOBUF_CONSTINIT const ::_pbi::DescriptorTable descriptor_table_raftpp_2eproto = {
     false,
     false,
-    1710,
+    2058,
     descriptor_table_protodef_raftpp_2eproto,
     "raftpp.proto",
     &descriptor_table_raftpp_2eproto_once,
     nullptr,
     0,
-    9,
+    11,
     schemas,
     file_default_instances,
     TableStruct_raftpp_2eproto::offsets,
@@ -530,6 +627,12 @@ const ::google::protobuf::EnumDescriptor* PROTOBUF_NONNULL ConfChangeType_descri
   return file_level_enum_descriptors_raftpp_2eproto[3];
 }
 PROTOBUF_CONSTINIT const uint32_t ConfChangeType_internal_data_[] = {
+    196608u, 0u, };
+const ::google::protobuf::EnumDescriptor* PROTOBUF_NONNULL CompressionType_descriptor() {
+  ::google::protobuf::internal::AssignDescriptors(&descriptor_table_raftpp_2eproto);
+  return file_level_enum_descriptors_raftpp_2eproto[4];
+}
+PROTOBUF_CONSTINIT const uint32_t CompressionType_internal_data_[] = {
     196608u, 0u, };
 // ===================================================================
 
@@ -4119,6 +4222,756 @@ void ConfChangeV2::InternalSwap(ConfChangeV2* PROTOBUF_RESTRICT PROTOBUF_NONNULL
 }
 
 ::google::protobuf::Metadata ConfChangeV2::GetMetadata() const {
+  return ::google::protobuf::Message::GetMetadataImpl(GetClassData()->full());
+}
+// ===================================================================
+
+class RpcHeader::_Internal {
+ public:
+  using HasBits =
+      decltype(::std::declval<RpcHeader>()._impl_._has_bits_);
+  static constexpr ::int32_t kHasBitsOffset =
+      8 * PROTOBUF_FIELD_OFFSET(RpcHeader, _impl_._has_bits_);
+};
+
+RpcHeader::RpcHeader(::google::protobuf::Arena* PROTOBUF_NULLABLE arena)
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+    : ::google::protobuf::Message(arena, RpcHeader_class_data_.base()) {
+#else   // PROTOBUF_CUSTOM_VTABLE
+    : ::google::protobuf::Message(arena) {
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  SharedCtor(arena);
+  // @@protoc_insertion_point(arena_constructor:raftpp.RpcHeader)
+}
+RpcHeader::RpcHeader(
+    ::google::protobuf::Arena* PROTOBUF_NULLABLE arena, const RpcHeader& from)
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+    : ::google::protobuf::Message(arena, RpcHeader_class_data_.base()),
+#else   // PROTOBUF_CUSTOM_VTABLE
+    : ::google::protobuf::Message(arena),
+#endif  // PROTOBUF_CUSTOM_VTABLE
+      _impl_(from._impl_) {
+  _internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(
+      from._internal_metadata_);
+}
+PROTOBUF_NDEBUG_INLINE RpcHeader::Impl_::Impl_(
+    [[maybe_unused]] ::google::protobuf::internal::InternalVisibility visibility,
+    [[maybe_unused]] ::google::protobuf::Arena* PROTOBUF_NULLABLE arena)
+      : _cached_size_{0} {}
+
+inline void RpcHeader::SharedCtor(::_pb::Arena* PROTOBUF_NULLABLE arena) {
+  new (&_impl_) Impl_(internal_visibility(), arena);
+  ::memset(reinterpret_cast<char*>(&_impl_) +
+               offsetof(Impl_, from_node_),
+           0,
+           offsetof(Impl_, msg_type_) -
+               offsetof(Impl_, from_node_) +
+               sizeof(Impl_::msg_type_));
+}
+RpcHeader::~RpcHeader() {
+  // @@protoc_insertion_point(destructor:raftpp.RpcHeader)
+  SharedDtor(*this);
+}
+inline void RpcHeader::SharedDtor(MessageLite& self) {
+  RpcHeader& this_ = static_cast<RpcHeader&>(self);
+  if constexpr (::_pbi::DebugHardenCheckHasBitConsistency()) {
+    this_.CheckHasBitConsistency();
+  }
+  this_._internal_metadata_.Delete<::google::protobuf::UnknownFieldSet>();
+  ABSL_DCHECK(this_.GetArena() == nullptr);
+  this_._impl_.~Impl_();
+}
+
+inline void* PROTOBUF_NONNULL RpcHeader::PlacementNew_(
+    const void* PROTOBUF_NONNULL, void* PROTOBUF_NONNULL mem,
+    ::google::protobuf::Arena* PROTOBUF_NULLABLE arena) {
+  return ::new (mem) RpcHeader(arena);
+}
+constexpr auto RpcHeader::InternalNewImpl_() {
+  return ::google::protobuf::internal::MessageCreator::ZeroInit(sizeof(RpcHeader),
+                                            alignof(RpcHeader));
+}
+constexpr auto RpcHeader::InternalGenerateClassData_() {
+  return ::google::protobuf::internal::ClassDataFull{
+      ::google::protobuf::internal::ClassData{
+          &_RpcHeader_default_instance_._instance,
+          &_table_.header,
+          nullptr,  // OnDemandRegisterArenaDtor
+          nullptr,  // IsInitialized
+          &RpcHeader::MergeImpl,
+          ::google::protobuf::Message::GetNewImpl<RpcHeader>(),
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+          &RpcHeader::SharedDtor,
+          ::google::protobuf::Message::GetClearImpl<RpcHeader>(), &RpcHeader::ByteSizeLong,
+              &RpcHeader::_InternalSerialize,
+#endif  // PROTOBUF_CUSTOM_VTABLE
+          PROTOBUF_FIELD_OFFSET(RpcHeader, _impl_._cached_size_),
+          false,
+      },
+      &RpcHeader::kDescriptorMethods,
+      &descriptor_table_raftpp_2eproto,
+      nullptr,  // tracker
+  };
+}
+
+PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 const
+    ::google::protobuf::internal::ClassDataFull RpcHeader_class_data_ =
+        RpcHeader::InternalGenerateClassData_();
+
+PROTOBUF_ATTRIBUTE_WEAK const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL
+RpcHeader::GetClassData() const {
+  ::google::protobuf::internal::PrefetchToLocalCache(&RpcHeader_class_data_);
+  ::google::protobuf::internal::PrefetchToLocalCache(RpcHeader_class_data_.tc_table);
+  return RpcHeader_class_data_.base();
+}
+PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1
+const ::_pbi::TcParseTable<3, 7, 0, 0, 2>
+RpcHeader::_table_ = {
+  {
+    PROTOBUF_FIELD_OFFSET(RpcHeader, _impl_._has_bits_),
+    0, // no _extensions_
+    7, 56,  // max_field_number, fast_idx_mask
+    offsetof(decltype(_table_), field_lookup_table),
+    4294967168,  // skipmap
+    offsetof(decltype(_table_), field_entries),
+    7,  // num_field_entries
+    0,  // num_aux_entries
+    offsetof(decltype(_table_), field_names),  // no aux_entries
+    RpcHeader_class_data_.base(),
+    nullptr,  // post_loop_handler
+    ::_pbi::TcParser::GenericFallback,  // fallback
+    #ifdef PROTOBUF_PREFETCH_PARSE_TABLE
+    ::_pbi::TcParser::GetTable<::raftpp::RpcHeader>(),  // to_prefetch
+    #endif  // PROTOBUF_PREFETCH_PARSE_TABLE
+  }, {{
+    {::_pbi::TcParser::MiniParse, {}},
+    // uint32 version = 1;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(RpcHeader, _impl_.version_), 2>(),
+     {8, 2, 0,
+      PROTOBUF_FIELD_OFFSET(RpcHeader, _impl_.version_)}},
+    // uint64 from_node = 2;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(RpcHeader, _impl_.from_node_), 0>(),
+     {16, 0, 0,
+      PROTOBUF_FIELD_OFFSET(RpcHeader, _impl_.from_node_)}},
+    // uint64 to_node = 3;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(RpcHeader, _impl_.to_node_), 1>(),
+     {24, 1, 0,
+      PROTOBUF_FIELD_OFFSET(RpcHeader, _impl_.to_node_)}},
+    // uint64 request_id = 4;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(RpcHeader, _impl_.request_id_), 4>(),
+     {32, 4, 0,
+      PROTOBUF_FIELD_OFFSET(RpcHeader, _impl_.request_id_)}},
+    // .raftpp.CompressionType compression = 5;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(RpcHeader, _impl_.compression_), 3>(),
+     {40, 3, 0,
+      PROTOBUF_FIELD_OFFSET(RpcHeader, _impl_.compression_)}},
+    // uint32 payload_size = 6;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(RpcHeader, _impl_.payload_size_), 5>(),
+     {48, 5, 0,
+      PROTOBUF_FIELD_OFFSET(RpcHeader, _impl_.payload_size_)}},
+    // .raftpp.MessageType msg_type = 7;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(RpcHeader, _impl_.msg_type_), 6>(),
+     {56, 6, 0,
+      PROTOBUF_FIELD_OFFSET(RpcHeader, _impl_.msg_type_)}},
+  }}, {{
+    65535, 65535
+  }}, {{
+    // uint32 version = 1;
+    {PROTOBUF_FIELD_OFFSET(RpcHeader, _impl_.version_), _Internal::kHasBitsOffset + 2, 0, (0 | ::_fl::kFcOptional | ::_fl::kUInt32)},
+    // uint64 from_node = 2;
+    {PROTOBUF_FIELD_OFFSET(RpcHeader, _impl_.from_node_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kUInt64)},
+    // uint64 to_node = 3;
+    {PROTOBUF_FIELD_OFFSET(RpcHeader, _impl_.to_node_), _Internal::kHasBitsOffset + 1, 0, (0 | ::_fl::kFcOptional | ::_fl::kUInt64)},
+    // uint64 request_id = 4;
+    {PROTOBUF_FIELD_OFFSET(RpcHeader, _impl_.request_id_), _Internal::kHasBitsOffset + 4, 0, (0 | ::_fl::kFcOptional | ::_fl::kUInt64)},
+    // .raftpp.CompressionType compression = 5;
+    {PROTOBUF_FIELD_OFFSET(RpcHeader, _impl_.compression_), _Internal::kHasBitsOffset + 3, 0, (0 | ::_fl::kFcOptional | ::_fl::kOpenEnum)},
+    // uint32 payload_size = 6;
+    {PROTOBUF_FIELD_OFFSET(RpcHeader, _impl_.payload_size_), _Internal::kHasBitsOffset + 5, 0, (0 | ::_fl::kFcOptional | ::_fl::kUInt32)},
+    // .raftpp.MessageType msg_type = 7;
+    {PROTOBUF_FIELD_OFFSET(RpcHeader, _impl_.msg_type_), _Internal::kHasBitsOffset + 6, 0, (0 | ::_fl::kFcOptional | ::_fl::kOpenEnum)},
+  }},
+  // no aux_entries
+  {{
+  }},
+};
+PROTOBUF_NOINLINE void RpcHeader::Clear() {
+// @@protoc_insertion_point(message_clear_start:raftpp.RpcHeader)
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  ::uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  cached_has_bits = _impl_._has_bits_[0];
+  if (BatchCheckHasBit(cached_has_bits, 0x0000007fU)) {
+    ::memset(&_impl_.from_node_, 0, static_cast<::size_t>(
+        reinterpret_cast<char*>(&_impl_.msg_type_) -
+        reinterpret_cast<char*>(&_impl_.from_node_)) + sizeof(_impl_.msg_type_));
+  }
+  _impl_._has_bits_.Clear();
+  _internal_metadata_.Clear<::google::protobuf::UnknownFieldSet>();
+}
+
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+::uint8_t* PROTOBUF_NONNULL RpcHeader::_InternalSerialize(
+    const ::google::protobuf::MessageLite& base, ::uint8_t* PROTOBUF_NONNULL target,
+    ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream) {
+  const RpcHeader& this_ = static_cast<const RpcHeader&>(base);
+#else   // PROTOBUF_CUSTOM_VTABLE
+::uint8_t* PROTOBUF_NONNULL RpcHeader::_InternalSerialize(
+    ::uint8_t* PROTOBUF_NONNULL target,
+    ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream) const {
+  const RpcHeader& this_ = *this;
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  if constexpr (::_pbi::DebugHardenCheckHasBitConsistency()) {
+    this_.CheckHasBitConsistency();
+  }
+  // @@protoc_insertion_point(serialize_to_array_start:raftpp.RpcHeader)
+  ::uint32_t cached_has_bits = 0;
+  (void)cached_has_bits;
+
+  cached_has_bits = this_._impl_._has_bits_[0];
+  // uint32 version = 1;
+  if (CheckHasBit(cached_has_bits, 0x00000004U)) {
+    if (this_._internal_version() != 0) {
+      target = stream->EnsureSpace(target);
+      target = ::_pbi::WireFormatLite::WriteUInt32ToArray(
+          1, this_._internal_version(), target);
+    }
+  }
+
+  // uint64 from_node = 2;
+  if (CheckHasBit(cached_has_bits, 0x00000001U)) {
+    if (this_._internal_from_node() != 0) {
+      target = stream->EnsureSpace(target);
+      target = ::_pbi::WireFormatLite::WriteUInt64ToArray(
+          2, this_._internal_from_node(), target);
+    }
+  }
+
+  // uint64 to_node = 3;
+  if (CheckHasBit(cached_has_bits, 0x00000002U)) {
+    if (this_._internal_to_node() != 0) {
+      target = stream->EnsureSpace(target);
+      target = ::_pbi::WireFormatLite::WriteUInt64ToArray(
+          3, this_._internal_to_node(), target);
+    }
+  }
+
+  // uint64 request_id = 4;
+  if (CheckHasBit(cached_has_bits, 0x00000010U)) {
+    if (this_._internal_request_id() != 0) {
+      target = stream->EnsureSpace(target);
+      target = ::_pbi::WireFormatLite::WriteUInt64ToArray(
+          4, this_._internal_request_id(), target);
+    }
+  }
+
+  // .raftpp.CompressionType compression = 5;
+  if (CheckHasBit(cached_has_bits, 0x00000008U)) {
+    if (this_._internal_compression() != 0) {
+      target = stream->EnsureSpace(target);
+      target = ::_pbi::WireFormatLite::WriteEnumToArray(
+          5, this_._internal_compression(), target);
+    }
+  }
+
+  // uint32 payload_size = 6;
+  if (CheckHasBit(cached_has_bits, 0x00000020U)) {
+    if (this_._internal_payload_size() != 0) {
+      target = stream->EnsureSpace(target);
+      target = ::_pbi::WireFormatLite::WriteUInt32ToArray(
+          6, this_._internal_payload_size(), target);
+    }
+  }
+
+  // .raftpp.MessageType msg_type = 7;
+  if (CheckHasBit(cached_has_bits, 0x00000040U)) {
+    if (this_._internal_msg_type() != 0) {
+      target = stream->EnsureSpace(target);
+      target = ::_pbi::WireFormatLite::WriteEnumToArray(
+          7, this_._internal_msg_type(), target);
+    }
+  }
+
+  if (ABSL_PREDICT_FALSE(this_._internal_metadata_.have_unknown_fields())) {
+    target =
+        ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
+            this_._internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance), target, stream);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:raftpp.RpcHeader)
+  return target;
+}
+
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+::size_t RpcHeader::ByteSizeLong(const MessageLite& base) {
+  const RpcHeader& this_ = static_cast<const RpcHeader&>(base);
+#else   // PROTOBUF_CUSTOM_VTABLE
+::size_t RpcHeader::ByteSizeLong() const {
+  const RpcHeader& this_ = *this;
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  // @@protoc_insertion_point(message_byte_size_start:raftpp.RpcHeader)
+  ::size_t total_size = 0;
+
+  ::uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void)cached_has_bits;
+
+  ::_pbi::Prefetch5LinesFrom7Lines(&this_);
+  cached_has_bits = this_._impl_._has_bits_[0];
+  if (BatchCheckHasBit(cached_has_bits, 0x0000007fU)) {
+    // uint64 from_node = 2;
+    if (CheckHasBit(cached_has_bits, 0x00000001U)) {
+      if (this_._internal_from_node() != 0) {
+        total_size += ::_pbi::WireFormatLite::UInt64SizePlusOne(
+            this_._internal_from_node());
+      }
+    }
+    // uint64 to_node = 3;
+    if (CheckHasBit(cached_has_bits, 0x00000002U)) {
+      if (this_._internal_to_node() != 0) {
+        total_size += ::_pbi::WireFormatLite::UInt64SizePlusOne(
+            this_._internal_to_node());
+      }
+    }
+    // uint32 version = 1;
+    if (CheckHasBit(cached_has_bits, 0x00000004U)) {
+      if (this_._internal_version() != 0) {
+        total_size += ::_pbi::WireFormatLite::UInt32SizePlusOne(
+            this_._internal_version());
+      }
+    }
+    // .raftpp.CompressionType compression = 5;
+    if (CheckHasBit(cached_has_bits, 0x00000008U)) {
+      if (this_._internal_compression() != 0) {
+        total_size += 1 +
+                      ::_pbi::WireFormatLite::EnumSize(this_._internal_compression());
+      }
+    }
+    // uint64 request_id = 4;
+    if (CheckHasBit(cached_has_bits, 0x00000010U)) {
+      if (this_._internal_request_id() != 0) {
+        total_size += ::_pbi::WireFormatLite::UInt64SizePlusOne(
+            this_._internal_request_id());
+      }
+    }
+    // uint32 payload_size = 6;
+    if (CheckHasBit(cached_has_bits, 0x00000020U)) {
+      if (this_._internal_payload_size() != 0) {
+        total_size += ::_pbi::WireFormatLite::UInt32SizePlusOne(
+            this_._internal_payload_size());
+      }
+    }
+    // .raftpp.MessageType msg_type = 7;
+    if (CheckHasBit(cached_has_bits, 0x00000040U)) {
+      if (this_._internal_msg_type() != 0) {
+        total_size += 1 +
+                      ::_pbi::WireFormatLite::EnumSize(this_._internal_msg_type());
+      }
+    }
+  }
+  return this_.MaybeComputeUnknownFieldsSize(total_size,
+                                             &this_._impl_._cached_size_);
+}
+
+void RpcHeader::MergeImpl(::google::protobuf::MessageLite& to_msg,
+                            const ::google::protobuf::MessageLite& from_msg) {
+   auto* const _this =
+      static_cast<RpcHeader*>(&to_msg);
+  auto& from = static_cast<const RpcHeader&>(from_msg);
+  if constexpr (::_pbi::DebugHardenCheckHasBitConsistency()) {
+    from.CheckHasBitConsistency();
+  }
+  // @@protoc_insertion_point(class_specific_merge_from_start:raftpp.RpcHeader)
+  ABSL_DCHECK_NE(&from, _this);
+  ::uint32_t cached_has_bits = 0;
+  (void)cached_has_bits;
+
+  cached_has_bits = from._impl_._has_bits_[0];
+  if (BatchCheckHasBit(cached_has_bits, 0x0000007fU)) {
+    if (CheckHasBit(cached_has_bits, 0x00000001U)) {
+      if (from._internal_from_node() != 0) {
+        _this->_impl_.from_node_ = from._impl_.from_node_;
+      }
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000002U)) {
+      if (from._internal_to_node() != 0) {
+        _this->_impl_.to_node_ = from._impl_.to_node_;
+      }
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000004U)) {
+      if (from._internal_version() != 0) {
+        _this->_impl_.version_ = from._impl_.version_;
+      }
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000008U)) {
+      if (from._internal_compression() != 0) {
+        _this->_impl_.compression_ = from._impl_.compression_;
+      }
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000010U)) {
+      if (from._internal_request_id() != 0) {
+        _this->_impl_.request_id_ = from._impl_.request_id_;
+      }
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000020U)) {
+      if (from._internal_payload_size() != 0) {
+        _this->_impl_.payload_size_ = from._impl_.payload_size_;
+      }
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000040U)) {
+      if (from._internal_msg_type() != 0) {
+        _this->_impl_.msg_type_ = from._impl_.msg_type_;
+      }
+    }
+  }
+  _this->_impl_._has_bits_[0] |= cached_has_bits;
+  _this->_internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(
+      from._internal_metadata_);
+}
+
+void RpcHeader::CopyFrom(const RpcHeader& from) {
+  // @@protoc_insertion_point(class_specific_copy_from_start:raftpp.RpcHeader)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+
+void RpcHeader::InternalSwap(RpcHeader* PROTOBUF_RESTRICT PROTOBUF_NONNULL other) {
+  using ::std::swap;
+  _internal_metadata_.InternalSwap(&other->_internal_metadata_);
+  swap(_impl_._has_bits_[0], other->_impl_._has_bits_[0]);
+  ::google::protobuf::internal::memswap<
+      PROTOBUF_FIELD_OFFSET(RpcHeader, _impl_.msg_type_)
+      + sizeof(RpcHeader::_impl_.msg_type_)
+      - PROTOBUF_FIELD_OFFSET(RpcHeader, _impl_.from_node_)>(
+          reinterpret_cast<char*>(&_impl_.from_node_),
+          reinterpret_cast<char*>(&other->_impl_.from_node_));
+}
+
+::google::protobuf::Metadata RpcHeader::GetMetadata() const {
+  return ::google::protobuf::Message::GetMetadataImpl(GetClassData()->full());
+}
+// ===================================================================
+
+class RpcHandshake::_Internal {
+ public:
+  using HasBits =
+      decltype(::std::declval<RpcHandshake>()._impl_._has_bits_);
+  static constexpr ::int32_t kHasBitsOffset =
+      8 * PROTOBUF_FIELD_OFFSET(RpcHandshake, _impl_._has_bits_);
+};
+
+RpcHandshake::RpcHandshake(::google::protobuf::Arena* PROTOBUF_NULLABLE arena)
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+    : ::google::protobuf::Message(arena, RpcHandshake_class_data_.base()) {
+#else   // PROTOBUF_CUSTOM_VTABLE
+    : ::google::protobuf::Message(arena) {
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  SharedCtor(arena);
+  // @@protoc_insertion_point(arena_constructor:raftpp.RpcHandshake)
+}
+RpcHandshake::RpcHandshake(
+    ::google::protobuf::Arena* PROTOBUF_NULLABLE arena, const RpcHandshake& from)
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+    : ::google::protobuf::Message(arena, RpcHandshake_class_data_.base()),
+#else   // PROTOBUF_CUSTOM_VTABLE
+    : ::google::protobuf::Message(arena),
+#endif  // PROTOBUF_CUSTOM_VTABLE
+      _impl_(from._impl_) {
+  _internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(
+      from._internal_metadata_);
+}
+PROTOBUF_NDEBUG_INLINE RpcHandshake::Impl_::Impl_(
+    [[maybe_unused]] ::google::protobuf::internal::InternalVisibility visibility,
+    [[maybe_unused]] ::google::protobuf::Arena* PROTOBUF_NULLABLE arena)
+      : _cached_size_{0} {}
+
+inline void RpcHandshake::SharedCtor(::_pb::Arena* PROTOBUF_NULLABLE arena) {
+  new (&_impl_) Impl_(internal_visibility(), arena);
+  ::memset(reinterpret_cast<char*>(&_impl_) +
+               offsetof(Impl_, node_id_),
+           0,
+           offsetof(Impl_, version_) -
+               offsetof(Impl_, node_id_) +
+               sizeof(Impl_::version_));
+}
+RpcHandshake::~RpcHandshake() {
+  // @@protoc_insertion_point(destructor:raftpp.RpcHandshake)
+  SharedDtor(*this);
+}
+inline void RpcHandshake::SharedDtor(MessageLite& self) {
+  RpcHandshake& this_ = static_cast<RpcHandshake&>(self);
+  if constexpr (::_pbi::DebugHardenCheckHasBitConsistency()) {
+    this_.CheckHasBitConsistency();
+  }
+  this_._internal_metadata_.Delete<::google::protobuf::UnknownFieldSet>();
+  ABSL_DCHECK(this_.GetArena() == nullptr);
+  this_._impl_.~Impl_();
+}
+
+inline void* PROTOBUF_NONNULL RpcHandshake::PlacementNew_(
+    const void* PROTOBUF_NONNULL, void* PROTOBUF_NONNULL mem,
+    ::google::protobuf::Arena* PROTOBUF_NULLABLE arena) {
+  return ::new (mem) RpcHandshake(arena);
+}
+constexpr auto RpcHandshake::InternalNewImpl_() {
+  return ::google::protobuf::internal::MessageCreator::ZeroInit(sizeof(RpcHandshake),
+                                            alignof(RpcHandshake));
+}
+constexpr auto RpcHandshake::InternalGenerateClassData_() {
+  return ::google::protobuf::internal::ClassDataFull{
+      ::google::protobuf::internal::ClassData{
+          &_RpcHandshake_default_instance_._instance,
+          &_table_.header,
+          nullptr,  // OnDemandRegisterArenaDtor
+          nullptr,  // IsInitialized
+          &RpcHandshake::MergeImpl,
+          ::google::protobuf::Message::GetNewImpl<RpcHandshake>(),
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+          &RpcHandshake::SharedDtor,
+          ::google::protobuf::Message::GetClearImpl<RpcHandshake>(), &RpcHandshake::ByteSizeLong,
+              &RpcHandshake::_InternalSerialize,
+#endif  // PROTOBUF_CUSTOM_VTABLE
+          PROTOBUF_FIELD_OFFSET(RpcHandshake, _impl_._cached_size_),
+          false,
+      },
+      &RpcHandshake::kDescriptorMethods,
+      &descriptor_table_raftpp_2eproto,
+      nullptr,  // tracker
+  };
+}
+
+PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1 const
+    ::google::protobuf::internal::ClassDataFull RpcHandshake_class_data_ =
+        RpcHandshake::InternalGenerateClassData_();
+
+PROTOBUF_ATTRIBUTE_WEAK const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL
+RpcHandshake::GetClassData() const {
+  ::google::protobuf::internal::PrefetchToLocalCache(&RpcHandshake_class_data_);
+  ::google::protobuf::internal::PrefetchToLocalCache(RpcHandshake_class_data_.tc_table);
+  return RpcHandshake_class_data_.base();
+}
+PROTOBUF_CONSTINIT PROTOBUF_ATTRIBUTE_INIT_PRIORITY1
+const ::_pbi::TcParseTable<2, 3, 0, 0, 2>
+RpcHandshake::_table_ = {
+  {
+    PROTOBUF_FIELD_OFFSET(RpcHandshake, _impl_._has_bits_),
+    0, // no _extensions_
+    3, 24,  // max_field_number, fast_idx_mask
+    offsetof(decltype(_table_), field_lookup_table),
+    4294967288,  // skipmap
+    offsetof(decltype(_table_), field_entries),
+    3,  // num_field_entries
+    0,  // num_aux_entries
+    offsetof(decltype(_table_), field_names),  // no aux_entries
+    RpcHandshake_class_data_.base(),
+    nullptr,  // post_loop_handler
+    ::_pbi::TcParser::GenericFallback,  // fallback
+    #ifdef PROTOBUF_PREFETCH_PARSE_TABLE
+    ::_pbi::TcParser::GetTable<::raftpp::RpcHandshake>(),  // to_prefetch
+    #endif  // PROTOBUF_PREFETCH_PARSE_TABLE
+  }, {{
+    {::_pbi::TcParser::MiniParse, {}},
+    // uint32 version = 1;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint32_t, offsetof(RpcHandshake, _impl_.version_), 2>(),
+     {8, 2, 0,
+      PROTOBUF_FIELD_OFFSET(RpcHandshake, _impl_.version_)}},
+    // uint64 node_id = 2;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(RpcHandshake, _impl_.node_id_), 0>(),
+     {16, 0, 0,
+      PROTOBUF_FIELD_OFFSET(RpcHandshake, _impl_.node_id_)}},
+    // uint64 cluster_id = 3;
+    {::_pbi::TcParser::SingularVarintNoZag1<::uint64_t, offsetof(RpcHandshake, _impl_.cluster_id_), 1>(),
+     {24, 1, 0,
+      PROTOBUF_FIELD_OFFSET(RpcHandshake, _impl_.cluster_id_)}},
+  }}, {{
+    65535, 65535
+  }}, {{
+    // uint32 version = 1;
+    {PROTOBUF_FIELD_OFFSET(RpcHandshake, _impl_.version_), _Internal::kHasBitsOffset + 2, 0, (0 | ::_fl::kFcOptional | ::_fl::kUInt32)},
+    // uint64 node_id = 2;
+    {PROTOBUF_FIELD_OFFSET(RpcHandshake, _impl_.node_id_), _Internal::kHasBitsOffset + 0, 0, (0 | ::_fl::kFcOptional | ::_fl::kUInt64)},
+    // uint64 cluster_id = 3;
+    {PROTOBUF_FIELD_OFFSET(RpcHandshake, _impl_.cluster_id_), _Internal::kHasBitsOffset + 1, 0, (0 | ::_fl::kFcOptional | ::_fl::kUInt64)},
+  }},
+  // no aux_entries
+  {{
+  }},
+};
+PROTOBUF_NOINLINE void RpcHandshake::Clear() {
+// @@protoc_insertion_point(message_clear_start:raftpp.RpcHandshake)
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  ::uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  cached_has_bits = _impl_._has_bits_[0];
+  if (BatchCheckHasBit(cached_has_bits, 0x00000007U)) {
+    ::memset(&_impl_.node_id_, 0, static_cast<::size_t>(
+        reinterpret_cast<char*>(&_impl_.version_) -
+        reinterpret_cast<char*>(&_impl_.node_id_)) + sizeof(_impl_.version_));
+  }
+  _impl_._has_bits_.Clear();
+  _internal_metadata_.Clear<::google::protobuf::UnknownFieldSet>();
+}
+
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+::uint8_t* PROTOBUF_NONNULL RpcHandshake::_InternalSerialize(
+    const ::google::protobuf::MessageLite& base, ::uint8_t* PROTOBUF_NONNULL target,
+    ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream) {
+  const RpcHandshake& this_ = static_cast<const RpcHandshake&>(base);
+#else   // PROTOBUF_CUSTOM_VTABLE
+::uint8_t* PROTOBUF_NONNULL RpcHandshake::_InternalSerialize(
+    ::uint8_t* PROTOBUF_NONNULL target,
+    ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream) const {
+  const RpcHandshake& this_ = *this;
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  if constexpr (::_pbi::DebugHardenCheckHasBitConsistency()) {
+    this_.CheckHasBitConsistency();
+  }
+  // @@protoc_insertion_point(serialize_to_array_start:raftpp.RpcHandshake)
+  ::uint32_t cached_has_bits = 0;
+  (void)cached_has_bits;
+
+  cached_has_bits = this_._impl_._has_bits_[0];
+  // uint32 version = 1;
+  if (CheckHasBit(cached_has_bits, 0x00000004U)) {
+    if (this_._internal_version() != 0) {
+      target = stream->EnsureSpace(target);
+      target = ::_pbi::WireFormatLite::WriteUInt32ToArray(
+          1, this_._internal_version(), target);
+    }
+  }
+
+  // uint64 node_id = 2;
+  if (CheckHasBit(cached_has_bits, 0x00000001U)) {
+    if (this_._internal_node_id() != 0) {
+      target = stream->EnsureSpace(target);
+      target = ::_pbi::WireFormatLite::WriteUInt64ToArray(
+          2, this_._internal_node_id(), target);
+    }
+  }
+
+  // uint64 cluster_id = 3;
+  if (CheckHasBit(cached_has_bits, 0x00000002U)) {
+    if (this_._internal_cluster_id() != 0) {
+      target = stream->EnsureSpace(target);
+      target = ::_pbi::WireFormatLite::WriteUInt64ToArray(
+          3, this_._internal_cluster_id(), target);
+    }
+  }
+
+  if (ABSL_PREDICT_FALSE(this_._internal_metadata_.have_unknown_fields())) {
+    target =
+        ::_pbi::WireFormat::InternalSerializeUnknownFieldsToArray(
+            this_._internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance), target, stream);
+  }
+  // @@protoc_insertion_point(serialize_to_array_end:raftpp.RpcHandshake)
+  return target;
+}
+
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+::size_t RpcHandshake::ByteSizeLong(const MessageLite& base) {
+  const RpcHandshake& this_ = static_cast<const RpcHandshake&>(base);
+#else   // PROTOBUF_CUSTOM_VTABLE
+::size_t RpcHandshake::ByteSizeLong() const {
+  const RpcHandshake& this_ = *this;
+#endif  // PROTOBUF_CUSTOM_VTABLE
+  // @@protoc_insertion_point(message_byte_size_start:raftpp.RpcHandshake)
+  ::size_t total_size = 0;
+
+  ::uint32_t cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void)cached_has_bits;
+
+  ::_pbi::Prefetch5LinesFrom7Lines(&this_);
+  cached_has_bits = this_._impl_._has_bits_[0];
+  if (BatchCheckHasBit(cached_has_bits, 0x00000007U)) {
+    // uint64 node_id = 2;
+    if (CheckHasBit(cached_has_bits, 0x00000001U)) {
+      if (this_._internal_node_id() != 0) {
+        total_size += ::_pbi::WireFormatLite::UInt64SizePlusOne(
+            this_._internal_node_id());
+      }
+    }
+    // uint64 cluster_id = 3;
+    if (CheckHasBit(cached_has_bits, 0x00000002U)) {
+      if (this_._internal_cluster_id() != 0) {
+        total_size += ::_pbi::WireFormatLite::UInt64SizePlusOne(
+            this_._internal_cluster_id());
+      }
+    }
+    // uint32 version = 1;
+    if (CheckHasBit(cached_has_bits, 0x00000004U)) {
+      if (this_._internal_version() != 0) {
+        total_size += ::_pbi::WireFormatLite::UInt32SizePlusOne(
+            this_._internal_version());
+      }
+    }
+  }
+  return this_.MaybeComputeUnknownFieldsSize(total_size,
+                                             &this_._impl_._cached_size_);
+}
+
+void RpcHandshake::MergeImpl(::google::protobuf::MessageLite& to_msg,
+                            const ::google::protobuf::MessageLite& from_msg) {
+   auto* const _this =
+      static_cast<RpcHandshake*>(&to_msg);
+  auto& from = static_cast<const RpcHandshake&>(from_msg);
+  if constexpr (::_pbi::DebugHardenCheckHasBitConsistency()) {
+    from.CheckHasBitConsistency();
+  }
+  // @@protoc_insertion_point(class_specific_merge_from_start:raftpp.RpcHandshake)
+  ABSL_DCHECK_NE(&from, _this);
+  ::uint32_t cached_has_bits = 0;
+  (void)cached_has_bits;
+
+  cached_has_bits = from._impl_._has_bits_[0];
+  if (BatchCheckHasBit(cached_has_bits, 0x00000007U)) {
+    if (CheckHasBit(cached_has_bits, 0x00000001U)) {
+      if (from._internal_node_id() != 0) {
+        _this->_impl_.node_id_ = from._impl_.node_id_;
+      }
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000002U)) {
+      if (from._internal_cluster_id() != 0) {
+        _this->_impl_.cluster_id_ = from._impl_.cluster_id_;
+      }
+    }
+    if (CheckHasBit(cached_has_bits, 0x00000004U)) {
+      if (from._internal_version() != 0) {
+        _this->_impl_.version_ = from._impl_.version_;
+      }
+    }
+  }
+  _this->_impl_._has_bits_[0] |= cached_has_bits;
+  _this->_internal_metadata_.MergeFrom<::google::protobuf::UnknownFieldSet>(
+      from._internal_metadata_);
+}
+
+void RpcHandshake::CopyFrom(const RpcHandshake& from) {
+  // @@protoc_insertion_point(class_specific_copy_from_start:raftpp.RpcHandshake)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+
+void RpcHandshake::InternalSwap(RpcHandshake* PROTOBUF_RESTRICT PROTOBUF_NONNULL other) {
+  using ::std::swap;
+  _internal_metadata_.InternalSwap(&other->_internal_metadata_);
+  swap(_impl_._has_bits_[0], other->_impl_._has_bits_[0]);
+  ::google::protobuf::internal::memswap<
+      PROTOBUF_FIELD_OFFSET(RpcHandshake, _impl_.version_)
+      + sizeof(RpcHandshake::_impl_.version_)
+      - PROTOBUF_FIELD_OFFSET(RpcHandshake, _impl_.node_id_)>(
+          reinterpret_cast<char*>(&_impl_.node_id_),
+          reinterpret_cast<char*>(&other->_impl_.node_id_));
+}
+
+::google::protobuf::Metadata RpcHandshake::GetMetadata() const {
   return ::google::protobuf::Message::GetMetadataImpl(GetClassData()->full());
 }
 // @@protoc_insertion_point(namespace_scope)

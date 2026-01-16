@@ -54,6 +54,8 @@ extern "C" {
 extern const ::google::protobuf::internal::DescriptorTable descriptor_table_raftpp_2eproto;
 }  // extern "C"
 namespace raftpp {
+enum CompressionType : int;
+extern const uint32_t CompressionType_internal_data_[];
 enum ConfChangeTransition : int;
 extern const uint32_t ConfChangeTransition_internal_data_[];
 enum ConfChangeType : int;
@@ -90,6 +92,14 @@ class Message;
 struct MessageDefaultTypeInternal;
 extern MessageDefaultTypeInternal _Message_default_instance_;
 extern const ::google::protobuf::internal::ClassDataFull Message_class_data_;
+class RpcHandshake;
+struct RpcHandshakeDefaultTypeInternal;
+extern RpcHandshakeDefaultTypeInternal _RpcHandshake_default_instance_;
+extern const ::google::protobuf::internal::ClassDataFull RpcHandshake_class_data_;
+class RpcHeader;
+struct RpcHeaderDefaultTypeInternal;
+extern RpcHeaderDefaultTypeInternal _RpcHeader_default_instance_;
+extern const ::google::protobuf::internal::ClassDataFull RpcHeader_class_data_;
 class Snapshot;
 struct SnapshotDefaultTypeInternal;
 extern SnapshotDefaultTypeInternal _Snapshot_default_instance_;
@@ -101,6 +111,9 @@ extern const ::google::protobuf::internal::ClassDataFull SnapshotMetadata_class_
 }  // namespace raftpp
 namespace google {
 namespace protobuf {
+template <>
+internal::EnumTraitsT<::raftpp::CompressionType_internal_data_>
+    internal::EnumTraitsImpl::value<::raftpp::CompressionType>;
 template <>
 internal::EnumTraitsT<::raftpp::ConfChangeTransition_internal_data_>
     internal::EnumTraitsImpl::value<::raftpp::ConfChangeTransition>;
@@ -281,10 +294,523 @@ inline bool ConfChangeType_Parse(
   return ::google::protobuf::internal::ParseNamedEnum<ConfChangeType>(ConfChangeType_descriptor(), name,
                                            value);
 }
+enum CompressionType : int {
+  COMPRESSION_NONE = 0,
+  COMPRESSION_LZ4 = 1,
+  COMPRESSION_ZSTD = 2,
+  CompressionType_INT_MIN_SENTINEL_DO_NOT_USE_ =
+      ::std::numeric_limits<::int32_t>::min(),
+  CompressionType_INT_MAX_SENTINEL_DO_NOT_USE_ =
+      ::std::numeric_limits<::int32_t>::max(),
+};
+
+extern const uint32_t CompressionType_internal_data_[];
+inline constexpr CompressionType CompressionType_MIN =
+    static_cast<CompressionType>(0);
+inline constexpr CompressionType CompressionType_MAX =
+    static_cast<CompressionType>(2);
+inline bool CompressionType_IsValid(int value) {
+  return 0 <= value && value <= 2;
+}
+inline constexpr int CompressionType_ARRAYSIZE = 2 + 1;
+const ::google::protobuf::EnumDescriptor* PROTOBUF_NONNULL CompressionType_descriptor();
+template <typename T>
+const ::std::string& CompressionType_Name(T value) {
+  static_assert(::std::is_same<T, CompressionType>::value ||
+                    ::std::is_integral<T>::value,
+                "Incorrect type passed to CompressionType_Name().");
+  return CompressionType_Name(static_cast<CompressionType>(value));
+}
+template <>
+inline const ::std::string& CompressionType_Name(CompressionType value) {
+  return ::google::protobuf::internal::NameOfDenseEnum<CompressionType_descriptor, 0, 2>(
+      static_cast<int>(value));
+}
+inline bool CompressionType_Parse(
+    ::absl::string_view name, CompressionType* PROTOBUF_NONNULL value) {
+  return ::google::protobuf::internal::ParseNamedEnum<CompressionType>(CompressionType_descriptor(), name,
+                                           value);
+}
 
 // ===================================================================
 
 
+// -------------------------------------------------------------------
+
+class RpcHeader final : public ::google::protobuf::Message
+/* @@protoc_insertion_point(class_definition:raftpp.RpcHeader) */ {
+ public:
+  inline RpcHeader() : RpcHeader(nullptr) {}
+  ~RpcHeader() PROTOBUF_FINAL;
+
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+  void operator delete(RpcHeader* PROTOBUF_NONNULL msg, ::std::destroying_delete_t) {
+    SharedDtor(*msg);
+    ::google::protobuf::internal::SizedDelete(msg, sizeof(RpcHeader));
+  }
+#endif
+
+  template <typename = void>
+  explicit PROTOBUF_CONSTEXPR RpcHeader(::google::protobuf::internal::ConstantInitialized);
+
+  inline RpcHeader(const RpcHeader& from) : RpcHeader(nullptr, from) {}
+  inline RpcHeader(RpcHeader&& from) noexcept
+      : RpcHeader(nullptr, ::std::move(from)) {}
+  inline RpcHeader& operator=(const RpcHeader& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline RpcHeader& operator=(RpcHeader&& from) noexcept {
+    if (this == &from) return *this;
+    if (::google::protobuf::internal::CanMoveWithInternalSwap(GetArena(), from.GetArena())) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const
+      ABSL_ATTRIBUTE_LIFETIME_BOUND {
+    return _internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance);
+  }
+  inline ::google::protobuf::UnknownFieldSet* PROTOBUF_NONNULL mutable_unknown_fields()
+      ABSL_ATTRIBUTE_LIFETIME_BOUND {
+    return _internal_metadata_.mutable_unknown_fields<::google::protobuf::UnknownFieldSet>();
+  }
+
+  static const ::google::protobuf::Descriptor* PROTOBUF_NONNULL descriptor() {
+    return GetDescriptor();
+  }
+  static const ::google::protobuf::Descriptor* PROTOBUF_NONNULL GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::google::protobuf::Reflection* PROTOBUF_NONNULL GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const RpcHeader& default_instance() {
+    return *reinterpret_cast<const RpcHeader*>(
+        &_RpcHeader_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages = 9;
+  friend void swap(RpcHeader& a, RpcHeader& b) { a.Swap(&b); }
+  inline void Swap(RpcHeader* PROTOBUF_NONNULL other) {
+    if (other == this) return;
+    if (::google::protobuf::internal::CanUseInternalSwap(GetArena(), other->GetArena())) {
+      InternalSwap(other);
+    } else {
+      ::google::protobuf::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(RpcHeader* PROTOBUF_NONNULL other) {
+    if (other == this) return;
+    ABSL_DCHECK(GetArena() == other->GetArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  RpcHeader* PROTOBUF_NONNULL New(::google::protobuf::Arena* PROTOBUF_NULLABLE arena = nullptr) const {
+    return ::google::protobuf::Message::DefaultConstruct<RpcHeader>(arena);
+  }
+  using ::google::protobuf::Message::CopyFrom;
+  void CopyFrom(const RpcHeader& from);
+  using ::google::protobuf::Message::MergeFrom;
+  void MergeFrom(const RpcHeader& from) { RpcHeader::MergeImpl(*this, from); }
+
+  private:
+  static void MergeImpl(::google::protobuf::MessageLite& to_msg,
+                        const ::google::protobuf::MessageLite& from_msg);
+
+  public:
+  bool IsInitialized() const {
+    return true;
+  }
+  ABSL_ATTRIBUTE_REINITIALIZES void Clear() PROTOBUF_FINAL;
+  #if defined(PROTOBUF_CUSTOM_VTABLE)
+  private:
+  static ::size_t ByteSizeLong(const ::google::protobuf::MessageLite& msg);
+  static ::uint8_t* PROTOBUF_NONNULL _InternalSerialize(
+      const ::google::protobuf::MessageLite& msg, ::uint8_t* PROTOBUF_NONNULL target,
+      ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream);
+
+  public:
+  ::size_t ByteSizeLong() const { return ByteSizeLong(*this); }
+  ::uint8_t* PROTOBUF_NONNULL _InternalSerialize(
+      ::uint8_t* PROTOBUF_NONNULL target,
+      ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream) const {
+    return _InternalSerialize(*this, target, stream);
+  }
+  #else   // PROTOBUF_CUSTOM_VTABLE
+  ::size_t ByteSizeLong() const final;
+  ::uint8_t* PROTOBUF_NONNULL _InternalSerialize(
+      ::uint8_t* PROTOBUF_NONNULL target,
+      ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream) const final;
+  #endif  // PROTOBUF_CUSTOM_VTABLE
+  int GetCachedSize() const { return _impl_._cached_size_.Get(); }
+
+  private:
+  void SharedCtor(::google::protobuf::Arena* PROTOBUF_NULLABLE arena);
+  static void SharedDtor(MessageLite& self);
+  void InternalSwap(RpcHeader* PROTOBUF_NONNULL other);
+ private:
+  template <typename T>
+  friend ::absl::string_view(::google::protobuf::internal::GetAnyMessageName)();
+  static ::absl::string_view FullMessageName() { return "raftpp.RpcHeader"; }
+
+  explicit RpcHeader(::google::protobuf::Arena* PROTOBUF_NULLABLE arena);
+  RpcHeader(::google::protobuf::Arena* PROTOBUF_NULLABLE arena, const RpcHeader& from);
+  RpcHeader(
+      ::google::protobuf::Arena* PROTOBUF_NULLABLE arena, RpcHeader&& from) noexcept
+      : RpcHeader(arena) {
+    *this = ::std::move(from);
+  }
+  const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL GetClassData() const PROTOBUF_FINAL;
+  static void* PROTOBUF_NONNULL PlacementNew_(
+      const void* PROTOBUF_NONNULL, void* PROTOBUF_NONNULL mem,
+      ::google::protobuf::Arena* PROTOBUF_NULLABLE arena);
+  static constexpr auto InternalNewImpl_();
+
+ public:
+  static constexpr auto InternalGenerateClassData_();
+
+  ::google::protobuf::Metadata GetMetadata() const;
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+  enum : int {
+    kFromNodeFieldNumber = 2,
+    kToNodeFieldNumber = 3,
+    kVersionFieldNumber = 1,
+    kCompressionFieldNumber = 5,
+    kRequestIdFieldNumber = 4,
+    kPayloadSizeFieldNumber = 6,
+    kMsgTypeFieldNumber = 7,
+  };
+  // uint64 from_node = 2;
+  void clear_from_node() ;
+  ::uint64_t from_node() const;
+  void set_from_node(::uint64_t value);
+
+  private:
+  ::uint64_t _internal_from_node() const;
+  void _internal_set_from_node(::uint64_t value);
+
+  public:
+  // uint64 to_node = 3;
+  void clear_to_node() ;
+  ::uint64_t to_node() const;
+  void set_to_node(::uint64_t value);
+
+  private:
+  ::uint64_t _internal_to_node() const;
+  void _internal_set_to_node(::uint64_t value);
+
+  public:
+  // uint32 version = 1;
+  void clear_version() ;
+  ::uint32_t version() const;
+  void set_version(::uint32_t value);
+
+  private:
+  ::uint32_t _internal_version() const;
+  void _internal_set_version(::uint32_t value);
+
+  public:
+  // .raftpp.CompressionType compression = 5;
+  void clear_compression() ;
+  ::raftpp::CompressionType compression() const;
+  void set_compression(::raftpp::CompressionType value);
+
+  private:
+  ::raftpp::CompressionType _internal_compression() const;
+  void _internal_set_compression(::raftpp::CompressionType value);
+
+  public:
+  // uint64 request_id = 4;
+  void clear_request_id() ;
+  ::uint64_t request_id() const;
+  void set_request_id(::uint64_t value);
+
+  private:
+  ::uint64_t _internal_request_id() const;
+  void _internal_set_request_id(::uint64_t value);
+
+  public:
+  // uint32 payload_size = 6;
+  void clear_payload_size() ;
+  ::uint32_t payload_size() const;
+  void set_payload_size(::uint32_t value);
+
+  private:
+  ::uint32_t _internal_payload_size() const;
+  void _internal_set_payload_size(::uint32_t value);
+
+  public:
+  // .raftpp.MessageType msg_type = 7;
+  void clear_msg_type() ;
+  ::raftpp::MessageType msg_type() const;
+  void set_msg_type(::raftpp::MessageType value);
+
+  private:
+  ::raftpp::MessageType _internal_msg_type() const;
+  void _internal_set_msg_type(::raftpp::MessageType value);
+
+  public:
+  // @@protoc_insertion_point(class_scope:raftpp.RpcHeader)
+ private:
+  class _Internal;
+  friend class ::google::protobuf::internal::TcParser;
+  static const ::google::protobuf::internal::TcParseTable<3, 7,
+                                   0, 0,
+                                   2>
+      _table_;
+
+  friend class ::google::protobuf::MessageLite;
+  friend class ::google::protobuf::Arena;
+  template <typename T>
+  friend class ::google::protobuf::Arena::InternalHelper;
+  using InternalArenaConstructable_ = void;
+  using DestructorSkippable_ = void;
+  struct Impl_ {
+    inline explicit constexpr Impl_(::google::protobuf::internal::ConstantInitialized) noexcept;
+    inline explicit Impl_(
+        ::google::protobuf::internal::InternalVisibility visibility,
+        ::google::protobuf::Arena* PROTOBUF_NULLABLE arena);
+    inline explicit Impl_(
+        ::google::protobuf::internal::InternalVisibility visibility,
+        ::google::protobuf::Arena* PROTOBUF_NULLABLE arena, const Impl_& from,
+        const RpcHeader& from_msg);
+    ::google::protobuf::internal::HasBits<1> _has_bits_;
+    ::google::protobuf::internal::CachedSize _cached_size_;
+    ::uint64_t from_node_;
+    ::uint64_t to_node_;
+    ::uint32_t version_;
+    int compression_;
+    ::uint64_t request_id_;
+    ::uint32_t payload_size_;
+    int msg_type_;
+    PROTOBUF_TSAN_DECLARE_MEMBER
+  };
+  union { Impl_ _impl_; };
+  friend struct ::TableStruct_raftpp_2eproto;
+};
+
+extern const ::google::protobuf::internal::ClassDataFull RpcHeader_class_data_;
+// -------------------------------------------------------------------
+
+class RpcHandshake final : public ::google::protobuf::Message
+/* @@protoc_insertion_point(class_definition:raftpp.RpcHandshake) */ {
+ public:
+  inline RpcHandshake() : RpcHandshake(nullptr) {}
+  ~RpcHandshake() PROTOBUF_FINAL;
+
+#if defined(PROTOBUF_CUSTOM_VTABLE)
+  void operator delete(RpcHandshake* PROTOBUF_NONNULL msg, ::std::destroying_delete_t) {
+    SharedDtor(*msg);
+    ::google::protobuf::internal::SizedDelete(msg, sizeof(RpcHandshake));
+  }
+#endif
+
+  template <typename = void>
+  explicit PROTOBUF_CONSTEXPR RpcHandshake(::google::protobuf::internal::ConstantInitialized);
+
+  inline RpcHandshake(const RpcHandshake& from) : RpcHandshake(nullptr, from) {}
+  inline RpcHandshake(RpcHandshake&& from) noexcept
+      : RpcHandshake(nullptr, ::std::move(from)) {}
+  inline RpcHandshake& operator=(const RpcHandshake& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  inline RpcHandshake& operator=(RpcHandshake&& from) noexcept {
+    if (this == &from) return *this;
+    if (::google::protobuf::internal::CanMoveWithInternalSwap(GetArena(), from.GetArena())) {
+      InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+
+  inline const ::google::protobuf::UnknownFieldSet& unknown_fields() const
+      ABSL_ATTRIBUTE_LIFETIME_BOUND {
+    return _internal_metadata_.unknown_fields<::google::protobuf::UnknownFieldSet>(::google::protobuf::UnknownFieldSet::default_instance);
+  }
+  inline ::google::protobuf::UnknownFieldSet* PROTOBUF_NONNULL mutable_unknown_fields()
+      ABSL_ATTRIBUTE_LIFETIME_BOUND {
+    return _internal_metadata_.mutable_unknown_fields<::google::protobuf::UnknownFieldSet>();
+  }
+
+  static const ::google::protobuf::Descriptor* PROTOBUF_NONNULL descriptor() {
+    return GetDescriptor();
+  }
+  static const ::google::protobuf::Descriptor* PROTOBUF_NONNULL GetDescriptor() {
+    return default_instance().GetMetadata().descriptor;
+  }
+  static const ::google::protobuf::Reflection* PROTOBUF_NONNULL GetReflection() {
+    return default_instance().GetMetadata().reflection;
+  }
+  static const RpcHandshake& default_instance() {
+    return *reinterpret_cast<const RpcHandshake*>(
+        &_RpcHandshake_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages = 10;
+  friend void swap(RpcHandshake& a, RpcHandshake& b) { a.Swap(&b); }
+  inline void Swap(RpcHandshake* PROTOBUF_NONNULL other) {
+    if (other == this) return;
+    if (::google::protobuf::internal::CanUseInternalSwap(GetArena(), other->GetArena())) {
+      InternalSwap(other);
+    } else {
+      ::google::protobuf::internal::GenericSwap(this, other);
+    }
+  }
+  void UnsafeArenaSwap(RpcHandshake* PROTOBUF_NONNULL other) {
+    if (other == this) return;
+    ABSL_DCHECK(GetArena() == other->GetArena());
+    InternalSwap(other);
+  }
+
+  // implements Message ----------------------------------------------
+
+  RpcHandshake* PROTOBUF_NONNULL New(::google::protobuf::Arena* PROTOBUF_NULLABLE arena = nullptr) const {
+    return ::google::protobuf::Message::DefaultConstruct<RpcHandshake>(arena);
+  }
+  using ::google::protobuf::Message::CopyFrom;
+  void CopyFrom(const RpcHandshake& from);
+  using ::google::protobuf::Message::MergeFrom;
+  void MergeFrom(const RpcHandshake& from) { RpcHandshake::MergeImpl(*this, from); }
+
+  private:
+  static void MergeImpl(::google::protobuf::MessageLite& to_msg,
+                        const ::google::protobuf::MessageLite& from_msg);
+
+  public:
+  bool IsInitialized() const {
+    return true;
+  }
+  ABSL_ATTRIBUTE_REINITIALIZES void Clear() PROTOBUF_FINAL;
+  #if defined(PROTOBUF_CUSTOM_VTABLE)
+  private:
+  static ::size_t ByteSizeLong(const ::google::protobuf::MessageLite& msg);
+  static ::uint8_t* PROTOBUF_NONNULL _InternalSerialize(
+      const ::google::protobuf::MessageLite& msg, ::uint8_t* PROTOBUF_NONNULL target,
+      ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream);
+
+  public:
+  ::size_t ByteSizeLong() const { return ByteSizeLong(*this); }
+  ::uint8_t* PROTOBUF_NONNULL _InternalSerialize(
+      ::uint8_t* PROTOBUF_NONNULL target,
+      ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream) const {
+    return _InternalSerialize(*this, target, stream);
+  }
+  #else   // PROTOBUF_CUSTOM_VTABLE
+  ::size_t ByteSizeLong() const final;
+  ::uint8_t* PROTOBUF_NONNULL _InternalSerialize(
+      ::uint8_t* PROTOBUF_NONNULL target,
+      ::google::protobuf::io::EpsCopyOutputStream* PROTOBUF_NONNULL stream) const final;
+  #endif  // PROTOBUF_CUSTOM_VTABLE
+  int GetCachedSize() const { return _impl_._cached_size_.Get(); }
+
+  private:
+  void SharedCtor(::google::protobuf::Arena* PROTOBUF_NULLABLE arena);
+  static void SharedDtor(MessageLite& self);
+  void InternalSwap(RpcHandshake* PROTOBUF_NONNULL other);
+ private:
+  template <typename T>
+  friend ::absl::string_view(::google::protobuf::internal::GetAnyMessageName)();
+  static ::absl::string_view FullMessageName() { return "raftpp.RpcHandshake"; }
+
+  explicit RpcHandshake(::google::protobuf::Arena* PROTOBUF_NULLABLE arena);
+  RpcHandshake(::google::protobuf::Arena* PROTOBUF_NULLABLE arena, const RpcHandshake& from);
+  RpcHandshake(
+      ::google::protobuf::Arena* PROTOBUF_NULLABLE arena, RpcHandshake&& from) noexcept
+      : RpcHandshake(arena) {
+    *this = ::std::move(from);
+  }
+  const ::google::protobuf::internal::ClassData* PROTOBUF_NONNULL GetClassData() const PROTOBUF_FINAL;
+  static void* PROTOBUF_NONNULL PlacementNew_(
+      const void* PROTOBUF_NONNULL, void* PROTOBUF_NONNULL mem,
+      ::google::protobuf::Arena* PROTOBUF_NULLABLE arena);
+  static constexpr auto InternalNewImpl_();
+
+ public:
+  static constexpr auto InternalGenerateClassData_();
+
+  ::google::protobuf::Metadata GetMetadata() const;
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+  enum : int {
+    kNodeIdFieldNumber = 2,
+    kClusterIdFieldNumber = 3,
+    kVersionFieldNumber = 1,
+  };
+  // uint64 node_id = 2;
+  void clear_node_id() ;
+  ::uint64_t node_id() const;
+  void set_node_id(::uint64_t value);
+
+  private:
+  ::uint64_t _internal_node_id() const;
+  void _internal_set_node_id(::uint64_t value);
+
+  public:
+  // uint64 cluster_id = 3;
+  void clear_cluster_id() ;
+  ::uint64_t cluster_id() const;
+  void set_cluster_id(::uint64_t value);
+
+  private:
+  ::uint64_t _internal_cluster_id() const;
+  void _internal_set_cluster_id(::uint64_t value);
+
+  public:
+  // uint32 version = 1;
+  void clear_version() ;
+  ::uint32_t version() const;
+  void set_version(::uint32_t value);
+
+  private:
+  ::uint32_t _internal_version() const;
+  void _internal_set_version(::uint32_t value);
+
+  public:
+  // @@protoc_insertion_point(class_scope:raftpp.RpcHandshake)
+ private:
+  class _Internal;
+  friend class ::google::protobuf::internal::TcParser;
+  static const ::google::protobuf::internal::TcParseTable<2, 3,
+                                   0, 0,
+                                   2>
+      _table_;
+
+  friend class ::google::protobuf::MessageLite;
+  friend class ::google::protobuf::Arena;
+  template <typename T>
+  friend class ::google::protobuf::Arena::InternalHelper;
+  using InternalArenaConstructable_ = void;
+  using DestructorSkippable_ = void;
+  struct Impl_ {
+    inline explicit constexpr Impl_(::google::protobuf::internal::ConstantInitialized) noexcept;
+    inline explicit Impl_(
+        ::google::protobuf::internal::InternalVisibility visibility,
+        ::google::protobuf::Arena* PROTOBUF_NULLABLE arena);
+    inline explicit Impl_(
+        ::google::protobuf::internal::InternalVisibility visibility,
+        ::google::protobuf::Arena* PROTOBUF_NULLABLE arena, const Impl_& from,
+        const RpcHandshake& from_msg);
+    ::google::protobuf::internal::HasBits<1> _has_bits_;
+    ::google::protobuf::internal::CachedSize _cached_size_;
+    ::uint64_t node_id_;
+    ::uint64_t cluster_id_;
+    ::uint32_t version_;
+    PROTOBUF_TSAN_DECLARE_MEMBER
+  };
+  union { Impl_ _impl_; };
+  friend struct ::TableStruct_raftpp_2eproto;
+};
+
+extern const ::google::protobuf::internal::ClassDataFull RpcHandshake_class_data_;
 // -------------------------------------------------------------------
 
 class HardState final : public ::google::protobuf::Message
@@ -4209,6 +4735,264 @@ inline void ConfChangeV2::set_allocated_context(::std::string* PROTOBUF_NULLABLE
   // @@protoc_insertion_point(field_set_allocated:raftpp.ConfChangeV2.context)
 }
 
+// -------------------------------------------------------------------
+
+// RpcHeader
+
+// uint32 version = 1;
+inline void RpcHeader::clear_version() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.version_ = 0u;
+  ClearHasBit(_impl_._has_bits_[0],
+                  0x00000004U);
+}
+inline ::uint32_t RpcHeader::version() const {
+  // @@protoc_insertion_point(field_get:raftpp.RpcHeader.version)
+  return _internal_version();
+}
+inline void RpcHeader::set_version(::uint32_t value) {
+  _internal_set_version(value);
+  SetHasBit(_impl_._has_bits_[0], 0x00000004U);
+  // @@protoc_insertion_point(field_set:raftpp.RpcHeader.version)
+}
+inline ::uint32_t RpcHeader::_internal_version() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return _impl_.version_;
+}
+inline void RpcHeader::_internal_set_version(::uint32_t value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.version_ = value;
+}
+
+// uint64 from_node = 2;
+inline void RpcHeader::clear_from_node() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.from_node_ = ::uint64_t{0u};
+  ClearHasBit(_impl_._has_bits_[0],
+                  0x00000001U);
+}
+inline ::uint64_t RpcHeader::from_node() const {
+  // @@protoc_insertion_point(field_get:raftpp.RpcHeader.from_node)
+  return _internal_from_node();
+}
+inline void RpcHeader::set_from_node(::uint64_t value) {
+  _internal_set_from_node(value);
+  SetHasBit(_impl_._has_bits_[0], 0x00000001U);
+  // @@protoc_insertion_point(field_set:raftpp.RpcHeader.from_node)
+}
+inline ::uint64_t RpcHeader::_internal_from_node() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return _impl_.from_node_;
+}
+inline void RpcHeader::_internal_set_from_node(::uint64_t value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.from_node_ = value;
+}
+
+// uint64 to_node = 3;
+inline void RpcHeader::clear_to_node() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.to_node_ = ::uint64_t{0u};
+  ClearHasBit(_impl_._has_bits_[0],
+                  0x00000002U);
+}
+inline ::uint64_t RpcHeader::to_node() const {
+  // @@protoc_insertion_point(field_get:raftpp.RpcHeader.to_node)
+  return _internal_to_node();
+}
+inline void RpcHeader::set_to_node(::uint64_t value) {
+  _internal_set_to_node(value);
+  SetHasBit(_impl_._has_bits_[0], 0x00000002U);
+  // @@protoc_insertion_point(field_set:raftpp.RpcHeader.to_node)
+}
+inline ::uint64_t RpcHeader::_internal_to_node() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return _impl_.to_node_;
+}
+inline void RpcHeader::_internal_set_to_node(::uint64_t value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.to_node_ = value;
+}
+
+// uint64 request_id = 4;
+inline void RpcHeader::clear_request_id() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.request_id_ = ::uint64_t{0u};
+  ClearHasBit(_impl_._has_bits_[0],
+                  0x00000010U);
+}
+inline ::uint64_t RpcHeader::request_id() const {
+  // @@protoc_insertion_point(field_get:raftpp.RpcHeader.request_id)
+  return _internal_request_id();
+}
+inline void RpcHeader::set_request_id(::uint64_t value) {
+  _internal_set_request_id(value);
+  SetHasBit(_impl_._has_bits_[0], 0x00000010U);
+  // @@protoc_insertion_point(field_set:raftpp.RpcHeader.request_id)
+}
+inline ::uint64_t RpcHeader::_internal_request_id() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return _impl_.request_id_;
+}
+inline void RpcHeader::_internal_set_request_id(::uint64_t value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.request_id_ = value;
+}
+
+// .raftpp.CompressionType compression = 5;
+inline void RpcHeader::clear_compression() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.compression_ = 0;
+  ClearHasBit(_impl_._has_bits_[0],
+                  0x00000008U);
+}
+inline ::raftpp::CompressionType RpcHeader::compression() const {
+  // @@protoc_insertion_point(field_get:raftpp.RpcHeader.compression)
+  return _internal_compression();
+}
+inline void RpcHeader::set_compression(::raftpp::CompressionType value) {
+  _internal_set_compression(value);
+  SetHasBit(_impl_._has_bits_[0], 0x00000008U);
+  // @@protoc_insertion_point(field_set:raftpp.RpcHeader.compression)
+}
+inline ::raftpp::CompressionType RpcHeader::_internal_compression() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return static_cast<::raftpp::CompressionType>(_impl_.compression_);
+}
+inline void RpcHeader::_internal_set_compression(::raftpp::CompressionType value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.compression_ = value;
+}
+
+// uint32 payload_size = 6;
+inline void RpcHeader::clear_payload_size() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.payload_size_ = 0u;
+  ClearHasBit(_impl_._has_bits_[0],
+                  0x00000020U);
+}
+inline ::uint32_t RpcHeader::payload_size() const {
+  // @@protoc_insertion_point(field_get:raftpp.RpcHeader.payload_size)
+  return _internal_payload_size();
+}
+inline void RpcHeader::set_payload_size(::uint32_t value) {
+  _internal_set_payload_size(value);
+  SetHasBit(_impl_._has_bits_[0], 0x00000020U);
+  // @@protoc_insertion_point(field_set:raftpp.RpcHeader.payload_size)
+}
+inline ::uint32_t RpcHeader::_internal_payload_size() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return _impl_.payload_size_;
+}
+inline void RpcHeader::_internal_set_payload_size(::uint32_t value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.payload_size_ = value;
+}
+
+// .raftpp.MessageType msg_type = 7;
+inline void RpcHeader::clear_msg_type() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.msg_type_ = 0;
+  ClearHasBit(_impl_._has_bits_[0],
+                  0x00000040U);
+}
+inline ::raftpp::MessageType RpcHeader::msg_type() const {
+  // @@protoc_insertion_point(field_get:raftpp.RpcHeader.msg_type)
+  return _internal_msg_type();
+}
+inline void RpcHeader::set_msg_type(::raftpp::MessageType value) {
+  _internal_set_msg_type(value);
+  SetHasBit(_impl_._has_bits_[0], 0x00000040U);
+  // @@protoc_insertion_point(field_set:raftpp.RpcHeader.msg_type)
+}
+inline ::raftpp::MessageType RpcHeader::_internal_msg_type() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return static_cast<::raftpp::MessageType>(_impl_.msg_type_);
+}
+inline void RpcHeader::_internal_set_msg_type(::raftpp::MessageType value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.msg_type_ = value;
+}
+
+// -------------------------------------------------------------------
+
+// RpcHandshake
+
+// uint32 version = 1;
+inline void RpcHandshake::clear_version() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.version_ = 0u;
+  ClearHasBit(_impl_._has_bits_[0],
+                  0x00000004U);
+}
+inline ::uint32_t RpcHandshake::version() const {
+  // @@protoc_insertion_point(field_get:raftpp.RpcHandshake.version)
+  return _internal_version();
+}
+inline void RpcHandshake::set_version(::uint32_t value) {
+  _internal_set_version(value);
+  SetHasBit(_impl_._has_bits_[0], 0x00000004U);
+  // @@protoc_insertion_point(field_set:raftpp.RpcHandshake.version)
+}
+inline ::uint32_t RpcHandshake::_internal_version() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return _impl_.version_;
+}
+inline void RpcHandshake::_internal_set_version(::uint32_t value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.version_ = value;
+}
+
+// uint64 node_id = 2;
+inline void RpcHandshake::clear_node_id() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.node_id_ = ::uint64_t{0u};
+  ClearHasBit(_impl_._has_bits_[0],
+                  0x00000001U);
+}
+inline ::uint64_t RpcHandshake::node_id() const {
+  // @@protoc_insertion_point(field_get:raftpp.RpcHandshake.node_id)
+  return _internal_node_id();
+}
+inline void RpcHandshake::set_node_id(::uint64_t value) {
+  _internal_set_node_id(value);
+  SetHasBit(_impl_._has_bits_[0], 0x00000001U);
+  // @@protoc_insertion_point(field_set:raftpp.RpcHandshake.node_id)
+}
+inline ::uint64_t RpcHandshake::_internal_node_id() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return _impl_.node_id_;
+}
+inline void RpcHandshake::_internal_set_node_id(::uint64_t value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.node_id_ = value;
+}
+
+// uint64 cluster_id = 3;
+inline void RpcHandshake::clear_cluster_id() {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.cluster_id_ = ::uint64_t{0u};
+  ClearHasBit(_impl_._has_bits_[0],
+                  0x00000002U);
+}
+inline ::uint64_t RpcHandshake::cluster_id() const {
+  // @@protoc_insertion_point(field_get:raftpp.RpcHandshake.cluster_id)
+  return _internal_cluster_id();
+}
+inline void RpcHandshake::set_cluster_id(::uint64_t value) {
+  _internal_set_cluster_id(value);
+  SetHasBit(_impl_._has_bits_[0], 0x00000002U);
+  // @@protoc_insertion_point(field_set:raftpp.RpcHandshake.cluster_id)
+}
+inline ::uint64_t RpcHandshake::_internal_cluster_id() const {
+  ::google::protobuf::internal::TSanRead(&_impl_);
+  return _impl_.cluster_id_;
+}
+inline void RpcHandshake::_internal_set_cluster_id(::uint64_t value) {
+  ::google::protobuf::internal::TSanWrite(&_impl_);
+  _impl_.cluster_id_ = value;
+}
+
 #ifdef __GNUC__
 #pragma GCC diagnostic pop
 #endif  // __GNUC__
@@ -4243,6 +5027,12 @@ struct is_proto_enum<::raftpp::ConfChangeType> : std::true_type {};
 template <>
 inline const EnumDescriptor* PROTOBUF_NONNULL GetEnumDescriptor<::raftpp::ConfChangeType>() {
   return ::raftpp::ConfChangeType_descriptor();
+}
+template <>
+struct is_proto_enum<::raftpp::CompressionType> : std::true_type {};
+template <>
+inline const EnumDescriptor* PROTOBUF_NONNULL GetEnumDescriptor<::raftpp::CompressionType>() {
+  return ::raftpp::CompressionType_descriptor();
 }
 
 }  // namespace protobuf

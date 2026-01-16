@@ -17,22 +17,29 @@ TEST_CASE("Codec encode/decode round-trip") {
     msg.set_index(100);
     msg.set_commit(50);
 
-    auto encoded = Codec::Encode(msg);
+    auto encoded = Codec::Encode(msg, 1, 2, 42);
 
-    // Check header
-    CHECK(encoded.size() >= Codec::kHeaderSize);
+    // Check minimum size (prefix + header + payload)
+    CHECK(encoded.size() >= Codec::kPrefixSize);
 
     auto result = Codec::Decode(encoded, Codec::kDefaultMaxMessageSize);
     REQUIRE(result.has_value());
 
-    auto [decoded, consumed] = *result;
-    CHECK(consumed == encoded.size());
-    CHECK(decoded.msg_type() == msg.msg_type());
-    CHECK(decoded.from() == msg.from());
-    CHECK(decoded.to() == msg.to());
-    CHECK(decoded.term() == msg.term());
-    CHECK(decoded.index() == msg.index());
-    CHECK(decoded.commit() == msg.commit());
+    auto& decode_result = *result;
+    CHECK(decode_result.bytes_consumed == encoded.size());
+    CHECK(decode_result.message.msg_type() == msg.msg_type());
+    CHECK(decode_result.message.from() == msg.from());
+    CHECK(decode_result.message.to() == msg.to());
+    CHECK(decode_result.message.term() == msg.term());
+    CHECK(decode_result.message.index() == msg.index());
+    CHECK(decode_result.message.commit() == msg.commit());
+
+    // Check RpcHeader fields
+    CHECK(decode_result.header.version() == Codec::kVersion);
+    CHECK(decode_result.header.from_node() == 1);
+    CHECK(decode_result.header.to_node() == 2);
+    CHECK(decode_result.header.request_id() == 42);
+    CHECK(decode_result.header.msg_type() == MsgAppend);
 }
 
 TEST_CASE("Codec handles incomplete buffer") {
@@ -43,17 +50,17 @@ TEST_CASE("Codec handles incomplete buffer") {
 
     auto encoded = Codec::Encode(msg);
 
-    // Only provide partial data
-    std::span<const uint8_t> partial(encoded.data(), Codec::kHeaderSize / 2);
+    // Only provide partial prefix
+    std::span<const uint8_t> partial(encoded.data(), Codec::kPrefixSize / 2);
     auto result = Codec::Decode(partial, Codec::kDefaultMaxMessageSize);
     REQUIRE(result.has_value());
-    CHECK(result->second == 0);  // Should return 0 bytes consumed
+    CHECK(result->bytes_consumed == 0);  // Should return 0 bytes consumed
 
-    // Provide header but not full payload
-    std::span<const uint8_t> header_only(encoded.data(), Codec::kHeaderSize + 1);
-    result = Codec::Decode(header_only, Codec::kDefaultMaxMessageSize);
+    // Provide prefix but not full header/payload
+    std::span<const uint8_t> prefix_only(encoded.data(), Codec::kPrefixSize + 1);
+    result = Codec::Decode(prefix_only, Codec::kDefaultMaxMessageSize);
     REQUIRE(result.has_value());
-    CHECK(result->second == 0);
+    CHECK(result->bytes_consumed == 0);
 }
 
 TEST_CASE("Codec rejects invalid magic") {
@@ -97,25 +104,45 @@ TEST_CASE("Codec handles message with entries") {
     auto result = Codec::Decode(encoded, Codec::kDefaultMaxMessageSize);
     REQUIRE(result.has_value());
 
-    auto [decoded, consumed] = *result;
-    CHECK(decoded.entries_size() == 10);
-    CHECK(decoded.entries(5).data() == "test data 5");
+    auto& decode_result = *result;
+    CHECK(decode_result.message.entries_size() == 10);
+    CHECK(decode_result.message.entries(5).data() == "test data 5");
 }
 
 TEST_CASE("Handshake encode/decode round-trip") {
     Handshake hs;
     hs.node_id = 12345;
+    hs.cluster_id = 999;
 
     auto encoded = hs.Encode();
-    CHECK(encoded.size() == Handshake::kSize);
+    CHECK(encoded.size() >= Handshake::kSize);  // At least prefix size
 
     auto result = Handshake::Decode(encoded);
     REQUIRE(result.has_value());
     CHECK(result->node_id == 12345);
+    CHECK(result->cluster_id == 999);
+}
+
+TEST_CASE("HandshakeCodec encode/decode round-trip") {
+    RpcHandshake hs;
+    hs.set_version(1);
+    hs.set_node_id(54321);
+    hs.set_cluster_id(888);
+
+    auto encoded = HandshakeCodec::Encode(hs);
+    CHECK(encoded.size() >= HandshakeCodec::kPrefixSize);
+
+    auto result = HandshakeCodec::Decode(encoded);
+    REQUIRE(result.has_value());
+    auto& [decoded, consumed] = *result;
+    CHECK(consumed == encoded.size());
+    CHECK(decoded.version() == 1);
+    CHECK(decoded.node_id() == 54321);
+    CHECK(decoded.cluster_id() == 888);
 }
 
 TEST_CASE("Handshake rejects invalid magic") {
-    std::vector<uint8_t> bad_hs(Handshake::kSize, 0);
+    std::vector<uint8_t> bad_hs(HandshakeCodec::kPrefixSize, 0);
 
     auto result = Handshake::Decode(bad_hs);
     REQUIRE(!result.has_value());
@@ -123,11 +150,11 @@ TEST_CASE("Handshake rejects invalid magic") {
 }
 
 TEST_CASE("Handshake rejects incomplete buffer") {
-    std::vector<uint8_t> short_buf(Handshake::kSize - 1, 0);
+    std::vector<uint8_t> short_buf(HandshakeCodec::kPrefixSize - 1, 0);
 
-    auto result = Handshake::Decode(short_buf);
-    REQUIRE(!result.has_value());
-    CHECK(result.error().code == RpcErrorCode::InvalidMessage);
+    auto result = HandshakeCodec::Decode(short_buf);
+    REQUIRE(result.has_value());
+    CHECK(result->second == 0);  // Incomplete, returns 0 bytes consumed
 }
 
 TEST_CASE("PeerManager basic operations") {

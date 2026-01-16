@@ -18,27 +18,153 @@ std::string RpcError::ToString() const {
     return fmt::format("{}: {}", code_name, message);
 }
 
-std::vector<uint8_t> Codec::Encode(const Message& msg) {
+std::vector<uint8_t> Codec::Encode(
+    const Message& msg, uint64_t from_node, uint64_t to_node, uint64_t request_id
+) {
+    // Build RpcHeader
+    RpcHeader header;
+    header.set_version(kVersion);
+    header.set_from_node(from_node);
+    header.set_to_node(to_node);
+    header.set_request_id(request_id);
+    header.set_compression(COMPRESSION_NONE);
+    header.set_payload_size(static_cast<uint32_t>(msg.ByteSizeLong()));
+    header.set_msg_type(msg.msg_type());
+
+    size_t header_size = header.ByteSizeLong();
     size_t payload_size = msg.ByteSizeLong();
-    std::vector<uint8_t> buffer(kHeaderSize + payload_size);
+    size_t total_size = kPrefixSize + header_size + payload_size;
+
+    std::vector<uint8_t> buffer(total_size);
 
     // Write magic (little-endian)
     uint32_t magic = kMagic;
     std::memcpy(buffer.data(), &magic, sizeof(magic));
 
-    // Write length (little-endian)
-    uint32_t length = static_cast<uint32_t>(payload_size);
-    std::memcpy(buffer.data() + 4, &length, sizeof(length));
+    // Write header length (little-endian)
+    uint32_t header_len = static_cast<uint32_t>(header_size);
+    std::memcpy(buffer.data() + 4, &header_len, sizeof(header_len));
+
+    // Write RpcHeader
+    header.SerializeToArray(buffer.data() + kPrefixSize, static_cast<int>(header_size));
 
     // Write payload
-    msg.SerializeToArray(buffer.data() + kHeaderSize, static_cast<int>(payload_size));
+    msg.SerializeToArray(buffer.data() + kPrefixSize + header_size, static_cast<int>(payload_size));
 
     return buffer;
 }
 
 RpcResult<size_t> Codec::FrameSize(std::span<const uint8_t> buffer, size_t max_size) {
-    if (buffer.size() < kHeaderSize) {
+    if (buffer.size() < kPrefixSize) {
+        return 0;  // Incomplete prefix
+    }
+
+    // Read magic
+    uint32_t magic;
+    std::memcpy(&magic, buffer.data(), sizeof(magic));
+    if (magic != kMagic) {
+        return std::unexpected(
+            RpcError::InvalidMagic(fmt::format("expected 0x{:08X}, got 0x{:08X}", kMagic, magic))
+        );
+    }
+
+    // Read header length
+    uint32_t header_len;
+    std::memcpy(&header_len, buffer.data() + 4, sizeof(header_len));
+
+    // Need full header to get payload size
+    size_t min_frame_size = kPrefixSize + header_len;
+    if (buffer.size() < min_frame_size) {
         return 0;  // Incomplete header
+    }
+
+    // Parse header to get payload size
+    RpcHeader header;
+    if (!header.ParseFromArray(buffer.data() + kPrefixSize, static_cast<int>(header_len))) {
+        return std::unexpected(RpcError::InvalidMessage("failed to parse RpcHeader"));
+    }
+
+    size_t total_size = kPrefixSize + header_len + header.payload_size();
+    if (total_size > max_size) {
+        return std::unexpected(
+            RpcError::MessageTooLarge(fmt::format("message size {} exceeds max {}", total_size, max_size))
+        );
+    }
+
+    return total_size;
+}
+
+RpcResult<Codec::DecodeResult> Codec::Decode(std::span<const uint8_t> buffer, size_t max_size) {
+    if (buffer.size() < kPrefixSize) {
+        return DecodeResult{{}, {}, 0};  // Incomplete
+    }
+
+    // Read magic
+    uint32_t magic;
+    std::memcpy(&magic, buffer.data(), sizeof(magic));
+    if (magic != kMagic) {
+        return std::unexpected(
+            RpcError::InvalidMagic(fmt::format("expected 0x{:08X}, got 0x{:08X}", kMagic, magic))
+        );
+    }
+
+    // Read header length
+    uint32_t header_len;
+    std::memcpy(&header_len, buffer.data() + 4, sizeof(header_len));
+
+    size_t header_end = kPrefixSize + header_len;
+    if (buffer.size() < header_end) {
+        return DecodeResult{{}, {}, 0};  // Incomplete header
+    }
+
+    // Parse RpcHeader
+    RpcHeader header;
+    if (!header.ParseFromArray(buffer.data() + kPrefixSize, static_cast<int>(header_len))) {
+        return std::unexpected(RpcError::InvalidMessage("failed to parse RpcHeader"));
+    }
+
+    size_t total_size = header_end + header.payload_size();
+    if (total_size > max_size) {
+        return std::unexpected(RpcError::MessageTooLarge(
+            fmt::format("message size {} exceeds max {}", total_size, max_size)
+        ));
+    }
+
+    if (buffer.size() < total_size) {
+        return DecodeResult{{}, {}, 0};  // Incomplete payload
+    }
+
+    // Parse Message payload
+    Message msg;
+    if (!msg.ParseFromArray(buffer.data() + header_end, static_cast<int>(header.payload_size()))) {
+        return std::unexpected(RpcError::InvalidMessage("failed to parse Message payload"));
+    }
+
+    return DecodeResult{std::move(header), std::move(msg), total_size};
+}
+
+// HandshakeCodec implementation
+std::vector<uint8_t> HandshakeCodec::Encode(const RpcHandshake& hs) {
+    size_t payload_size = hs.ByteSizeLong();
+    std::vector<uint8_t> buffer(kPrefixSize + payload_size);
+
+    // Write magic
+    uint32_t magic = kMagic;
+    std::memcpy(buffer.data(), &magic, sizeof(magic));
+
+    // Write length
+    uint32_t length = static_cast<uint32_t>(payload_size);
+    std::memcpy(buffer.data() + 4, &length, sizeof(length));
+
+    // Write payload
+    hs.SerializeToArray(buffer.data() + kPrefixSize, static_cast<int>(payload_size));
+
+    return buffer;
+}
+
+RpcResult<std::pair<RpcHandshake, size_t>> HandshakeCodec::Decode(std::span<const uint8_t> buffer) {
+    if (buffer.size() < kPrefixSize) {
+        return std::pair<RpcHandshake, size_t>{{}, 0};  // Incomplete
     }
 
     // Read magic
@@ -54,84 +180,44 @@ RpcResult<size_t> Codec::FrameSize(std::span<const uint8_t> buffer, size_t max_s
     uint32_t length;
     std::memcpy(&length, buffer.data() + 4, sizeof(length));
 
-    if (length > max_size) {
-        return std::unexpected(
-            RpcError::MessageTooLarge(fmt::format("message size {} exceeds max {}", length, max_size)
-            )
-        );
+    size_t total_size = kPrefixSize + length;
+    if (buffer.size() < total_size) {
+        return std::pair<RpcHandshake, size_t>{{}, 0};  // Incomplete
     }
 
-    return kHeaderSize + length;
+    // Parse RpcHandshake
+    RpcHandshake hs;
+    if (!hs.ParseFromArray(buffer.data() + kPrefixSize, static_cast<int>(length))) {
+        return std::unexpected(RpcError::InvalidMessage("failed to parse RpcHandshake"));
+    }
+
+    return std::pair{std::move(hs), total_size};
 }
 
-RpcResult<std::pair<Message, size_t>> Codec::Decode(std::span<const uint8_t> buffer, size_t max_size
-) {
-    auto frame_size_result = FrameSize(buffer, max_size);
-    if (!frame_size_result) {
-        return std::unexpected(frame_size_result.error());
-    }
-
-    size_t frame_size = *frame_size_result;
-    if (frame_size == 0 || buffer.size() < frame_size) {
-        // Incomplete frame
-        return std::pair<Message, size_t>{{}, 0};
-    }
-
-    // Parse protobuf payload
-    Message msg;
-    if (!msg.ParseFromArray(buffer.data() + kHeaderSize, static_cast<int>(frame_size - kHeaderSize))
-    ) {
-        return std::unexpected(RpcError::InvalidMessage("failed to parse protobuf message"));
-    }
-
-    return std::pair{std::move(msg), frame_size};
-}
-
+// Legacy Handshake implementation (delegates to HandshakeCodec)
 std::vector<uint8_t> Handshake::Encode() const {
-    std::vector<uint8_t> buffer(kSize);
-
-    // Write magic
-    uint32_t magic = kMagic;
-    std::memcpy(buffer.data(), &magic, sizeof(magic));
-
-    // Write version
-    uint16_t version = kVersion;
-    std::memcpy(buffer.data() + 4, &version, sizeof(version));
-
-    // Write node_id
-    std::memcpy(buffer.data() + 6, &node_id, sizeof(node_id));
-
-    return buffer;
+    RpcHandshake hs;
+    hs.set_version(kVersion);
+    hs.set_node_id(node_id);
+    hs.set_cluster_id(cluster_id);
+    return HandshakeCodec::Encode(hs);
 }
 
 RpcResult<Handshake> Handshake::Decode(std::span<const uint8_t> buffer) {
-    if (buffer.size() < kSize) {
+    auto result = HandshakeCodec::Decode(buffer);
+    if (!result) {
+        return std::unexpected(result.error());
+    }
+
+    auto& [hs, consumed] = *result;
+    if (consumed == 0) {
         return std::unexpected(RpcError::InvalidMessage("handshake buffer too small"));
     }
 
-    // Read magic
-    uint32_t magic;
-    std::memcpy(&magic, buffer.data(), sizeof(magic));
-    if (magic != kMagic) {
-        return std::unexpected(
-            RpcError::InvalidMagic(fmt::format("expected 0x{:08X}, got 0x{:08X}", kMagic, magic))
-        );
-    }
-
-    // Read version
-    uint16_t version;
-    std::memcpy(&version, buffer.data() + 4, sizeof(version));
-    if (version != kVersion) {
-        return std::unexpected(
-            RpcError::InvalidMessage(fmt::format("unsupported version {}", version))
-        );
-    }
-
-    // Read node_id
-    Handshake hs;
-    std::memcpy(&hs.node_id, buffer.data() + 6, sizeof(hs.node_id));
-
-    return hs;
+    Handshake legacy;
+    legacy.node_id = hs.node_id();
+    legacy.cluster_id = hs.cluster_id();
+    return legacy;
 }
 
 }  // namespace raftpp::rpc

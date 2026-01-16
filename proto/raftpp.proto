@@ -187,3 +187,37 @@ message ConfChangeV2 {
     repeated ConfChangeSingle changes = 2;
     bytes context = 3;
 }
+
+// RPC header for message framing
+message RpcHeader {
+    // Protocol version for compatibility checking
+    uint32 version = 1;
+    // Source node ID
+    uint64 from_node = 2;
+    // Destination node ID (0 for broadcast or unknown)
+    uint64 to_node = 3;
+    // Request ID for request/response correlation
+    uint64 request_id = 4;
+    // Compression type for payload
+    CompressionType compression = 5;
+    // Size of the payload in bytes
+    uint32 payload_size = 6;
+    // Message type hint (allows routing without parsing payload)
+    MessageType msg_type = 7;
+}
+
+enum CompressionType {
+    COMPRESSION_NONE = 0;
+    COMPRESSION_LZ4 = 1;
+    COMPRESSION_ZSTD = 2;
+}
+
+// Handshake message for connection establishment
+message RpcHandshake {
+    // Protocol version
+    uint32 version = 1;
+    // Node ID of the sender
+    uint64 node_id = 2;
+    // Cluster ID for isolation (optional)
+    uint64 cluster_id = 3;
+}
