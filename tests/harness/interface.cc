@@ -31,20 +31,31 @@ void Interface::Persist() {
     }
 
     auto& raft_log = raft_->raft_log();
+    
+    // Get the internal storage from raft (need to cast to MemoryStorage for Append/ApplySnapshot)
+    auto* internal_storage = dynamic_cast<MemoryStorage*>(raft_log.storage());
 
     // Persist unstable snapshot if any
     const Unstable& unstable = raft_log.unstable();
     const auto& snapshot_opt = static_cast<const Unstable&>(unstable).snapshot();
     if (snapshot_opt.has_value()) {
-        const Snapshot& snap = *snapshot_opt;
+        // Make a copy of snapshot BEFORE calling StableSnapshot, which clears it
+        const Snapshot snap = *snapshot_opt;
         const uint64_t index = snap.metadata().index();
-        raft_log.StableSnapshot(index);
-        if (storage_) {
-            auto result = storage_->ApplySnapshot(snap);
+        
+        // First apply to storage, then mark as stable
+        if (internal_storage) {
+            auto result = internal_storage->ApplySnapshot(snap);
             if (!result) {
                 // Ignore errors in tests
             }
         }
+        // Also update the external storage for test verification
+        if (storage_) {
+            storage_->ApplySnapshot(snap);
+        }
+        // Now mark snapshot as stable (this clears unstable snapshot)
+        raft_log.StableSnapshot(index);
         raft_->OnPersistSnapshot(index);
         raft_->CommitApply(index);
     }
@@ -52,16 +63,25 @@ void Interface::Persist() {
     // Persist unstable entries if any
     const auto& unstable_entries = raft_log.unstable().entries();
     if (!unstable_entries.empty()) {
-        const auto& last_entry = unstable_entries.back();
+        // Make a copy of entries BEFORE calling StableEntries, which clears them
+        std::vector<Entry> entries_to_persist(unstable_entries.begin(), unstable_entries.end());
+        const auto& last_entry = entries_to_persist.back();
         const uint64_t last_idx = last_entry.index();
         const uint64_t last_term = last_entry.term();
-        raft_log.StableEntries(last_idx, last_term);
-        if (storage_) {
-            auto result = storage_->Append(unstable_entries);
+        
+        // First append to storage, then mark as stable
+        if (internal_storage) {
+            auto result = internal_storage->Append(entries_to_persist);
             if (!result) {
                 // Ignore errors in tests
             }
         }
+        // Also update the external storage for test verification
+        if (storage_) {
+            storage_->Append(entries_to_persist);
+        }
+        // Now mark entries as stable (this clears unstable entries)
+        raft_log.StableEntries(last_idx, last_term);
         raft_->OnPersistEntries(last_idx, last_term);
     }
 }

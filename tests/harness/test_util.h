@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <string>
@@ -18,7 +19,7 @@
 
 namespace raftpp {
 
-constexpr uint64_t NO_LIMIT = 0;
+constexpr uint64_t NO_LIMIT = std::numeric_limits<uint64_t>::max();
 
 /// Create a test config with given parameters.
 Config NewTestConfig(uint64_t id, size_t election_tick, size_t heartbeat_tick);

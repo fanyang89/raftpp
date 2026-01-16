@@ -1,4 +1,6 @@
 #include "harness/network.h"
+#include <spdlog/spdlog.h>
+#include <magic_enum/magic_enum.hpp>
 
 #include <cassert>
 
@@ -12,7 +14,7 @@ Config Network::DefaultConfig() {
     Config config = raftpp::DefaultConfig();
     config.election_tick = 10;
     config.heartbeat_tick = 1;
-    config.max_size_per_message = 0;  // NO_LIMIT
+    config.max_size_per_message = NO_LIMIT;
     config.max_inflight_messages = 256;
     return config;
 }
@@ -42,14 +44,13 @@ Network Network::CreateWithConfig(std::vector<std::unique_ptr<Interface>> peers,
             // Create new raft with default config
             auto storage = std::make_shared<MemoryStorage>();
 
-            // Initialize with conf state
-            Snapshot snap;
-            snap.mutable_metadata()->set_index(0);
-            snap.mutable_metadata()->set_term(0);
+            // Initialize with conf state directly (not via ApplySnapshot
+            // because first_index() > snap.index() would cause SnapshotOutOfDate)
+            ConfState conf_state;
             for (uint64_t peer_id : peer_ids) {
-                snap.mutable_metadata()->mutable_conf_state()->add_voters(peer_id);
+                conf_state.add_voters(peer_id);
             }
-            storage->ApplySnapshot(snap).value();
+            storage->SetConfState(conf_state);
 
             Config node_config = config;
             node_config.id = id;
@@ -120,6 +121,7 @@ void Network::Send(std::vector<Message> msgs) {
         std::vector<Message> new_msgs;
 
         for (auto& m : msgs) {
+            SPDLOG_INFO("Network::Send: type={}, from={}, to={}", magic_enum::enum_name(m.msg_type()), m.from(), m.to());
             auto it = peers_.find(m.to());
             if (it == peers_.end()) {
                 continue;

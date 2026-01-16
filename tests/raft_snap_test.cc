@@ -236,6 +236,9 @@ TEST_CASE("request snapshot") {
     (void)res;
     CHECK_EQ(voter_2.state(), ProgressState::Replicate);
 
+    // Clear messages from previous steps (BecomeLeader, MsgAppendResponse handling).
+    r.ReadMessages();
+
     // Request snapshot.
     res = r.Step(m);
     (void)res;

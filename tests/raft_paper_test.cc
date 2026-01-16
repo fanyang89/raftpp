@@ -617,14 +617,13 @@ TEST_CASE("raft paper: voter") {
         const auto& [ents, log_term, index, wreject] = tests[i];
 
         auto storage = std::make_shared<MemoryStorage>();
+        // Set conf_state directly instead of using ApplySnapshot
+        // (ApplySnapshot would fail because first_index > snap.index)
+        ConfState conf_state;
+        conf_state.add_voters(1);
+        conf_state.add_voters(2);
+        storage->SetConfState(conf_state);
         storage->Append(ents);
-
-        Snapshot snap;
-        snap.mutable_metadata()->set_index(0);
-        snap.mutable_metadata()->set_term(0);
-        snap.mutable_metadata()->mutable_conf_state()->add_voters(1);
-        snap.mutable_metadata()->mutable_conf_state()->add_voters(2);
-        storage->ApplySnapshot(snap);
 
         auto r = NewTestRaftWithConfig(NewTestConfig(1, 10, 1), storage);
 
@@ -664,14 +663,13 @@ TEST_CASE("raft paper: leader only commits log from current term") {
         const auto& [index, wcommit] = tests[i];
 
         auto storage = std::make_shared<MemoryStorage>();
+        // Set conf_state directly instead of using ApplySnapshot
+        // (ApplySnapshot would fail because first_index > snap.index)
+        ConfState conf_state;
+        conf_state.add_voters(1);
+        conf_state.add_voters(2);
+        storage->SetConfState(conf_state);
         storage->Append(ents);
-
-        Snapshot snap;
-        snap.mutable_metadata()->set_index(0);
-        snap.mutable_metadata()->set_term(0);
-        snap.mutable_metadata()->mutable_conf_state()->add_voters(1);
-        snap.mutable_metadata()->mutable_conf_state()->add_voters(2);
-        storage->ApplySnapshot(snap);
 
         auto r = NewTestRaftWithConfig(NewTestConfig(1, 10, 1), storage);
         r->LoadState(MakeHardState(2, 0, 0));

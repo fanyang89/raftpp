@@ -110,6 +110,13 @@ Interface NewTestRaftWithConfig(const Config& config, std::shared_ptr<MemoryStor
 
     // Get the initial state from shared storage (which may have ApplySnapshot applied)
     auto initial_state = storage->InitialState();
+
+    // Check if storage has a snapshot by comparing first_index and last_index
+    auto first_idx = storage->FirstIndex().value();
+    uint64_t snapshot_index = first_idx - 1;  // first_index = snapshot.index + 1
+
+    // Reset hard state but preserve commit if there's a snapshot
+    // Commit should never be less than snapshot index
     if (initial_state) {
         // Preserve both hard_state and conf_state from the shared storage
         owned_storage->SetRaftState({initial_state->hard_state, initial_state->conf_state});
@@ -311,11 +318,23 @@ std::vector<Entry> NextEntries(Raft& r, MemoryStorage& s) {
     // Persist unstable entries
     const auto& unstable_entries = raft_log.unstable().entries();
     if (!unstable_entries.empty()) {
-        const auto& last_entry = unstable_entries.back();
+        // Make a copy BEFORE calling StableEntries, which clears them
+        std::vector<Entry> entries_to_persist(unstable_entries.begin(), unstable_entries.end());
+        const auto& last_entry = entries_to_persist.back();
         const uint64_t last_idx = last_entry.index();
         const uint64_t last_term = last_entry.term();
+        
+        // First append to storage, then mark as stable
+        s.Append(entries_to_persist).value();
+        
+        // Also update the internal storage
+        auto* internal_storage = dynamic_cast<MemoryStorage*>(raft_log.storage());
+        if (internal_storage) {
+            internal_storage->Append(entries_to_persist).value();
+        }
+        
+        // Now mark as stable
         raft_log.StableEntries(last_idx, last_term);
-        s.Append(unstable_entries).value();
         r.OnPersistEntries(last_idx, last_term);
     }
 
