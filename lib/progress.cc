@@ -122,20 +122,20 @@ bool Progress::IsPaused() const {
 bool Progress::MaybeDecTo(
     const uint64_t rejected, uint64_t match_hint, const uint64_t request_snapshot
 ) {
-    SPDLOG_INFO(
+    SPDLOG_DEBUG(
         "MaybeDecTo: rejected={}, match_hint={}, request_snapshot={}, state={}, matched={}",
         rejected, match_hint, request_snapshot, magic_enum::enum_name(state_), matched_
     );
     if (state_ == ProgressState::Replicate) {
         if (rejected < matched_ || (rejected == matched_ && request_snapshot == INVALID_INDEX)) {
-            SPDLOG_INFO("MaybeDecTo: returning false (stale reject in Replicate)");
+            SPDLOG_DEBUG("MaybeDecTo: returning false (stale reject in Replicate)");
             return false;
         }
 
         if (request_snapshot == INVALID_INDEX) {
             next_idx_ = matched_ + 1;
         } else {
-            SPDLOG_INFO("MaybeDecTo: setting pending_request_snapshot to {}", request_snapshot);
+            SPDLOG_DEBUG("MaybeDecTo: setting pending_request_snapshot to {}", request_snapshot);
             pending_request_snapshot_ = request_snapshot;
         }
         return true;

@@ -283,7 +283,7 @@ VoteResult Raft::Poll(const uint64_t from, MessageType mt, const bool vote) {
     progress_tracker_.RecordVote(from, vote);
     const auto& r = progress_tracker_.CountVotes();
     if (from != id_) {
-        SPDLOG_INFO("received votes response");
+        SPDLOG_DEBUG("received votes response from {}, vote={}", from, vote);
     }
 
     switch (r.result) {
@@ -490,13 +490,13 @@ void Raft::HandleAppendResponse(const Message& m) {
 
     Progress& pr = *p;
     pr.recent_active() = true;
-    SPDLOG_INFO(
+    SPDLOG_DEBUG(
         "HandleAppendResponse: from={}, index={}, reject={}", m.from(), m.index(), m.reject()
     );
     pr.UpdateCommitted(m.commit());
 
     if (m.reject()) {
-        SPDLOG_INFO(
+        SPDLOG_DEBUG(
             "HandleAppendResponse: reject from {}, index={}, reject_hint={}, log_term={}", m.from(),
             m.index(), m.reject_hint(), m.log_term()
         );
@@ -802,8 +802,8 @@ void Raft::HandleHeartbeatResponse(const Message& m) {
     // update followers committed index via heartbeat response
     pr.UpdateCommitted(m.commit());
     pr.recent_active() = true;
-    SPDLOG_INFO(
-        "HandleAppendResponse: from={}, index={}, reject={}", m.from(), m.index(), m.reject()
+    SPDLOG_DEBUG(
+        "HandleHeartbeatResponse: from={}, index={}, reject={}", m.from(), m.index(), m.reject()
     );
     pr.Resume();
 
@@ -812,12 +812,12 @@ void Raft::HandleHeartbeatResponse(const Message& m) {
     }
 
     // Does it request snapshot?
-    SPDLOG_INFO(
+    SPDLOG_DEBUG(
         "HandleHeartbeatResp check: from={}, matched={}, next={}, last_index={}", m.from(),
         pr.matched(), pr.next_idx(), raft_log_.LastIndex()
     );
     if (pr.matched() < raft_log_.LastIndex() || pr.pending_request_snapshot() != INVALID_INDEX) {
-        SPDLOG_INFO("HandleHeartbeatResp: sending append to {}", m.from());
+        SPDLOG_DEBUG("HandleHeartbeatResp: sending append to {}", m.from());
         RaftCore::SendAppend(m.from(), pr, messages_);
     }
 
@@ -851,8 +851,8 @@ void Raft::HandleSnapshotStatus(const Message& m) {
     }
 
     if (m.reject()) {
-        SPDLOG_INFO(
-            "HandleAppendResponse: reject from {}, index={}, reject_hint={}, log_term={}", m.from(),
+        SPDLOG_DEBUG(
+            "HandleSnapshotStatus: reject from {}, index={}, reject_hint={}, log_term={}", m.from(),
             m.index(), m.reject_hint(), m.log_term()
         );
         pr.SnapshotFailure();
@@ -996,7 +996,7 @@ Result<void> Raft::StepLeader(const Message& m) {
 
     switch (m.msg_type()) {
         case MsgAppendResponse:
-            SPDLOG_INFO("StepLeader: received MsgAppendResponse from {}", m.from());
+            SPDLOG_DEBUG("StepLeader: received MsgAppendResponse from {}", m.from());
             HandleAppendResponse(m);
             break;
         case MsgHeartbeatResponse:

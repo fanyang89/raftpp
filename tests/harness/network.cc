@@ -126,7 +126,7 @@ void Network::Send(std::vector<Message> msgs) {
         std::vector<Message> new_msgs;
 
         for (auto& m : msgs) {
-            SPDLOG_INFO(
+            SPDLOG_DEBUG(
                 "Network::Send: type={}, from={}, to={}", magic_enum::enum_name(m.msg_type()),
                 m.from(), m.to()
             );
