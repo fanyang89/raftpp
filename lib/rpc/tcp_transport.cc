@@ -266,20 +266,21 @@ void TcpTransport::ProcessReadBuffer(Connection* conn) {
         }
 
         if (!conn->handshake_done) {
-            // Expecting handshake
-            if (buf.size() < Handshake::kSize) {
-                break;  // Need more data
-            }
-
-            auto hs_result = Handshake::Decode(buf);
+            // Expecting handshake - use HandshakeCodec for proper decoding
+            auto hs_result = HandshakeCodec::Decode(buf);
             if (!hs_result) {
                 SPDLOG_WARN("Invalid handshake: {}", hs_result.error().ToString());
                 CloseConnection(conn);
                 return;
             }
 
-            OnHandshakeReceived(conn, hs_result->node_id);
-            buf.erase(buf.begin(), buf.begin() + Handshake::kSize);
+            auto& [hs, consumed] = *hs_result;
+            if (consumed == 0) {
+                break;  // Need more data
+            }
+
+            OnHandshakeReceived(conn, hs.node_id());
+            buf.erase(buf.begin(), buf.begin() + consumed);
 
             // Send our handshake if this is incoming connection
             if (!conn->is_outgoing) {

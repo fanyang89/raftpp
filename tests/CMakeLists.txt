@@ -18,6 +18,7 @@ add_executable(raftpp-tests
   raft_flow_control_test.cc
   wal_test.cc
   rpc_test.cc
+  rpc_transport_test.cc
   raftor_test.cc
 )
 
