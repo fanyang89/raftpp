@@ -16,7 +16,9 @@ void PeerManager::AddPeer(uint64_t id, std::string addr) {
     peers_[id] = std::move(info);
 }
 
-void PeerManager::RemovePeer(uint64_t id) { peers_.erase(id); }
+void PeerManager::RemovePeer(uint64_t id) {
+    peers_.erase(id);
+}
 
 PeerInfo* PeerManager::GetPeer(uint64_t id) {
     auto it = peers_.find(id);
@@ -64,8 +66,8 @@ void PeerManager::RecordFailure(uint64_t id) {
     if (auto* peer = GetPeer(id)) {
         peer->state = PeerState::Disconnected;
         peer->failure_count++;
-        peer->reconnect_after = std::chrono::steady_clock::now() + CalculateBackoff(peer->failure_count
-        );
+        peer->reconnect_after =
+            std::chrono::steady_clock::now() + CalculateBackoff(peer->failure_count);
     }
 }
 
@@ -75,7 +77,9 @@ void PeerManager::RecordActivity(uint64_t id) {
     }
 }
 
-bool PeerManager::HasPeer(uint64_t id) const { return peers_.contains(id); }
+bool PeerManager::HasPeer(uint64_t id) const {
+    return peers_.contains(id);
+}
 
 size_t PeerManager::ConnectedCount() const {
     size_t count = 0;

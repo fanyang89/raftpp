@@ -797,9 +797,7 @@ TEST_CASE("raw_node: entries_after_snapshot") {
     storage->Append(rd.entries).value();
     auto light_rd = raw_node.Advance(rd);
     CHECK(!light_rd.commit_index.has_value());
-    CHECK_EQ(
-        light_rd.committed_entries, std::vector<Entry>(entries.begin(), entries.begin() + 4)
-    );
+    CHECK_EQ(light_rd.committed_entries, std::vector<Entry>(entries.begin(), entries.begin() + 4));
     CHECK(light_rd.messages.empty());
 
     Snapshot snap = NewSnapshot(10, 3, {1, 2});
@@ -834,9 +832,7 @@ TEST_CASE("raw_node: entries_after_snapshot") {
 
     auto light_rd2 = raw_node.Advance(rd2);
     CHECK(!light_rd2.commit_index.has_value());
-    CHECK_EQ(
-        light_rd2.committed_entries, std::vector<Entry>(entries.begin(), entries.begin() + 2)
-    );
+    CHECK_EQ(light_rd2.committed_entries, std::vector<Entry>(entries.begin(), entries.begin() + 2));
     CHECK(light_rd2.messages.empty());
 }
 

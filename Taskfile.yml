@@ -25,8 +25,9 @@ tasks:
     platforms: [linux, darwin]
     cmds:
       - >
-        clang-format --style=file -i
-        $(git ls-files | grep '.cc$\|.h$\|.hpp$' | grep -v '\.pb\.\|generated')
+        find include lib tests -type f \( -name '*.cc' -o -name '*.h' -o -name '*.hpp' \)
+        ! -path '*/generated/*' ! -name '*.pb.*'
+        -exec clang-format --style=file -i {} +
 
   cmake:
     desc: Configure CMake with dev preset

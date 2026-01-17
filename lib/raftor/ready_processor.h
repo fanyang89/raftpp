@@ -27,11 +27,8 @@ namespace raftpp::raftor {
 class ReadyProcessor {
   public:
     ReadyProcessor(
-        RawNode& raw_node,
-        std::shared_ptr<wal::WALStorage> storage,
-        StateMachine& state_machine,
-        rpc::Transport& transport,
-        ProposalTracker& proposal_tracker
+        RawNode& raw_node, std::shared_ptr<wal::WALStorage> storage, StateMachine& state_machine,
+        rpc::Transport& transport, ProposalTracker& proposal_tracker
     );
 
     /// Process one Ready cycle
@@ -41,7 +38,9 @@ class ReadyProcessor {
 
     /// Get the current leadership state for notifications
     [[nodiscard]] bool IsLeader() const { return prev_role_ == StateRole::Leader; }
+
     [[nodiscard]] uint64_t GetLeaderId() const { return prev_leader_; }
+
     [[nodiscard]] uint64_t GetAppliedIndex() const { return applied_index_; }
 
   private:

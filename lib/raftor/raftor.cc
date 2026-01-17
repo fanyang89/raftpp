@@ -50,10 +50,8 @@ raftpp::Config RaftorConfig::ToRaftConfig() const {
 class RaftorImpl : public Raftor {
   public:
     RaftorImpl(
-        const RaftorConfig& config,
-        std::unique_ptr<StateMachine> state_machine,
-        std::shared_ptr<wal::WALStorage> storage,
-        std::unique_ptr<rpc::Transport> transport
+        const RaftorConfig& config, std::unique_ptr<StateMachine> state_machine,
+        std::shared_ptr<wal::WALStorage> storage, std::unique_ptr<rpc::Transport> transport
     );
 
     ~RaftorImpl() override;
@@ -124,10 +122,8 @@ class RaftorImpl : public Raftor {
 };
 
 RaftorImpl::RaftorImpl(
-    const RaftorConfig& config,
-    std::unique_ptr<StateMachine> state_machine,
-    std::shared_ptr<wal::WALStorage> storage,
-    std::unique_ptr<rpc::Transport> transport
+    const RaftorConfig& config, std::unique_ptr<StateMachine> state_machine,
+    std::shared_ptr<wal::WALStorage> storage, std::unique_ptr<rpc::Transport> transport
 )
     : config_(config),
       state_machine_(std::move(state_machine)),
@@ -144,9 +140,9 @@ RaftorImpl::RaftorImpl(
 
     // Set up transport callbacks
     transport_->SetMessageCallback([this](Message msg) { OnMessage(std::move(msg)); });
-    transport_->SetErrorCallback(
-        [this](uint64_t peer_id, std::string error) { OnPeerError(peer_id, std::move(error)); }
-    );
+    transport_->SetErrorCallback([this](uint64_t peer_id, std::string error) {
+        OnPeerError(peer_id, std::move(error));
+    });
 
     // Add initial peers to transport
     for (const auto& peer : config_.initial_peers) {
@@ -316,9 +312,7 @@ void RaftorImpl::Propose(std::string data, ProposalCallback callback) {
     proposal_queue_.Push(std::move(data), std::move(callback));
 }
 
-Result<std::string> RaftorImpl::ProposeSync(
-    std::string data, std::chrono::milliseconds timeout
-) {
+Result<std::string> RaftorImpl::ProposeSync(std::string data, std::chrono::milliseconds timeout) {
     std::promise<Result<std::string>> promise;
     auto future = promise.get_future();
 
@@ -479,9 +473,7 @@ Result<std::unique_ptr<Raftor>> Raftor::Create(
 
     auto storage_result = wal::WALStorage::Open(wal_config);
     if (!storage_result) {
-        return std::unexpected(
-            RaftError(RaftErrorCode::ProposalDropped)
-        );
+        return std::unexpected(RaftError(RaftErrorCode::ProposalDropped));
     }
 
     // Create TCP transport
@@ -498,10 +490,8 @@ Result<std::unique_ptr<Raftor>> Raftor::Create(
 }
 
 Result<std::unique_ptr<Raftor>> Raftor::Create(
-    const RaftorConfig& config,
-    std::unique_ptr<StateMachine> state_machine,
-    std::shared_ptr<Storage> storage,
-    std::unique_ptr<rpc::Transport> transport
+    const RaftorConfig& config, std::unique_ptr<StateMachine> state_machine,
+    std::shared_ptr<Storage> storage, std::unique_ptr<rpc::Transport> transport
 ) {
     // Validate config
     if (auto result = config.Validate(); !result) {
@@ -511,9 +501,7 @@ Result<std::unique_ptr<Raftor>> Raftor::Create(
     // Cast to WALStorage if possible
     auto wal_storage = std::dynamic_pointer_cast<wal::WALStorage>(storage);
     if (!wal_storage) {
-        return std::unexpected(
-            RaftError(RaftErrorCode::ProposalDropped)
-        );
+        return std::unexpected(RaftError(RaftErrorCode::ProposalDropped));
     }
 
     return std::make_unique<RaftorImpl>(

@@ -1,13 +1,14 @@
-#include <doctest/doctest.h>
+#include "raftpp/raftor/raftor.h"
 
 #include <atomic>
 #include <chrono>
 #include <span>
 #include <thread>
 
+#include <doctest/doctest.h>
+
 #include "raftpp/memory_storage.h"
 #include "raftpp/raftor/proposal_tracker.h"
-#include "raftpp/raftor/raftor.h"
 #include "raftpp/raftor/raftor_config.h"
 #include "raftpp/raftor/state_machine.h"
 #include "raftpp/rpc/transport.h"
@@ -73,38 +74,47 @@ class MockStateMachine : public StateMachine {
         std::lock_guard lock(mutex_);
         return apply_count_;
     }
+
     size_t SnapshotCount() const {
         std::lock_guard lock(mutex_);
         return snapshot_count_;
     }
+
     size_t RestoreCount() const {
         std::lock_guard lock(mutex_);
         return restore_count_;
     }
+
     size_t LeadershipChangeCount() const {
         std::lock_guard lock(mutex_);
         return leadership_change_count_;
     }
+
     bool IsLeader() const {
         std::lock_guard lock(mutex_);
         return is_leader_;
     }
+
     uint64_t CurrentTerm() const {
         std::lock_guard lock(mutex_);
         return current_term_;
     }
+
     uint64_t CurrentLeader() const {
         std::lock_guard lock(mutex_);
         return current_leader_;
     }
+
     std::vector<std::string> AppliedEntries() const {
         std::lock_guard lock(mutex_);
         return applied_entries_;
     }
+
     std::vector<uint64_t> UnreachablePeers() const {
         std::lock_guard lock(mutex_);
         return unreachable_peers_;
     }
+
     uint64_t LastRestoredIndex() const {
         std::lock_guard lock(mutex_);
         return last_restored_index_;

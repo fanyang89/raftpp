@@ -9,7 +9,7 @@
 namespace raftpp::wal {
 
 // Magic numbers for file format identification
-constexpr uint32_t kSegmentMagic = 0x57414C31;  // "WAL1"
+constexpr uint32_t kSegmentMagic = 0x57414C31;   // "WAL1"
 constexpr uint32_t kMetadataMagic = 0x4D455441;  // "META"
 constexpr uint32_t kFormatVersion = 1;
 
@@ -42,6 +42,7 @@ struct SegmentHeader {
         return h;
     }
 };
+
 static_assert(sizeof(SegmentHeader) == 32);
 
 // Record header (16 bytes, aligned)
@@ -72,23 +73,23 @@ struct RecordHeader {
     }
 
     // Total size of the record including header, payload, and padding
-    [[nodiscard]] uint32_t TotalSize() const {
-        return sizeof(RecordHeader) + length + padding;
-    }
+    [[nodiscard]] uint32_t TotalSize() const { return sizeof(RecordHeader) + length + padding; }
 };
+
 static_assert(sizeof(RecordHeader) == 16);
 
 // Metadata file header
 struct MetadataHeader {
     uint32_t magic = kMetadataMagic;
     uint32_t version = kFormatVersion;
-    uint32_t crc = 0;       // CRC of everything after this field
+    uint32_t crc = 0;  // CRC of everything after this field
     uint32_t reserved = 0;
 
     [[nodiscard]] bool IsValid() const {
         return magic == kMetadataMagic && version == kFormatVersion;
     }
 };
+
 static_assert(sizeof(MetadataHeader) == 16);
 
 // Metadata content (follows MetadataHeader)
@@ -98,6 +99,7 @@ struct MetadataContent {
     uint64_t snapshot_term = 0;
     // Followed by serialized HardState and ConfState
 };
+
 static_assert(sizeof(MetadataContent) == 24);
 
 // Helper to build a record with CRC
@@ -106,6 +108,7 @@ class RecordBuilder {
     RecordBuilder() = default;
 
     void SetType(RecordType type) { type_ = type; }
+
     void SetPayload(std::span<const uint8_t> payload);
     void SetPayload(const std::string& payload);
 
@@ -123,8 +126,11 @@ class RecordParser {
     explicit RecordParser(std::span<const uint8_t> data);
 
     [[nodiscard]] bool IsValid() const { return valid_; }
+
     [[nodiscard]] RecordHeader Header() const { return header_; }
+
     [[nodiscard]] std::span<const uint8_t> Payload() const { return payload_; }
+
     [[nodiscard]] RecordType Type() const { return static_cast<RecordType>(header_.type); }
 
   private:

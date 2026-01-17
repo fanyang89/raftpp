@@ -1,7 +1,7 @@
 #define DOCTEST_CONFIG_IMPLEMENT
 #include <doctest/doctest.h>
-#include <spdlog/spdlog.h>
 #include <spdlog/cfg/env.h>
+#include <spdlog/spdlog.h>
 
 int main(const int argc, char** argv) {
     // Set default log level to WARN for tests to reduce noise

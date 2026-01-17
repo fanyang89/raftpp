@@ -37,19 +37,27 @@ struct RpcError {
     static RpcError ConnectionFailed(std::string msg = "") {
         return {RpcErrorCode::ConnectionFailed, std::move(msg)};
     }
+
     static RpcError ConnectionClosed(std::string msg = "") {
         return {RpcErrorCode::ConnectionClosed, std::move(msg)};
     }
+
     static RpcError MessageTooLarge(std::string msg = "") {
         return {RpcErrorCode::MessageTooLarge, std::move(msg)};
     }
+
     static RpcError InvalidMessage(std::string msg = "") {
         return {RpcErrorCode::InvalidMessage, std::move(msg)};
     }
-    static RpcError Timeout(std::string msg = "") { return {RpcErrorCode::Timeout, std::move(msg)}; }
+
+    static RpcError Timeout(std::string msg = "") {
+        return {RpcErrorCode::Timeout, std::move(msg)};
+    }
+
     static RpcError InvalidMagic(std::string msg = "") {
         return {RpcErrorCode::InvalidMagic, std::move(msg)};
     }
+
     static RpcError InvalidAddress(std::string msg = "") {
         return {RpcErrorCode::InvalidAddress, std::move(msg)};
     }

@@ -1,9 +1,10 @@
 #include "raftpp/rpc/tcp_transport.h"
 
+#include <uv.h>
+
 #include <cstring>
 
 #include <spdlog/spdlog.h>
-#include <uv.h>
 
 #include "raftpp/rpc/peer_manager.h"
 
@@ -38,15 +39,13 @@ RpcResult<std::pair<std::string, int>> ParseAddress(const std::string& addr) {
 /// Connection context for both client and server connections
 struct Connection {
     uv_tcp_t handle;
-    uint64_t peer_id = 0;          // 0 until handshake completes
-    bool is_outgoing = false;      // true for client connections
-    bool handshake_done = false;   // true after handshake exchange
+    uint64_t peer_id = 0;         // 0 until handshake completes
+    bool is_outgoing = false;     // true for client connections
+    bool handshake_done = false;  // true after handshake exchange
     std::vector<uint8_t> read_buf;
-    void* transport = nullptr;     // Pointer to TcpTransport::Impl
+    void* transport = nullptr;  // Pointer to TcpTransport::Impl
 
-    Connection() {
-        handle.data = this;
-    }
+    Connection() { handle.data = this; }
 };
 
 struct TcpTransport::Impl {
@@ -96,16 +95,16 @@ struct TcpTransport::Impl {
 
         int r = uv_tcp_bind(&server, reinterpret_cast<const sockaddr*>(&addr), 0);
         if (r != 0) {
-            return std::unexpected(RpcError::ConnectionFailed(
-                std::string("bind failed: ") + uv_strerror(r)
-            ));
+            return std::unexpected(
+                RpcError::ConnectionFailed(std::string("bind failed: ") + uv_strerror(r))
+            );
         }
 
         r = uv_listen(reinterpret_cast<uv_stream_t*>(&server), 128, OnNewConnection);
         if (r != 0) {
-            return std::unexpected(RpcError::ConnectionFailed(
-                std::string("listen failed: ") + uv_strerror(r)
-            ));
+            return std::unexpected(
+                RpcError::ConnectionFailed(std::string("listen failed: ") + uv_strerror(r))
+            );
         }
 
         // Initialize reconnect timer
@@ -193,12 +192,8 @@ struct TcpTransport::Impl {
             timer.data = &loop;
             uv_timer_init(&loop, &timer);
             uv_timer_start(
-                &timer,
-                [](uv_timer_t* t) {
-                    uv_stop(static_cast<uv_loop_t*>(t->data));
-                },
-                timeout.count(),
-                0
+                &timer, [](uv_timer_t* t) { uv_stop(static_cast<uv_loop_t*>(t->data)); },
+                timeout.count(), 0
             );
 
             uv_run(&loop, UV_RUN_DEFAULT);
@@ -209,9 +204,7 @@ struct TcpTransport::Impl {
         }
     }
 
-    void Run() {
-        uv_run(&loop, UV_RUN_DEFAULT);
-    }
+    void Run() { uv_run(&loop, UV_RUN_DEFAULT); }
 
     void TryConnect(uint64_t peer_id) {
         auto* peer = peer_manager.GetPeer(peer_id);
@@ -242,7 +235,8 @@ struct TcpTransport::Impl {
 
         peer_manager.UpdateState(peer_id, PeerState::Connecting);
 
-        int r = uv_tcp_connect(req, &conn->handle, reinterpret_cast<const sockaddr*>(&addr), OnConnect);
+        int r =
+            uv_tcp_connect(req, &conn->handle, reinterpret_cast<const sockaddr*>(&addr), OnConnect);
         if (r != 0) {
             SPDLOG_WARN("Connect to {} failed: {}", peer_id, uv_strerror(r));
             delete req;
@@ -256,13 +250,10 @@ struct TcpTransport::Impl {
 
     void CloseConnection(Connection* conn) {
         if (!uv_is_closing(reinterpret_cast<uv_handle_t*>(&conn->handle))) {
-            uv_close(
-                reinterpret_cast<uv_handle_t*>(&conn->handle),
-                [](uv_handle_t* h) {
-                    auto* c = static_cast<Connection*>(h->data);
-                    delete c;
-                }
-            );
+            uv_close(reinterpret_cast<uv_handle_t*>(&conn->handle), [](uv_handle_t* h) {
+                auto* c = static_cast<Connection*>(h->data);
+                delete c;
+            });
         }
         handle_to_conn.erase(&conn->handle);
     }
@@ -275,10 +266,7 @@ struct TcpTransport::Impl {
         uv_buf_t buf = uv_buf_init(reinterpret_cast<char*>(buf_data->data()), buf_data->size());
 
         uv_write(
-            req,
-            reinterpret_cast<uv_stream_t*>(&conn->handle),
-            &buf,
-            1,
+            req, reinterpret_cast<uv_stream_t*>(&conn->handle), &buf, 1,
             [](uv_write_t* req, int status) {
                 auto* buf_data = static_cast<std::vector<uint8_t>*>(req->data);
                 delete buf_data;
@@ -301,11 +289,7 @@ struct TcpTransport::Impl {
         if (conn->is_outgoing) {
             // For outgoing connections, we already know the peer_id
             if (conn->peer_id != remote_id) {
-                SPDLOG_WARN(
-                    "Peer ID mismatch: expected {}, got {}",
-                    conn->peer_id,
-                    remote_id
-                );
+                SPDLOG_WARN("Peer ID mismatch: expected {}, got {}", conn->peer_id, remote_id);
                 // Still accept if IDs don't match (peer might have restarted)
             }
         } else {
@@ -407,11 +391,7 @@ struct TcpTransport::Impl {
         impl->handle_to_conn[&conn->handle] = conn;
 
         if (uv_accept(server, reinterpret_cast<uv_stream_t*>(&conn->handle)) == 0) {
-            uv_read_start(
-                reinterpret_cast<uv_stream_t*>(&conn->handle),
-                OnAlloc,
-                OnRead
-            );
+            uv_read_start(reinterpret_cast<uv_stream_t*>(&conn->handle), OnAlloc, OnRead);
             SPDLOG_DEBUG("Accepted incoming connection");
         } else {
             impl->CloseConnection(conn);
@@ -439,11 +419,7 @@ struct TcpTransport::Impl {
         SPDLOG_DEBUG("Connected to peer {}", conn->peer_id);
 
         // Start reading
-        uv_read_start(
-            reinterpret_cast<uv_stream_t*>(&conn->handle),
-            OnAlloc,
-            OnRead
-        );
+        uv_read_start(reinterpret_cast<uv_stream_t*>(&conn->handle), OnAlloc, OnRead);
 
         // Send handshake
         impl->SendHandshake(conn);
@@ -468,7 +444,9 @@ struct TcpTransport::Impl {
                 impl->connections.erase(conn->peer_id);
 
                 if (impl->on_error) {
-                    impl->on_error(conn->peer_id, nread == UV_EOF ? "connection closed" : uv_strerror(nread));
+                    impl->on_error(
+                        conn->peer_id, nread == UV_EOF ? "connection closed" : uv_strerror(nread)
+                    );
                 }
             }
 
@@ -479,11 +457,7 @@ struct TcpTransport::Impl {
         }
 
         if (nread > 0) {
-            conn->read_buf.insert(
-                conn->read_buf.end(),
-                buf->base,
-                buf->base + nread
-            );
+            conn->read_buf.insert(conn->read_buf.end(), buf->base, buf->base + nread);
             impl->ProcessReadBuffer(conn);
         }
 
@@ -507,22 +481,40 @@ TcpTransport::TcpTransport(TransportConfig config)
 
 TcpTransport::~TcpTransport() = default;
 
-RpcResult<void> TcpTransport::Start() { return impl_->Start(); }
+RpcResult<void> TcpTransport::Start() {
+    return impl_->Start();
+}
 
-void TcpTransport::Stop() { impl_->Stop(); }
+void TcpTransport::Stop() {
+    impl_->Stop();
+}
 
-void TcpTransport::AddPeer(uint64_t id, const std::string& addr) { impl_->AddPeer(id, addr); }
+void TcpTransport::AddPeer(uint64_t id, const std::string& addr) {
+    impl_->AddPeer(id, addr);
+}
 
-void TcpTransport::RemovePeer(uint64_t id) { impl_->RemovePeer(id); }
+void TcpTransport::RemovePeer(uint64_t id) {
+    impl_->RemovePeer(id);
+}
 
-void TcpTransport::Send(std::span<const Message> messages) { impl_->Send(messages); }
+void TcpTransport::Send(std::span<const Message> messages) {
+    impl_->Send(messages);
+}
 
-void TcpTransport::SetMessageCallback(MessageCallback cb) { impl_->on_message = std::move(cb); }
+void TcpTransport::SetMessageCallback(MessageCallback cb) {
+    impl_->on_message = std::move(cb);
+}
 
-void TcpTransport::SetErrorCallback(ErrorCallback cb) { impl_->on_error = std::move(cb); }
+void TcpTransport::SetErrorCallback(ErrorCallback cb) {
+    impl_->on_error = std::move(cb);
+}
 
-void TcpTransport::Poll(std::chrono::milliseconds timeout) { impl_->Poll(timeout); }
+void TcpTransport::Poll(std::chrono::milliseconds timeout) {
+    impl_->Poll(timeout);
+}
 
-void TcpTransport::Run() { impl_->Run(); }
+void TcpTransport::Run() {
+    impl_->Run();
+}
 
 }  // namespace raftpp::rpc

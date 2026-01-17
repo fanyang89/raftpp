@@ -425,8 +425,7 @@ RawNode NewRawNode(
     config.load_state_on_startup = true;
 
     auto initial_state = storage->InitialState();
-    bool is_initialized =
-        initial_state && !initial_state->conf_state.voters().empty();
+    bool is_initialized = initial_state && !initial_state->conf_state.voters().empty();
 
     // If storage is already initialized, just use it as-is (empty peers means use existing config)
     // If storage is NOT initialized and peers is provided, initialize with snapshot
@@ -441,8 +440,7 @@ RawNode NewRawNodeWithConfig(
     const std::vector<uint64_t>& peers, const Config& config, std::shared_ptr<MemoryStorage> storage
 ) {
     auto initial_state = storage->InitialState();
-    bool is_initialized =
-        initial_state && !initial_state->conf_state.voters().empty();
+    bool is_initialized = initial_state && !initial_state->conf_state.voters().empty();
 
     // If storage is already initialized, just use it as-is (empty peers means use existing config)
     // If storage is NOT initialized and peers is provided, initialize with snapshot

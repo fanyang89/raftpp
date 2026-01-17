@@ -1,9 +1,10 @@
 #include "raftpp/rpc/kcp_transport.h"
 
+#include <uv.h>
+
 #include <cstring>
 
 #include <spdlog/spdlog.h>
-#include <uv.h>
 
 extern "C" {
 #include "ikcp.h"
@@ -101,15 +102,14 @@ bool SockaddrEqual(const sockaddr_storage& a, const sockaddr_storage& b) {
     if (a.ss_family == AF_INET) {
         const auto* a4 = reinterpret_cast<const sockaddr_in*>(&a);
         const auto* b4 = reinterpret_cast<const sockaddr_in*>(&b);
-        return a4->sin_port == b4->sin_port &&
-               a4->sin_addr.s_addr == b4->sin_addr.s_addr;
+        return a4->sin_port == b4->sin_port && a4->sin_addr.s_addr == b4->sin_addr.s_addr;
     }
 
     if (a.ss_family == AF_INET6) {
         const auto* a6 = reinterpret_cast<const sockaddr_in6*>(&a);
         const auto* b6 = reinterpret_cast<const sockaddr_in6*>(&b);
         return a6->sin6_port == b6->sin6_port &&
-               std::memcmp(&a6->sin6_addr, &b6->sin6_addr, 16) == 0;
+            std::memcmp(&a6->sin6_addr, &b6->sin6_addr, 16) == 0;
     }
 
     return false;
@@ -193,8 +193,7 @@ struct KcpTransport::Impl {
     bool running = false;
     bool stopped = false;
 
-    Impl(TransportConfig cfg, KcpConfig kcp_cfg)
-        : config(std::move(cfg)), kcp_config(kcp_cfg) {
+    Impl(TransportConfig cfg, KcpConfig kcp_cfg) : config(std::move(cfg)), kcp_config(kcp_cfg) {
         uv_loop_init(&loop);
         udp_handle.data = this;
         update_timer.data = this;
@@ -225,13 +224,15 @@ struct KcpTransport::Impl {
         int r = uv_udp_bind(&udp_handle, reinterpret_cast<const sockaddr*>(&addr), 0);
         if (r != 0) {
             return std::unexpected(
-                RpcError::ConnectionFailed(std::string("UDP bind failed: ") + uv_strerror(r)));
+                RpcError::ConnectionFailed(std::string("UDP bind failed: ") + uv_strerror(r))
+            );
         }
 
         r = uv_udp_recv_start(&udp_handle, OnAlloc, OnRecv);
         if (r != 0) {
             return std::unexpected(
-                RpcError::ConnectionFailed(std::string("UDP recv start failed: ") + uv_strerror(r)));
+                RpcError::ConnectionFailed(std::string("UDP recv start failed: ") + uv_strerror(r))
+            );
         }
 
         uv_timer_init(&loop, &update_timer);
@@ -323,8 +324,10 @@ struct KcpTransport::Impl {
             }
 
             auto buf = Codec::Encode(msg);
-            int ret = ikcp_send(it->second->kcp, reinterpret_cast<const char*>(buf.data()),
-                                static_cast<int>(buf.size()));
+            int ret = ikcp_send(
+                it->second->kcp, reinterpret_cast<const char*>(buf.data()),
+                static_cast<int>(buf.size())
+            );
             if (ret < 0) {
                 SPDLOG_WARN("KCP send failed to {}: {}", to, ret);
             }
@@ -339,10 +342,9 @@ struct KcpTransport::Impl {
             timer.data = &loop;
             uv_timer_init(&loop, &timer);
             uv_timer_start(
-                &timer,
-                [](uv_timer_t* t) { uv_stop(static_cast<uv_loop_t*>(t->data)); },
-                timeout.count(),
-                0);
+                &timer, [](uv_timer_t* t) { uv_stop(static_cast<uv_loop_t*>(t->data)); },
+                timeout.count(), 0
+            );
 
             uv_run(&loop, UV_RUN_DEFAULT);
 
@@ -364,8 +366,10 @@ struct KcpTransport::Impl {
         return next_conv_id++;
     }
 
-    KcpSession* CreateSession(uint32_t conv, uint64_t peer_id, const sockaddr_storage& addr,
-                              socklen_t addr_len, bool is_initiator) {
+    KcpSession* CreateSession(
+        uint32_t conv, uint64_t peer_id, const sockaddr_storage& addr, socklen_t addr_len,
+        bool is_initiator
+    ) {
         auto* session = new KcpSession();
         session->conv = conv;
         session->peer_id = peer_id;
@@ -377,8 +381,9 @@ struct KcpTransport::Impl {
 
         session->kcp = ikcp_create(conv, session);
         ikcp_setoutput(session->kcp, KcpOutput);
-        ikcp_nodelay(session->kcp, kcp_config.nodelay, kcp_config.interval, kcp_config.resend,
-                     kcp_config.nc);
+        ikcp_nodelay(
+            session->kcp, kcp_config.nodelay, kcp_config.interval, kcp_config.resend, kcp_config.nc
+        );
         ikcp_wndsize(session->kcp, kcp_config.snd_wnd, kcp_config.rcv_wnd);
         ikcp_setmtu(session->kcp, kcp_config.mtu);
 
@@ -428,17 +433,21 @@ struct KcpTransport::Impl {
         pkt.node_id = config.node_id;
 
         auto buf = pkt.Encode();
-        SendUdp(buf.data(), buf.size(), reinterpret_cast<const sockaddr*>(&it->second),
-                sizeof(sockaddr_in));
+        SendUdp(
+            buf.data(), buf.size(), reinterpret_cast<const sockaddr*>(&it->second),
+            sizeof(sockaddr_in)
+        );
 
         peer_manager.UpdateState(peer_id, PeerState::Connecting);
         SPDLOG_DEBUG("Initiating KCP handshake to peer {} with conv {}", peer_id, conv);
     }
 
-    void HandleKcpHandshake(const char* data, size_t len, const sockaddr* addr,
-                            socklen_t addr_len) {
+    void HandleKcpHandshake(
+        const char* data, size_t len, const sockaddr* addr, socklen_t addr_len
+    ) {
         auto result = KcpHandshakePacket::Decode(
-            std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(data), len));
+            std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(data), len)
+        );
         if (!result) {
             SPDLOG_WARN("Invalid KCP handshake: {}", result.error().ToString());
             return;
@@ -492,8 +501,9 @@ struct KcpTransport::Impl {
         Handshake hs;
         hs.node_id = config.node_id;
         auto buf = hs.Encode();
-        ikcp_send(session->kcp, reinterpret_cast<const char*>(buf.data()),
-                  static_cast<int>(buf.size()));
+        ikcp_send(
+            session->kcp, reinterpret_cast<const char*>(buf.data()), static_cast<int>(buf.size())
+        );
     }
 
     void OnAppHandshakeReceived(KcpSession* session, uint64_t remote_id) {
@@ -554,8 +564,9 @@ struct KcpTransport::Impl {
             }
 
             session->recv_buf.resize(peek_size);
-            int received = ikcp_recv(session->kcp,
-                                     reinterpret_cast<char*>(session->recv_buf.data()), peek_size);
+            int received = ikcp_recv(
+                session->kcp, reinterpret_cast<char*>(session->recv_buf.data()), peek_size
+            );
             if (received < 0) {
                 break;
             }
@@ -622,21 +633,21 @@ struct KcpTransport::Impl {
 
     void SendUdp(const void* data, size_t len, const sockaddr* addr, socklen_t /*addr_len*/) {
         auto* req = new uv_udp_send_t();
-        auto* buf_data = new std::vector<char>(static_cast<const char*>(data),
-                                               static_cast<const char*>(data) + len);
+        auto* buf_data = new std::vector<char>(
+            static_cast<const char*>(data), static_cast<const char*>(data) + len
+        );
         req->data = buf_data;
 
         uv_buf_t buf = uv_buf_init(buf_data->data(), buf_data->size());
 
-        uv_udp_send(
-            req, &udp_handle, &buf, 1, addr, [](uv_udp_send_t* req, int status) {
-                auto* buf_data = static_cast<std::vector<char>*>(req->data);
-                delete buf_data;
-                delete req;
-                if (status != 0) {
-                    SPDLOG_DEBUG("UDP send failed: {}", uv_strerror(status));
-                }
-            });
+        uv_udp_send(req, &udp_handle, &buf, 1, addr, [](uv_udp_send_t* req, int status) {
+            auto* buf_data = static_cast<std::vector<char>*>(req->data);
+            delete buf_data;
+            delete req;
+            if (status != 0) {
+                SPDLOG_DEBUG("UDP send failed: {}", uv_strerror(status));
+            }
+        });
     }
 
     void UpdateAllKcpSessions() {
@@ -652,9 +663,9 @@ struct KcpTransport::Impl {
 
             ikcp_update(session->kcp, current);
 
-            auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
-                               now - session->last_activity)
-                               .count();
+            auto elapsed =
+                std::chrono::duration_cast<std::chrono::milliseconds>(now - session->last_activity)
+                    .count();
             if (static_cast<uint32_t>(elapsed) > kcp_config.session_timeout_ms) {
                 to_remove.push_back(session);
             }
@@ -675,8 +686,9 @@ struct KcpTransport::Impl {
     static int KcpOutput(const char* buf, int len, ikcpcb* /*kcp*/, void* user) {
         auto* session = static_cast<KcpSession*>(user);
         auto* impl = static_cast<Impl*>(session->transport);
-        impl->SendUdp(buf, len, reinterpret_cast<const sockaddr*>(&session->remote_addr),
-                      session->addr_len);
+        impl->SendUdp(
+            buf, len, reinterpret_cast<const sockaddr*>(&session->remote_addr), session->addr_len
+        );
         return 0;
     }
 
@@ -685,8 +697,10 @@ struct KcpTransport::Impl {
         buf->len = suggested_size;
     }
 
-    static void OnRecv(uv_udp_t* handle, ssize_t nread, const uv_buf_t* buf, const sockaddr* addr,
-                       unsigned /*flags*/) {
+    static void OnRecv(
+        uv_udp_t* handle, ssize_t nread, const uv_buf_t* buf, const sockaddr* addr,
+        unsigned /*flags*/
+    ) {
         auto* impl = static_cast<Impl*>(handle->data);
 
         if (nread < 0 || addr == nullptr) {
@@ -695,8 +709,8 @@ struct KcpTransport::Impl {
         }
 
         if (nread > 0) {
-            socklen_t addr_len = (addr->sa_family == AF_INET) ? sizeof(sockaddr_in)
-                                                              : sizeof(sockaddr_in6);
+            socklen_t addr_len =
+                (addr->sa_family == AF_INET) ? sizeof(sockaddr_in) : sizeof(sockaddr_in6);
             impl->ProcessUdpPacket(buf->base, static_cast<size_t>(nread), addr, addr_len);
         }
 
@@ -728,22 +742,40 @@ KcpTransport::KcpTransport(TransportConfig config, KcpConfig kcp_config)
 
 KcpTransport::~KcpTransport() = default;
 
-RpcResult<void> KcpTransport::Start() { return impl_->Start(); }
+RpcResult<void> KcpTransport::Start() {
+    return impl_->Start();
+}
 
-void KcpTransport::Stop() { impl_->Stop(); }
+void KcpTransport::Stop() {
+    impl_->Stop();
+}
 
-void KcpTransport::AddPeer(uint64_t id, const std::string& addr) { impl_->AddPeer(id, addr); }
+void KcpTransport::AddPeer(uint64_t id, const std::string& addr) {
+    impl_->AddPeer(id, addr);
+}
 
-void KcpTransport::RemovePeer(uint64_t id) { impl_->RemovePeer(id); }
+void KcpTransport::RemovePeer(uint64_t id) {
+    impl_->RemovePeer(id);
+}
 
-void KcpTransport::Send(std::span<const Message> messages) { impl_->Send(messages); }
+void KcpTransport::Send(std::span<const Message> messages) {
+    impl_->Send(messages);
+}
 
-void KcpTransport::SetMessageCallback(MessageCallback cb) { impl_->on_message = std::move(cb); }
+void KcpTransport::SetMessageCallback(MessageCallback cb) {
+    impl_->on_message = std::move(cb);
+}
 
-void KcpTransport::SetErrorCallback(ErrorCallback cb) { impl_->on_error = std::move(cb); }
+void KcpTransport::SetErrorCallback(ErrorCallback cb) {
+    impl_->on_error = std::move(cb);
+}
 
-void KcpTransport::Poll(std::chrono::milliseconds timeout) { impl_->Poll(timeout); }
+void KcpTransport::Poll(std::chrono::milliseconds timeout) {
+    impl_->Poll(timeout);
+}
 
-void KcpTransport::Run() { impl_->Run(); }
+void KcpTransport::Run() {
+    impl_->Run();
+}
 
 }  // namespace raftpp::rpc

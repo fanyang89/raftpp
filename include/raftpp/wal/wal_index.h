@@ -22,7 +22,9 @@ class WALIndex {
 
     // Insert an entry at the given index
     // Assumes entries are inserted in order (index == last_index + 1)
-    void Insert(uint64_t index, uint64_t segment_id, uint64_t offset, uint32_t length, uint64_t term);
+    void Insert(
+        uint64_t index, uint64_t segment_id, uint64_t offset, uint32_t length, uint64_t term
+    );
 
     // Lookup an entry by index
     [[nodiscard]] std::optional<IndexEntry> Lookup(uint64_t index) const;
@@ -43,8 +45,11 @@ class WALIndex {
 
     // Getters
     [[nodiscard]] uint64_t first_index() const { return first_index_; }
+
     [[nodiscard]] uint64_t last_index() const;
+
     [[nodiscard]] bool empty() const { return entries_.empty(); }
+
     [[nodiscard]] size_t size() const { return entries_.size(); }
 
     // Set the first index (used when rebuilding from metadata)

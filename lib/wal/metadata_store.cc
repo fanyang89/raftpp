@@ -143,8 +143,8 @@ std::vector<uint8_t> MetadataStore::Serialize(const WALMetadata& meta) const {
 
     // Calculate total size:
     // MetadataHeader (16) + MetadataContent (24) + hard_state_len (4) + hard_state + conf_state_len (4) + conf_state
-    size_t total_size = sizeof(MetadataHeader) + sizeof(MetadataContent) + 4 + hard_state_bytes.size() +
-                        4 + conf_state_bytes.size();
+    size_t total_size = sizeof(MetadataHeader) + sizeof(MetadataContent) + 4 +
+        hard_state_bytes.size() + 4 + conf_state_bytes.size();
 
     std::vector<uint8_t> data(total_size, 0);
     uint8_t* ptr = data.data();
@@ -238,11 +238,8 @@ Result<WALMetadata> MetadataStore::Deserialize(const std::vector<uint8_t>& data)
     }
 
     SPDLOG_DEBUG(
-        "loaded metadata: first_index={}, snapshot_index={}, term={}, vote={}",
-        meta.first_index,
-        meta.snapshot_index,
-        meta.hard_state.term(),
-        meta.hard_state.vote()
+        "loaded metadata: first_index={}, snapshot_index={}, term={}, vote={}", meta.first_index,
+        meta.snapshot_index, meta.hard_state.term(), meta.hard_state.vote()
     );
 
     return meta;

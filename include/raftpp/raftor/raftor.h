@@ -97,10 +97,8 @@ class Raftor {
     /// @param transport Custom transport implementation
     /// @return Raftor instance or error
     [[nodiscard]] static Result<std::unique_ptr<Raftor>> Create(
-        const RaftorConfig& config,
-        std::unique_ptr<StateMachine> state_machine,
-        std::shared_ptr<Storage> storage,
-        std::unique_ptr<rpc::Transport> transport
+        const RaftorConfig& config, std::unique_ptr<StateMachine> state_machine,
+        std::shared_ptr<Storage> storage, std::unique_ptr<rpc::Transport> transport
     );
 
     // === Lifecycle ===
@@ -148,8 +146,7 @@ class Raftor {
     /// @param timeout Maximum time to wait
     /// @return The state machine's response or error
     [[nodiscard]] virtual Result<std::string> ProposeSync(
-        std::string data,
-        std::chrono::milliseconds timeout = std::chrono::milliseconds{5000}
+        std::string data, std::chrono::milliseconds timeout = std::chrono::milliseconds{5000}
     ) = 0;
 
     /// Propose data and return a future
@@ -182,8 +179,7 @@ class Raftor {
     /// @param timeout Maximum time to wait
     /// @return void on success (safe to read), or error
     [[nodiscard]] virtual Result<void> ReadIndexSync(
-        std::string ctx,
-        std::chrono::milliseconds timeout = std::chrono::milliseconds{5000}
+        std::string ctx, std::chrono::milliseconds timeout = std::chrono::milliseconds{5000}
     ) = 0;
 
     // === Cluster Management ===

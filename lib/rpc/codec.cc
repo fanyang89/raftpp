@@ -87,7 +87,9 @@ RpcResult<size_t> Codec::FrameSize(std::span<const uint8_t> buffer, size_t max_s
     size_t total_size = kPrefixSize + header_len + header.payload_size();
     if (total_size > max_size) {
         return std::unexpected(
-            RpcError::MessageTooLarge(fmt::format("message size {} exceeds max {}", total_size, max_size))
+            RpcError::MessageTooLarge(
+                fmt::format("message size {} exceeds max {}", total_size, max_size)
+            )
         );
     }
 
@@ -125,9 +127,11 @@ RpcResult<Codec::DecodeResult> Codec::Decode(std::span<const uint8_t> buffer, si
 
     size_t total_size = header_end + header.payload_size();
     if (total_size > max_size) {
-        return std::unexpected(RpcError::MessageTooLarge(
-            fmt::format("message size {} exceeds max {}", total_size, max_size)
-        ));
+        return std::unexpected(
+            RpcError::MessageTooLarge(
+                fmt::format("message size {} exceeds max {}", total_size, max_size)
+            )
+        );
     }
 
     if (buffer.size() < total_size) {

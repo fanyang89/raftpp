@@ -439,8 +439,8 @@ TEST_CASE("raft: group commit") {
         // Disable group commit - should use simple quorum
         sm->EnableGroupCommit(false);
         CHECK_MESSAGE(
-            sm->raft_log().committed() == tc.quorum_commit_index, "test #", i, ": quorum committed ",
-            sm->raft_log().committed(), ", want ", tc.quorum_commit_index
+            sm->raft_log().committed() == tc.quorum_commit_index, "test #", i,
+            ": quorum committed ", sm->raft_log().committed(), ", want ", tc.quorum_commit_index
         );
     }
 }

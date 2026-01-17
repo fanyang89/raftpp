@@ -48,8 +48,11 @@ Result<std::unique_ptr<Segment>> Segment::Create(
 ) {
     int fd = ::open(path.c_str(), O_RDWR | O_CREAT | O_EXCL, 0644);
     if (fd < 0) {
-        return RaftError(StorageErrorOther{
-            fmt::format("failed to create segment {}: {}", path.string(), strerror(errno))});
+        return RaftError(
+            StorageErrorOther{
+                fmt::format("failed to create segment {}: {}", path.string(), strerror(errno))
+            }
+        );
     }
 
     // Preallocate space if requested
@@ -73,8 +76,9 @@ Result<std::unique_ptr<Segment>> Segment::Create(
     if (written != static_cast<ssize_t>(header_buf.size())) {
         ::close(fd);
         ::unlink(path.c_str());
-        return RaftError(StorageErrorOther{
-            fmt::format("failed to write segment header: {}", strerror(errno))});
+        return RaftError(
+            StorageErrorOther{fmt::format("failed to write segment header: {}", strerror(errno))}
+        );
     }
 
     auto segment = std::unique_ptr<Segment>(new Segment());
@@ -93,7 +97,9 @@ Result<std::unique_ptr<Segment>> Segment::Open(const std::filesystem::path& path
     int fd = ::open(path.c_str(), O_RDWR);
     if (fd < 0) {
         return RaftError(
-            StorageErrorOther{fmt::format("failed to open segment {}: {}", path.string(), strerror(errno))}
+            StorageErrorOther{
+                fmt::format("failed to open segment {}: {}", path.string(), strerror(errno))
+            }
         );
     }
 
@@ -102,21 +108,26 @@ Result<std::unique_ptr<Segment>> Segment::Open(const std::filesystem::path& path
     ssize_t n = ::pread(fd, header_buf.data(), header_buf.size(), 0);
     if (n != static_cast<ssize_t>(header_buf.size())) {
         ::close(fd);
-        return RaftError(StorageErrorOther{fmt::format("failed to read segment header: {}", strerror(errno))}
+        return RaftError(
+            StorageErrorOther{fmt::format("failed to read segment header: {}", strerror(errno))}
         );
     }
 
     auto header = SegmentHeader::Deserialize(std::span<const uint8_t, 32>(header_buf));
     if (!header.IsValid()) {
         ::close(fd);
-        return RaftError(StorageErrorOther{fmt::format("invalid segment header in {}", path.string())});
+        return RaftError(
+            StorageErrorOther{fmt::format("invalid segment header in {}", path.string())}
+        );
     }
 
     // Get file size to determine write offset
-    struct stat st {};
+    struct stat st{};
     if (::fstat(fd, &st) < 0) {
         ::close(fd);
-        return RaftError(StorageErrorOther{fmt::format("failed to stat segment: {}", strerror(errno))});
+        return RaftError(
+            StorageErrorOther{fmt::format("failed to stat segment: {}", strerror(errno))}
+        );
     }
 
     auto segment = std::unique_ptr<Segment>(new Segment());
@@ -127,11 +138,8 @@ Result<std::unique_ptr<Segment>> Segment::Open(const std::filesystem::path& path
     segment->path_ = path;
 
     SPDLOG_DEBUG(
-        "opened segment {} with segment_id={}, first_index={}, size={}",
-        path.string(),
-        header.segment_id,
-        header.first_index,
-        st.st_size
+        "opened segment {} with segment_id={}, first_index={}, size={}", path.string(),
+        header.segment_id, header.first_index, st.st_size
     );
 
     return segment;
@@ -144,7 +152,9 @@ Result<void> Segment::Append(std::span<const uint8_t> data) {
 
     ssize_t written = ::pwrite(fd_, data.data(), data.size(), static_cast<off_t>(write_offset_));
     if (written != static_cast<ssize_t>(data.size())) {
-        return RaftError(StorageErrorOther{fmt::format("failed to write to segment: {}", strerror(errno))});
+        return RaftError(
+            StorageErrorOther{fmt::format("failed to write to segment: {}", strerror(errno))}
+        );
     }
 
     write_offset_ += data.size();
@@ -159,12 +169,16 @@ Result<std::vector<uint8_t>> Segment::Read(uint64_t offset, uint32_t length) con
     std::vector<uint8_t> data(length);
     ssize_t n = ::pread(fd_, data.data(), length, static_cast<off_t>(offset));
     if (n < 0) {
-        return RaftError(StorageErrorOther{fmt::format("failed to read from segment: {}", strerror(errno))});
+        return RaftError(
+            StorageErrorOther{fmt::format("failed to read from segment: {}", strerror(errno))}
+        );
     }
     if (static_cast<uint32_t>(n) != length) {
-        return RaftError(StorageErrorOther{fmt::format(
-            "short read from segment: expected {}, got {}", length, n
-        )});
+        return RaftError(
+            StorageErrorOther{
+                fmt::format("short read from segment: expected {}, got {}", length, n)
+            }
+        );
     }
 
     return data;
@@ -175,10 +189,19 @@ Result<void> Segment::Sync() {
         return RaftError(StorageErrorOther{"segment not open"});
     }
 
-    if (::fdatasync(fd_) < 0) {
-        return RaftError(StorageErrorOther{fmt::format("failed to sync segment: {}", strerror(errno))});
-    }
+    int rc = -1;
 
+#if defined(__APPLE__) && defined(__MACH__)
+    rc = ::fsync(fd_);
+#else
+    rc = ::fdatasync(fd_);
+#endif
+
+    if (rc < 0) {
+        return RaftError(
+            StorageErrorOther{fmt::format("failed to sync segment: {}", strerror(errno))}
+        );
+    }
     return {};
 }
 
@@ -188,7 +211,9 @@ Result<void> Segment::Truncate(uint64_t offset) {
     }
 
     if (::ftruncate(fd_, static_cast<off_t>(offset)) < 0) {
-        return RaftError(StorageErrorOther{fmt::format("failed to truncate segment: {}", strerror(errno))});
+        return RaftError(
+            StorageErrorOther{fmt::format("failed to truncate segment: {}", strerror(errno))}
+        );
     }
 
     write_offset_ = offset;
@@ -200,7 +225,9 @@ Result<void> Segment::Truncate(uint64_t offset) {
 Result<void> Segment::Close() {
     if (fd_ >= 0) {
         if (::close(fd_) < 0) {
-            return RaftError(StorageErrorOther{fmt::format("failed to close segment: {}", strerror(errno))});
+            return RaftError(
+                StorageErrorOther{fmt::format("failed to close segment: {}", strerror(errno))}
+            );
         }
         fd_ = -1;
     }

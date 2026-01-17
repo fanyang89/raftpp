@@ -5,11 +5,8 @@
 namespace raftpp::raftor {
 
 ReadyProcessor::ReadyProcessor(
-    RawNode& raw_node,
-    std::shared_ptr<wal::WALStorage> storage,
-    StateMachine& state_machine,
-    rpc::Transport& transport,
-    ProposalTracker& proposal_tracker
+    RawNode& raw_node, std::shared_ptr<wal::WALStorage> storage, StateMachine& state_machine,
+    rpc::Transport& transport, ProposalTracker& proposal_tracker
 )
     : raw_node_(raw_node),
       storage_(std::move(storage)),
@@ -103,8 +100,7 @@ Result<void> ReadyProcessor::ApplySnapshot(const Ready& rd) {
     }
 
     spdlog::info(
-        "Applying snapshot at index {} term {}",
-        snapshot.metadata().index(),
+        "Applying snapshot at index {} term {}", snapshot.metadata().index(),
         snapshot.metadata().term()
     );
 
@@ -139,9 +135,7 @@ Result<void> ReadyProcessor::ApplyCommittedEntries(const std::vector<Entry>& ent
         if (auto result = ApplyEntry(entry); !result) {
             // Log but continue - state machine errors shouldn't stop Raft
             spdlog::warn(
-                "Failed to apply entry at index {}: {}",
-                entry.index(),
-                result.error().ToString()
+                "Failed to apply entry at index {}: {}", entry.index(), result.error().ToString()
             );
         }
         applied_index_ = entry.index();
@@ -176,8 +170,7 @@ Result<void> ReadyProcessor::ApplyEntry(const Entry& entry) {
 
         // Update transport peers based on conf change
         for (const auto& change : cc.changes()) {
-            if (change.change_type() == AddNode ||
-                change.change_type() == AddLearnerNode) {
+            if (change.change_type() == AddNode || change.change_type() == AddLearnerNode) {
                 // Note: address needs to be provided via context or external mechanism
                 // For now, we skip adding - the user should call AddNode explicitly
                 spdlog::info("Node {} added to configuration", change.node_id());
@@ -227,9 +220,7 @@ void ReadyProcessor::ProcessLightReady(const LightReady& light_rd) {
     for (const auto& entry : light_rd.committed_entries) {
         if (auto result = ApplyEntry(entry); !result) {
             spdlog::warn(
-                "Failed to apply entry at index {}: {}",
-                entry.index(),
-                result.error().ToString()
+                "Failed to apply entry at index {}: {}", entry.index(), result.error().ToString()
             );
         }
         applied_index_ = entry.index();
@@ -256,10 +247,8 @@ void ReadyProcessor::CheckLeadershipChange(const Ready& rd) {
         uint64_t term = rd.hs ? rd.hs->term() : prev_term_;
 
         spdlog::info(
-            "Leadership change: role={}, leader={}, term={}",
-            static_cast<int>(ss.raft_state),
-            ss.leader_id,
-            term
+            "Leadership change: role={}, leader={}, term={}", static_cast<int>(ss.raft_state),
+            ss.leader_id, term
         );
 
         state_machine_.OnLeadershipChange(is_leader, term, ss.leader_id);

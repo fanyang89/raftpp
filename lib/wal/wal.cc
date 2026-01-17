@@ -53,12 +53,8 @@ Result<void> WAL::Initialize(const WALConfig& config) {
     }
 
     SPDLOG_INFO(
-        "WAL opened at {}: first_index={}, last_index={}, term={}, vote={}",
-        config_.dir.string(),
-        first_index_,
-        LastIndexUnlocked(),
-        hard_state_.term(),
-        hard_state_.vote()
+        "WAL opened at {}: first_index={}, last_index={}, term={}, vote={}", config_.dir.string(),
+        first_index_, LastIndexUnlocked(), hard_state_.term(), hard_state_.vote()
     );
 
     return {};
@@ -87,7 +83,8 @@ Result<void> WAL::Recover() {
             auto result = ReplaySegment(segment);
             if (!result) {
                 SPDLOG_WARN(
-                    "failed to replay segment {}: {}", seg_info.segment_id, result.error().ToString()
+                    "failed to replay segment {}: {}", seg_info.segment_id,
+                    result.error().ToString()
                 );
                 // Continue with partial recovery
             }
@@ -97,15 +94,15 @@ Result<void> WAL::Recover() {
     // Verify consistency
     uint64_t last_idx = LastIndexUnlocked();
     if (last_idx < hard_state_.commit()) {
-        return RaftError(FatalError{fmt::format(
-            "WAL inconsistent: last_index {} < committed {}", last_idx, hard_state_.commit()
-        )});
+        return RaftError(
+            FatalError{fmt::format(
+                "WAL inconsistent: last_index {} < committed {}", last_idx, hard_state_.commit()
+            )}
+        );
     }
 
     SPDLOG_DEBUG(
-        "WAL recovery complete: {} entries from index {} to {}",
-        index_.size(),
-        first_index_,
+        "WAL recovery complete: {} entries from index {} to {}", index_.size(), first_index_,
         last_idx
     );
 
@@ -187,11 +184,7 @@ Result<void> WAL::ReplaySegment(Segment* segment) {
                 // Only add entries >= first_index (entries before may have been compacted)
                 if (entry.index() >= first_index_) {
                     index_.Insert(
-                        entry.index(),
-                        segment->segment_id(),
-                        offset,
-                        total_size,
-                        entry.term()
+                        entry.index(), segment->segment_id(), offset, total_size, entry.term()
                     );
                 }
                 break;
@@ -202,22 +195,21 @@ Result<void> WAL::ReplaySegment(Segment* segment) {
                 auto payload = parser.Payload();
                 while (pos < payload.size()) {
                     // Read entry length (4 bytes)
-                    if (pos + 4 > payload.size()) break;
+                    if (pos + 4 > payload.size())
+                        break;
                     uint32_t entry_len;
                     std::memcpy(&entry_len, payload.data() + pos, sizeof(entry_len));
                     pos += 4;
 
-                    if (pos + entry_len > payload.size()) break;
+                    if (pos + entry_len > payload.size())
+                        break;
 
                     Entry entry;
                     if (entry.ParseFromArray(payload.data() + pos, entry_len)) {
                         if (entry.index() >= first_index_) {
                             // For batch, we store the batch offset but track individual entries
                             index_.Insert(
-                                entry.index(),
-                                segment->segment_id(),
-                                offset,
-                                total_size,
+                                entry.index(), segment->segment_id(), offset, total_size,
                                 entry.term()
                             );
                         }
@@ -259,9 +251,12 @@ Result<void> WAL::Append(std::span<const Entry> entries) {
             // Truncate the index
             index_.TruncateFrom(entries.front().index());
         } else if (entries.front().index() != expected_index) {
-            return RaftError(FatalError{fmt::format(
-                "non-continuous entries: expected {}, got {}", expected_index, entries.front().index()
-            )});
+            return RaftError(
+                FatalError{fmt::format(
+                    "non-continuous entries: expected {}, got {}", expected_index,
+                    entries.front().index()
+                )}
+            );
         }
     }
 
@@ -304,11 +299,8 @@ Result<void> WAL::Append(std::span<const Entry> entries) {
 
         // Update index
         index_.Insert(
-            entry.index(),
-            segment->segment_id(),
-            record_offset,
-            static_cast<uint32_t>(record.size()),
-            entry.term()
+            entry.index(), segment->segment_id(), record_offset,
+            static_cast<uint32_t>(record.size()), entry.term()
         );
     }
 
@@ -492,9 +484,9 @@ Result<void> WAL::Compact(uint64_t compact_index) {
 
     uint64_t last_idx = LastIndexUnlocked();
     if (compact_index > last_idx) {
-        return RaftError(FatalError{fmt::format(
-            "compact index {} > last index {}", compact_index, last_idx
-        )});
+        return RaftError(
+            FatalError{fmt::format("compact index {} > last index {}", compact_index, last_idx)}
+        );
     }
 
     // Update first_index
@@ -541,7 +533,9 @@ Result<void> WAL::Compact(uint64_t compact_index) {
     for (uint64_t seg_id : segments_to_remove) {
         auto remove_result = segment_manager_->RemoveSegment(seg_id);
         if (!remove_result) {
-            SPDLOG_WARN("failed to remove segment {}: {}", seg_id, remove_result.error().ToString());
+            SPDLOG_WARN(
+                "failed to remove segment {}: {}", seg_id, remove_result.error().ToString()
+            );
         }
     }
 
@@ -616,7 +610,9 @@ Result<void> WAL::Close() {
     if (segment_manager_) {
         auto flush_result = FlushWriteBuffer();
         if (!flush_result) {
-            SPDLOG_WARN("failed to flush write buffer on close: {}", flush_result.error().ToString());
+            SPDLOG_WARN(
+                "failed to flush write buffer on close: {}", flush_result.error().ToString()
+            );
         }
 
         auto sync_result = segment_manager_->SyncAll();
@@ -664,9 +660,9 @@ Result<void> WAL::FlushWriteBuffer() {
         return segment_result.error();
     }
 
-    auto write_result = (*segment_result)->Append(
-        std::span<const uint8_t>(write_buffer_.data(), write_buffer_used_)
-    );
+    auto write_result =
+        (*segment_result)
+            ->Append(std::span<const uint8_t>(write_buffer_.data(), write_buffer_used_));
     if (!write_result) {
         return write_result;
     }

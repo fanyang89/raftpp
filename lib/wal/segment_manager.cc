@@ -105,9 +105,7 @@ Result<Segment*> SegmentManager::RollToNewSegment(uint64_t first_index) {
     segments_[new_segment_id] = std::move(*segment);
     current_segment_id_ = new_segment_id;
 
-    SPDLOG_DEBUG(
-        "rolled to new segment {} with first_index={}", new_segment_id, first_index
-    );
+    SPDLOG_DEBUG("rolled to new segment {} with first_index={}", new_segment_id, first_index);
 
     return segment_ptr;
 }
@@ -184,11 +182,13 @@ std::vector<SegmentInfo> SegmentManager::ListSegments() const {
     result.reserve(segments_.size());
 
     for (const auto& [seg_id, segment] : segments_) {
-        result.push_back(SegmentInfo{
-            .segment_id = seg_id,
-            .first_index = segment->first_index(),
-            .path = segment->path(),
-        });
+        result.push_back(
+            SegmentInfo{
+                .segment_id = seg_id,
+                .first_index = segment->first_index(),
+                .path = segment->path(),
+            }
+        );
     }
 
     return result;

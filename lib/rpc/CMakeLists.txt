@@ -15,8 +15,6 @@ target_link_libraries(raftpp-rpc
         raftpp-proto
         uv_a
         spdlog
-        absl::flat_hash_map
-        absl::flat_hash_set
         nlohmann_json::nlohmann_json
         kcp
 )

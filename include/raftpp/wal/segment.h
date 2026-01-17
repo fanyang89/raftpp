@@ -50,8 +50,11 @@ class Segment {
 
     // Getters
     [[nodiscard]] uint64_t segment_id() const { return segment_id_; }
+
     [[nodiscard]] uint64_t first_index() const { return first_index_; }
+
     [[nodiscard]] uint64_t write_offset() const { return write_offset_; }
+
     [[nodiscard]] const std::filesystem::path& path() const { return path_; }
 
     // Check if segment has reached size threshold
