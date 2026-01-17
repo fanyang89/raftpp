@@ -68,3 +68,8 @@ tasks:
       - dt
     cmds:
       - ./build/tests/datadriven/raftpp-datadriven-tests
+
+  clean:
+    desc: Clear the default build directory
+    cmds:
+      - rm -rf ./build
