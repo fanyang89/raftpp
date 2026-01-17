@@ -19,12 +19,14 @@ add_executable(raftpp-tests
   raft_flow_control_test.cc
   wal_test.cc
   rpc_test.cc
+  raftor_test.cc
 )
 
 target_link_libraries(raftpp-tests PRIVATE raftpp)
 target_link_libraries(raftpp-tests PRIVATE raftpp-rpc)
 target_link_libraries(raftpp-tests PRIVATE raftpp-proto)
 target_link_libraries(raftpp-tests PRIVATE raftpp-test-harness)
+target_link_libraries(raftpp-tests PRIVATE raftor)
 
 target_link_libraries(raftpp-tests PRIVATE doctest)
 target_compile_definitions(raftpp-tests PUBLIC DOCTEST_CONFIG_USE_STD_HEADERS=1)

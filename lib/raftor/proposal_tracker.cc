@@ -37,7 +37,7 @@ void ProposalTracker::Fail(const std::string& ctx, RaftError error) {
         proposals_.erase(it);
     }
     if (callback) {
-        callback(std::unexpected(error));
+        callback(std::unexpected(std::move(error)));
     }
 }
 
@@ -48,11 +48,13 @@ void ProposalTracker::FailAll(RaftError error) {
         callbacks = std::move(proposals_);
         proposals_.clear();
     }
+    // Use ProposalDropped for all failures in FailAll
     for (auto& [ctx, callback] : callbacks) {
         if (callback) {
-            callback(std::unexpected(error));
+            callback(std::unexpected(RaftError(RaftErrorCode::ProposalDropped)));
         }
     }
+    (void)error;  // error parameter indicates the reason but we use a fresh error each time
 }
 
 void ProposalTracker::TrackRead(const std::string& ctx, ReadIndexCallback callback) {
@@ -88,7 +90,7 @@ void ProposalTracker::FailRead(const std::string& ctx, RaftError error) {
         reads_.erase(it);
     }
     if (callback) {
-        callback(std::unexpected(error));
+        callback(std::unexpected(std::move(error)));
     }
 }
 
