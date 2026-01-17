@@ -13,7 +13,7 @@ task cmake    # Configure CMake with dev preset
 task build    # Build test targets
 task test     # Build and run all tests
 task pb       # Regenerate protobuf files from proto/raftpp.proto
-task fmt      # Format code with clang-format (Linux only)
+task fmt      # Format code with clang-format
 ```
 
 ### Running Individual Tests
@@ -22,16 +22,17 @@ task fmt      # Format code with clang-format (Linux only)
 # Run specific test by name (doctest filter)
 ./build/tests/raftpp-tests "test_name"
 
-# Run unit tests only
+# Run unit tests only (alias: task ut)
 ./build/tests/raftpp-tests
 
-# Run data-driven tests only
+# Run data-driven tests only (alias: task dt)
 ./build/tests/datadriven/raftpp-datadriven-tests
 ```
 
 ### Build Options
 
 Enable sanitizers via CMake:
+
 ```bash
 cmake --preset=dev -DRAFTPP_SANITIZE=address
 ```
@@ -45,6 +46,7 @@ cmake --preset=dev -DRAFTPP_SANITIZE=address
 2. **Raft** (`include/raftpp/raft.h`) - Core consensus state machine extending `RaftCore`. Handles state transitions (Follower, Candidate, PreCandidate, Leader), message processing, and log replication coordination.
 
 3. **RaftLog** (`include/raftpp/raft_log.h`) - Log management combining:
+
    - `Unstable` - In-memory buffer for uncommitted entries
    - `Storage` interface - Pluggable persistence backend
 
@@ -52,9 +54,31 @@ cmake --preset=dev -DRAFTPP_SANITIZE=address
 
 5. **Configuration Management** - `ConfChanger`, `JointConf`, `MajorityConf` handle dynamic cluster membership with joint consensus.
 
+### High-Level Integration Components
+
+6. **Raftor** (`include/raftpp/raftor/`) - Complete orchestration layer managing the Raft lifecycle:
+
+   - Single-threaded event loop model with ticking
+   - Ready processing in correct order
+   - Thread-safe proposal/read APIs with callbacks, futures, and sync variants
+   - Users implement `StateMachine` interface for application logic
+
+7. **WAL** (`include/raftpp/wal/`) - Write-Ahead Log for durable storage:
+
+   - Segmented log files with CRC32C checksums
+   - Metadata persistence for HardState/ConfState
+   - Index for fast entry lookup
+   - Log compaction via snapshots
+
+8. **RPC Transport** (`include/raftpp/rpc/`) - Network layer with pluggable transports:
+   - `Transport` - Abstract interface for message passing
+   - `TcpTransport` - TCP implementation using libuv
+   - `KcpTransport` - UDP/KCP implementation for low-latency messaging
+
 ### Key Patterns
 
 **Error Handling**: Uses `std::expected<T, RaftError>` aliased as `Result<T>`:
+
 ```cpp
 if (const auto result = operation(); !result) {
     return result.error();
@@ -63,15 +87,18 @@ if (const auto result = operation(); !result) {
 
 **Message Dispatch**: Role-based message handling through `Step()` → `StepFollower()`, `StepCandidate()`, `StepLeader()`.
 
-**Storage Interface**: Pure virtual interface in `storage.h`. `MemoryStorage` provides built-in implementation; custom backends can be implemented.
+**Storage Interface**: Pure virtual interface in `storage.h`. `MemoryStorage` provides built-in implementation; `WALStorage` provides persistence; custom backends can be implemented.
 
 ### Directory Structure
 
 - `include/raftpp/` - Public headers
+- `include/raftpp/wal/` - WAL subsystem headers
+- `include/raftpp/rpc/` - Transport layer headers
+- `include/raftpp/raftor/` - High-level orchestration headers
 - `lib/` - Implementation files (.cc)
 - `proto/` - Protobuf definitions and generated code
 - `tests/` - Unit tests using doctest
-- `tests/datadriven/` - Data-driven tests with text-based DSL (testdata/*.txt)
+- `tests/datadriven/` - Data-driven tests with text-based DSL (testdata/\*.txt)
 - `tests/harness/` - Test support infrastructure (network simulation, utilities)
 
 ### Entry Parameter Order
