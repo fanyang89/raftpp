@@ -43,10 +43,10 @@ Result<void> CheckInvariants(const TrackerConfiguration& cfg, const IncrChangeMa
 
     if (!Joint(cfg)) {
         if (!cfg.learners_next.empty()) {
-            return RaftError(ConfChangeError("learners_next must be empty when not joint"));
+            return RaftError(ConfChangeErrorCode::LearnersNextMustBeEmpty);
         }
         if (cfg.auto_leave) {
-            return RaftError(ConfChangeError("auto_leave must be false when not joint"));
+            return RaftError(ConfChangeErrorCode::AutoLeaveMustBeFalse);
         }
     }
 
@@ -93,7 +93,7 @@ Result<std::pair<TrackerConfiguration, MapChange>> ConfChanger::EnterJoint(
     const bool auto_leave, const std::span<const ConfChangeSingle> ccs
 ) {
     if (Joint(tracker_.conf())) {
-        return RaftError(ConfChangeError{"config is already joint"});
+        return RaftError(ConfChangeErrorCode::ConfigAlreadyJoint);
     }
 
     if (auto p = CheckAndCopy(); !p) {
@@ -103,7 +103,7 @@ Result<std::pair<TrackerConfiguration, MapChange>> ConfChanger::EnterJoint(
         IncrChangeMap& prs = p->second;
 
         if (cfg.voters.incoming().empty()) {
-            return RaftError(ConfChangeError("can't make a zero-voter config joint"));
+            return RaftError(ConfChangeErrorCode::ZeroVoterConfigJoint);
         }
 
         cfg.voters.outgoing().insert(cfg.voters.incoming().begin(), cfg.voters.incoming().end());
@@ -121,7 +121,7 @@ Result<std::pair<TrackerConfiguration, MapChange>> ConfChanger::EnterJoint(
 Result<std::pair<TrackerConfiguration, std::vector<std::pair<uint64_t, MapChangeType>>>, RaftError>
 ConfChanger::LeaveJoint() {
     if (!Joint(tracker_.conf())) {
-        return RaftError(ConfChangeError("can't leave a non-joint config"));
+        return RaftError(ConfChangeErrorCode::LeaveNonJointConfig);
     }
 
     if (auto p = CheckAndCopy(); !p) {
@@ -175,7 +175,7 @@ Result<void> ConfChanger::Apply(
     }
 
     if (cfg.voters.incoming().empty()) {
-        return RaftError(ConfChangeError("removed all voters"));
+        return RaftError(ConfChangeErrorCode::RemovedAllVoters);
     }
     return {};
 }
@@ -192,7 +192,7 @@ Result<std::pair<TrackerConfiguration, MapChange>> ConfChanger::Simple(
     const std::span<const ConfChangeSingle> ccs
 ) const {
     if (Joint(tracker_.conf())) {
-        return RaftError(ConfChangeError("can't apply simple config change in joint config"));
+        return RaftError(ConfChangeErrorCode::CannotApplySimpleInJointConfig);
     }
 
     if (auto p = CheckAndCopy(); !p) {
@@ -219,9 +219,7 @@ Result<std::pair<TrackerConfiguration, MapChange>> ConfChanger::Simple(
         std::vector<uint64_t> diff;
         std::ranges::set_symmetric_difference(new_voters, old_voters, std::back_inserter(diff));
         if (diff.size() > 1) {
-            return RaftError(
-                ConfChangeError("more than one voter changed without entering joint config")
-            );
+            return RaftError(ConfChangeErrorCode::MultipleVotersChangedWithoutJoint);
         }
 
         if (const auto r = CheckInvariants(cfg, prs); !r) {

@@ -403,12 +403,12 @@ Result<std::vector<Entry>> WAL::ReadEntries(
 
         RecordParser parser(*record_data);
         if (!parser.IsValid()) {
-            return RaftError(StorageErrorOther{"corrupt entry record"});
+            return RaftError(StorageErrorCode::CorruptEntryRecord);
         }
 
         Entry entry;
         if (!entry.ParseFromArray(parser.Payload().data(), parser.Payload().size())) {
-            return RaftError(StorageErrorOther{"failed to parse entry"});
+            return RaftError(StorageErrorCode::EntryParseError);
         }
 
         uint64_t entry_size = entry.ByteSizeLong();

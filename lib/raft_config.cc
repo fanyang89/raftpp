@@ -20,13 +20,13 @@ size_t Config::MaxElectionTick() const {
 
 Result<void> Config::Validate() const {
     if (id == INVALID_ID) {
-        return InvalidConfigError("invalid node id").ToError();
+        return RaftError(ConfigErrorCode::InvalidNodeId);
     }
     if (heartbeat_tick == 0) {
-        return InvalidConfigError("heartbeat tick must greater than 0").ToError();
+        return RaftError(ConfigErrorCode::HeartbeatTickTooSmall);
     }
     if (election_tick <= heartbeat_tick) {
-        return InvalidConfigError("election tick must be greater than heartbeat tick").ToError();
+        return RaftError(ConfigErrorCode::ElectionTickTooSmall);
     }
 
     const size_t min_timeout = MinElectionTick();
@@ -53,12 +53,11 @@ Result<void> Config::Validate() const {
     }
 
     if (max_inflight_messages == 0) {
-        return InvalidConfigError("max inflight messages must be greater than 0").ToError();
+        return RaftError(ConfigErrorCode::MaxInflightMessagesTooSmall);
     }
 
     if (read_only_option == ReadOnlyOption::LeaseBased && !check_quorum) {
-        return InvalidConfigError("read_only_option == LeaseBased requires check_quorum == true")
-            .ToError();
+        return RaftError(ConfigErrorCode::LeaseBasedReadRequiresCheckQuorum);
     }
 
     if (max_uncommitted_size < max_size_per_message) {

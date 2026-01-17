@@ -19,7 +19,7 @@ voters=(1 2 3)&&(1) autoleave
 # Can't enter-joint twice, even if autoleave changes.
 enter-joint autoleave=false
 ----
-config is already joint
+ConfigAlreadyJoint
 
 leave-joint
 ----

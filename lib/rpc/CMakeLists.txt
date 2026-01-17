@@ -16,4 +16,5 @@ target_link_libraries(raftpp-rpc
         uv_a
         spdlog
         kcp
+        libassert::assert
 )

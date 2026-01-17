@@ -54,7 +54,7 @@ class KcpTransport : public Transport {
     KcpTransport& operator=(KcpTransport&&) = delete;
 
     // Transport interface
-    RpcResult<void> Start() override;
+    Result<void> Start() override;
     void Stop() override;
     void AddPeer(uint64_t id, const std::string& addr) override;
     void RemovePeer(uint64_t id) override;

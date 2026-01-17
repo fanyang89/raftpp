@@ -2,21 +2,11 @@
 
 #include <cstring>
 
-#include <spdlog/fmt/fmt.h>
-
 namespace raftpp::rpc {
 
-std::string RpcError::ToString() const {
-    static constexpr const char* kCodeNames[] = {
-        "ConnectionFailed", "ConnectionClosed", "MessageTooLarge", "InvalidMessage",
-        "Timeout",          "InvalidMagic",     "InvalidAddress",
-    };
-    auto code_name = kCodeNames[static_cast<int>(code)];
-    if (message.empty()) {
-        return code_name;
-    }
-    return fmt::format("{}: {}", code_name, message);
-}
+using raftpp::RaftError;
+using raftpp::Result;
+using raftpp::RpcErrorCode;
 
 std::vector<uint8_t> Codec::Encode(
     const Message& msg, uint64_t from_node, uint64_t to_node, uint64_t request_id
@@ -54,7 +44,7 @@ std::vector<uint8_t> Codec::Encode(
     return buffer;
 }
 
-RpcResult<size_t> Codec::FrameSize(std::span<const uint8_t> buffer, size_t max_size) {
+Result<size_t> Codec::FrameSize(std::span<const uint8_t> buffer, size_t max_size) {
     if (buffer.size() < kPrefixSize) {
         return 0;  // Incomplete prefix
     }
@@ -63,9 +53,7 @@ RpcResult<size_t> Codec::FrameSize(std::span<const uint8_t> buffer, size_t max_s
     uint32_t magic;
     std::memcpy(&magic, buffer.data(), sizeof(magic));
     if (magic != kMagic) {
-        return std::unexpected(
-            RpcError::InvalidMagic(fmt::format("expected 0x{:08X}, got 0x{:08X}", kMagic, magic))
-        );
+        return RaftError(RpcErrorCode::InvalidMagic);
     }
 
     // Read header length
@@ -81,22 +69,18 @@ RpcResult<size_t> Codec::FrameSize(std::span<const uint8_t> buffer, size_t max_s
     // Parse header to get payload size
     RpcHeader header;
     if (!header.ParseFromArray(buffer.data() + kPrefixSize, static_cast<int>(header_len))) {
-        return std::unexpected(RpcError::InvalidMessage("failed to parse RpcHeader"));
+        return RaftError(RpcErrorCode::HeaderParseFailed);
     }
 
     size_t total_size = kPrefixSize + header_len + header.payload_size();
     if (total_size > max_size) {
-        return std::unexpected(
-            RpcError::MessageTooLarge(
-                fmt::format("message size {} exceeds max {}", total_size, max_size)
-            )
-        );
+        return RaftError(RpcErrorCode::MessageTooLarge);
     }
 
     return total_size;
 }
 
-RpcResult<Codec::DecodeResult> Codec::Decode(std::span<const uint8_t> buffer, size_t max_size) {
+Result<Codec::DecodeResult> Codec::Decode(std::span<const uint8_t> buffer, size_t max_size) {
     if (buffer.size() < kPrefixSize) {
         return DecodeResult{{}, {}, 0};  // Incomplete
     }
@@ -105,9 +89,7 @@ RpcResult<Codec::DecodeResult> Codec::Decode(std::span<const uint8_t> buffer, si
     uint32_t magic;
     std::memcpy(&magic, buffer.data(), sizeof(magic));
     if (magic != kMagic) {
-        return std::unexpected(
-            RpcError::InvalidMagic(fmt::format("expected 0x{:08X}, got 0x{:08X}", kMagic, magic))
-        );
+        return RaftError(RpcErrorCode::InvalidMagic);
     }
 
     // Read header length
@@ -122,16 +104,12 @@ RpcResult<Codec::DecodeResult> Codec::Decode(std::span<const uint8_t> buffer, si
     // Parse RpcHeader
     RpcHeader header;
     if (!header.ParseFromArray(buffer.data() + kPrefixSize, static_cast<int>(header_len))) {
-        return std::unexpected(RpcError::InvalidMessage("failed to parse RpcHeader"));
+        return RaftError(RpcErrorCode::HeaderParseFailed);
     }
 
     size_t total_size = header_end + header.payload_size();
     if (total_size > max_size) {
-        return std::unexpected(
-            RpcError::MessageTooLarge(
-                fmt::format("message size {} exceeds max {}", total_size, max_size)
-            )
-        );
+        return RaftError(RpcErrorCode::MessageTooLarge);
     }
 
     if (buffer.size() < total_size) {
@@ -141,7 +119,7 @@ RpcResult<Codec::DecodeResult> Codec::Decode(std::span<const uint8_t> buffer, si
     // Parse Message payload
     Message msg;
     if (!msg.ParseFromArray(buffer.data() + header_end, static_cast<int>(header.payload_size()))) {
-        return std::unexpected(RpcError::InvalidMessage("failed to parse Message payload"));
+        return RaftError(RpcErrorCode::PayloadParseFailed);
     }
 
     return DecodeResult{std::move(header), std::move(msg), total_size};
@@ -166,7 +144,7 @@ std::vector<uint8_t> HandshakeCodec::Encode(const RpcHandshake& hs) {
     return buffer;
 }
 
-RpcResult<std::pair<RpcHandshake, size_t>> HandshakeCodec::Decode(std::span<const uint8_t> buffer) {
+Result<std::pair<RpcHandshake, size_t>> HandshakeCodec::Decode(std::span<const uint8_t> buffer) {
     if (buffer.size() < kPrefixSize) {
         return std::pair<RpcHandshake, size_t>{{}, 0};  // Incomplete
     }
@@ -175,9 +153,7 @@ RpcResult<std::pair<RpcHandshake, size_t>> HandshakeCodec::Decode(std::span<cons
     uint32_t magic;
     std::memcpy(&magic, buffer.data(), sizeof(magic));
     if (magic != kMagic) {
-        return std::unexpected(
-            RpcError::InvalidMagic(fmt::format("expected 0x{:08X}, got 0x{:08X}", kMagic, magic))
-        );
+        return RaftError(RpcErrorCode::InvalidMagic);
     }
 
     // Read length
@@ -192,7 +168,7 @@ RpcResult<std::pair<RpcHandshake, size_t>> HandshakeCodec::Decode(std::span<cons
     // Parse RpcHandshake
     RpcHandshake hs;
     if (!hs.ParseFromArray(buffer.data() + kPrefixSize, static_cast<int>(length))) {
-        return std::unexpected(RpcError::InvalidMessage("failed to parse RpcHandshake"));
+        return RaftError(RpcErrorCode::HandshakeParseFailed);
     }
 
     return std::pair{std::move(hs), total_size};
@@ -207,7 +183,7 @@ std::vector<uint8_t> Handshake::Encode() const {
     return HandshakeCodec::Encode(hs);
 }
 
-RpcResult<Handshake> Handshake::Decode(std::span<const uint8_t> buffer) {
+Result<Handshake> Handshake::Decode(std::span<const uint8_t> buffer) {
     auto result = HandshakeCodec::Decode(buffer);
     if (!result) {
         return std::unexpected(result.error());
@@ -215,7 +191,7 @@ RpcResult<Handshake> Handshake::Decode(std::span<const uint8_t> buffer) {
 
     auto& [hs, consumed] = *result;
     if (consumed == 0) {
-        return std::unexpected(RpcError::InvalidMessage("handshake buffer too small"));
+        return RaftError(RpcErrorCode::HandshakeBufferTooSmall);
     }
 
     Handshake legacy;

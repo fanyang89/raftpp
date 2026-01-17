@@ -116,9 +116,7 @@ Result<std::unique_ptr<Segment>> Segment::Open(const std::filesystem::path& path
     auto header = SegmentHeader::Deserialize(std::span<const uint8_t, 32>(header_buf));
     if (!header.IsValid()) {
         ::close(fd);
-        return RaftError(
-            StorageErrorOther{fmt::format("invalid segment header in {}", path.string())}
-        );
+        return RaftError(StorageErrorCode::InvalidSegmentHeader);
     }
 
     // Get file size to determine write offset
@@ -147,7 +145,7 @@ Result<std::unique_ptr<Segment>> Segment::Open(const std::filesystem::path& path
 
 Result<void> Segment::Append(std::span<const uint8_t> data) {
     if (fd_ < 0) {
-        return RaftError(StorageErrorOther{"segment not open"});
+        return RaftError(StorageErrorCode::SegmentNotOpen);
     }
 
     ssize_t written = ::pwrite(fd_, data.data(), data.size(), static_cast<off_t>(write_offset_));
@@ -163,7 +161,7 @@ Result<void> Segment::Append(std::span<const uint8_t> data) {
 
 Result<std::vector<uint8_t>> Segment::Read(uint64_t offset, uint32_t length) const {
     if (fd_ < 0) {
-        return RaftError(StorageErrorOther{"segment not open"});
+        return RaftError(StorageErrorCode::SegmentNotOpen);
     }
 
     std::vector<uint8_t> data(length);
@@ -186,7 +184,7 @@ Result<std::vector<uint8_t>> Segment::Read(uint64_t offset, uint32_t length) con
 
 Result<void> Segment::Sync() {
     if (fd_ < 0) {
-        return RaftError(StorageErrorOther{"segment not open"});
+        return RaftError(StorageErrorCode::SegmentNotOpen);
     }
 
     int rc = -1;
@@ -207,7 +205,7 @@ Result<void> Segment::Sync() {
 
 Result<void> Segment::Truncate(uint64_t offset) {
     if (fd_ < 0) {
-        return RaftError(StorageErrorOther{"segment not open"});
+        return RaftError(StorageErrorCode::SegmentNotOpen);
     }
 
     if (::ftruncate(fd_, static_cast<off_t>(offset)) < 0) {

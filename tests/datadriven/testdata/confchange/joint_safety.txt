@@ -1,15 +1,15 @@
 leave-joint
 ----
-can't leave a non-joint config
+LeaveNonJointConfig
 
 enter-joint
 ----
-can't make a zero-voter config joint
+ZeroVoterConfigJoint
 
 enter-joint
 v1
 ----
-can't make a zero-voter config joint
+ZeroVoterConfigJoint
 
 simple
 v1
@@ -19,7 +19,7 @@ voters=(1)
 
 leave-joint
 ----
-can't leave a non-joint config
+LeaveNonJointConfig
 
 # Can enter into joint config.
 enter-joint
@@ -29,7 +29,7 @@ voters=(1)&&(1)
 
 enter-joint
 ----
-config is already joint
+ConfigAlreadyJoint
 
 leave-joint
 ----
@@ -38,7 +38,7 @@ voters=(1)
 
 leave-joint
 ----
-can't leave a non-joint config
+LeaveNonJointConfig
 
 # Can enter again, this time with some ops.
 enter-joint
@@ -52,17 +52,17 @@ voters=(2 3)&&(1) learners=(4)
 
 enter-joint
 ----
-config is already joint
+ConfigAlreadyJoint
 
 enter-joint
 v12
 ----
-config is already joint
+ConfigAlreadyJoint
 
 simple
 l15
 ----
-can't apply simple config change in joint config
+CannotApplySimpleInJointConfig
 
 leave-joint
 ----

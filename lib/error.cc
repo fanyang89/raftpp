@@ -26,6 +26,18 @@ struct ToStringVisitor {
     std::string operator()(raftpp::FatalError ec) const {
         return fmt::format("fatal error: {}", ec.message);
     }
+
+    std::string operator()(const raftpp::RpcErrorCode ec) const {
+        return fmt::format("rpc error: {}", format_as(ec));
+    }
+
+    std::string operator()(const raftpp::ConfigErrorCode ec) const {
+        return fmt::format("config error: {}", format_as(ec));
+    }
+
+    std::string operator()(const raftpp::ConfChangeErrorCode ec) const {
+        return fmt::format("conf change error: {}", format_as(ec));
+    }
 };
 
 }  // namespace

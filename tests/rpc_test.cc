@@ -68,7 +68,7 @@ TEST_SUITE("rpc") {
 
         auto result = Codec::Decode(bad_magic, Codec::kDefaultMaxMessageSize);
         REQUIRE(!result.has_value());
-        CHECK(result.error().code == RpcErrorCode::InvalidMagic);
+        CHECK(result.error().Is(RpcErrorCode::InvalidMagic));
     }
 
     TEST_CASE("Codec rejects oversized message") {
@@ -82,7 +82,7 @@ TEST_SUITE("rpc") {
         // Try to decode with very small max size
         auto result = Codec::Decode(encoded, 1);  // 1 byte max
         REQUIRE(!result.has_value());
-        CHECK(result.error().code == RpcErrorCode::MessageTooLarge);
+        CHECK(result.error().Is(RpcErrorCode::MessageTooLarge));
     }
 
     TEST_CASE("Codec handles message with entries") {
@@ -146,7 +146,7 @@ TEST_SUITE("rpc") {
 
         auto result = Handshake::Decode(bad_hs);
         REQUIRE(!result.has_value());
-        CHECK(result.error().code == RpcErrorCode::InvalidMagic);
+        CHECK(result.error().Is(RpcErrorCode::InvalidMagic));
     }
 
     TEST_CASE("Handshake rejects incomplete buffer") {
@@ -245,14 +245,6 @@ TEST_SUITE("rpc") {
 
         pm.UpdateState(1, PeerState::Connected);
         CHECK(pm.GetPeer(1)->failure_count == 0);
-    }
-
-    TEST_CASE("RpcError ToString") {
-        auto err = RpcError::ConnectionFailed("timeout");
-        CHECK(err.ToString() == "ConnectionFailed: timeout");
-
-        auto err2 = RpcError::InvalidMagic();
-        CHECK(err2.ToString() == "InvalidMagic");
     }
 
 }  // TEST_SUITE("rpc")

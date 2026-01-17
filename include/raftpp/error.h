@@ -9,6 +9,7 @@
 namespace raftpp {
 
 enum class StorageErrorCode {
+    // Core storage errors
     /// The storage was compacted and not accessible
     Compacted,
     /// The log is not available.
@@ -18,7 +19,37 @@ enum class StorageErrorCode {
     /// The snapshot is out of date.
     SnapshotOutOfDate,
     /// The snapshot is being created.
-    SnapshotTemporarilyUnavailable
+    SnapshotTemporarilyUnavailable,
+
+    // Metadata errors
+    /// Metadata file is smaller than minimum required size
+    MetadataFileTooSmall,
+    /// Metadata header validation failed
+    InvalidMetadataHeader,
+    /// Metadata CRC checksum mismatch
+    MetadataCrcMismatch,
+    /// Failed to parse HardState from metadata
+    HardStateParseError,
+    /// Failed to parse ConfState from metadata
+    ConfStateParseError,
+
+    // Segment errors
+    /// Current active segment not found in segment manager
+    CurrentSegmentNotFound,
+    /// Attempted operation on a segment that is not open
+    SegmentNotOpen,
+    /// Segment header validation failed
+    InvalidSegmentHeader,
+
+    // WAL errors
+    /// WAL entry record is corrupted (CRC mismatch)
+    CorruptEntryRecord,
+    /// Failed to parse entry from WAL record
+    EntryParseError,
+
+    // RaftLog errors
+    /// Got zero entries when slice expected non-empty result
+    ZeroEntriesInSlice,
 };
 
 constexpr std::string_view format_as(StorageErrorCode ec) {
@@ -33,6 +64,28 @@ constexpr std::string_view format_as(StorageErrorCode ec) {
             return "SnapshotOutOfDate";
         case StorageErrorCode::SnapshotTemporarilyUnavailable:
             return "SnapshotTemporarilyUnavailable";
+        case StorageErrorCode::MetadataFileTooSmall:
+            return "MetadataFileTooSmall";
+        case StorageErrorCode::InvalidMetadataHeader:
+            return "InvalidMetadataHeader";
+        case StorageErrorCode::MetadataCrcMismatch:
+            return "MetadataCrcMismatch";
+        case StorageErrorCode::HardStateParseError:
+            return "HardStateParseError";
+        case StorageErrorCode::ConfStateParseError:
+            return "ConfStateParseError";
+        case StorageErrorCode::CurrentSegmentNotFound:
+            return "CurrentSegmentNotFound";
+        case StorageErrorCode::SegmentNotOpen:
+            return "SegmentNotOpen";
+        case StorageErrorCode::InvalidSegmentHeader:
+            return "InvalidSegmentHeader";
+        case StorageErrorCode::CorruptEntryRecord:
+            return "CorruptEntryRecord";
+        case StorageErrorCode::EntryParseError:
+            return "EntryParseError";
+        case StorageErrorCode::ZeroEntriesInSlice:
+            return "ZeroEntriesInSlice";
     }
     return "Unknown";
 }
@@ -67,6 +120,153 @@ constexpr std::string_view format_as(RaftErrorCode ec) {
     return "Unknown";
 }
 
+enum class RpcErrorCode {
+    /// Missing port in address
+    AddressPortMissing,
+    /// Invalid port format in address
+    AddressPortInvalid,
+    /// Port number out of valid range
+    AddressPortOutOfRange,
+    /// TCP/UDP bind failed
+    BindFailed,
+    /// TCP listen failed
+    ListenFailed,
+    /// UDP bind failed
+    UdpBindFailed,
+    /// UDP receive start failed
+    UdpRecvStartFailed,
+    /// Connection was closed
+    ConnectionClosed,
+    /// Invalid magic number in frame header
+    InvalidMagic,
+    /// Failed to parse RpcHeader
+    HeaderParseFailed,
+    /// Failed to parse RpcHandshake
+    HandshakeParseFailed,
+    /// Failed to parse message payload
+    PayloadParseFailed,
+    /// KCP handshake packet too short
+    HandshakeTooShort,
+    /// Invalid KCP handshake magic
+    HandshakeInvalidMagic,
+    /// Handshake buffer too small
+    HandshakeBufferTooSmall,
+    /// Message exceeds maximum allowed size
+    MessageTooLarge,
+    /// Operation timed out
+    Timeout,
+};
+
+constexpr std::string_view format_as(RpcErrorCode ec) {
+    switch (ec) {
+        case RpcErrorCode::AddressPortMissing:
+            return "AddressPortMissing";
+        case RpcErrorCode::AddressPortInvalid:
+            return "AddressPortInvalid";
+        case RpcErrorCode::AddressPortOutOfRange:
+            return "AddressPortOutOfRange";
+        case RpcErrorCode::BindFailed:
+            return "BindFailed";
+        case RpcErrorCode::ListenFailed:
+            return "ListenFailed";
+        case RpcErrorCode::UdpBindFailed:
+            return "UdpBindFailed";
+        case RpcErrorCode::UdpRecvStartFailed:
+            return "UdpRecvStartFailed";
+        case RpcErrorCode::ConnectionClosed:
+            return "ConnectionClosed";
+        case RpcErrorCode::InvalidMagic:
+            return "InvalidMagic";
+        case RpcErrorCode::HeaderParseFailed:
+            return "HeaderParseFailed";
+        case RpcErrorCode::HandshakeParseFailed:
+            return "HandshakeParseFailed";
+        case RpcErrorCode::PayloadParseFailed:
+            return "PayloadParseFailed";
+        case RpcErrorCode::HandshakeTooShort:
+            return "HandshakeTooShort";
+        case RpcErrorCode::HandshakeInvalidMagic:
+            return "HandshakeInvalidMagic";
+        case RpcErrorCode::HandshakeBufferTooSmall:
+            return "HandshakeBufferTooSmall";
+        case RpcErrorCode::MessageTooLarge:
+            return "MessageTooLarge";
+        case RpcErrorCode::Timeout:
+            return "Timeout";
+    }
+    return "Unknown";
+}
+
+enum class ConfigErrorCode {
+    /// Node ID is invalid (INVALID_ID)
+    InvalidNodeId,
+    /// Heartbeat tick must be greater than 0
+    HeartbeatTickTooSmall,
+    /// Election tick must be greater than heartbeat tick
+    ElectionTickTooSmall,
+    /// Max inflight messages must be greater than 0
+    MaxInflightMessagesTooSmall,
+    /// LeaseBased read-only option requires check_quorum to be true
+    LeaseBasedReadRequiresCheckQuorum,
+};
+
+constexpr std::string_view format_as(ConfigErrorCode ec) {
+    switch (ec) {
+        case ConfigErrorCode::InvalidNodeId:
+            return "InvalidNodeId";
+        case ConfigErrorCode::HeartbeatTickTooSmall:
+            return "HeartbeatTickTooSmall";
+        case ConfigErrorCode::ElectionTickTooSmall:
+            return "ElectionTickTooSmall";
+        case ConfigErrorCode::MaxInflightMessagesTooSmall:
+            return "MaxInflightMessagesTooSmall";
+        case ConfigErrorCode::LeaseBasedReadRequiresCheckQuorum:
+            return "LeaseBasedReadRequiresCheckQuorum";
+    }
+    return "Unknown";
+}
+
+enum class ConfChangeErrorCode {
+    /// learners_next must be empty when not in joint config
+    LearnersNextMustBeEmpty,
+    /// auto_leave must be false when not in joint config
+    AutoLeaveMustBeFalse,
+    /// Cannot enter joint config when already in joint config
+    ConfigAlreadyJoint,
+    /// Cannot make a zero-voter config joint
+    ZeroVoterConfigJoint,
+    /// Cannot leave a non-joint config
+    LeaveNonJointConfig,
+    /// Removed all voters from config
+    RemovedAllVoters,
+    /// Cannot apply simple config change while in joint config
+    CannotApplySimpleInJointConfig,
+    /// Multiple voters changed without entering joint config
+    MultipleVotersChangedWithoutJoint,
+};
+
+constexpr std::string_view format_as(ConfChangeErrorCode ec) {
+    switch (ec) {
+        case ConfChangeErrorCode::LearnersNextMustBeEmpty:
+            return "LearnersNextMustBeEmpty";
+        case ConfChangeErrorCode::AutoLeaveMustBeFalse:
+            return "AutoLeaveMustBeFalse";
+        case ConfChangeErrorCode::ConfigAlreadyJoint:
+            return "ConfigAlreadyJoint";
+        case ConfChangeErrorCode::ZeroVoterConfigJoint:
+            return "ZeroVoterConfigJoint";
+        case ConfChangeErrorCode::LeaveNonJointConfig:
+            return "LeaveNonJointConfig";
+        case ConfChangeErrorCode::RemovedAllVoters:
+            return "RemovedAllVoters";
+        case ConfChangeErrorCode::CannotApplySimpleInJointConfig:
+            return "CannotApplySimpleInJointConfig";
+        case ConfChangeErrorCode::MultipleVotersChangedWithoutJoint:
+            return "MultipleVotersChangedWithoutJoint";
+    }
+    return "Unknown";
+}
+
 class RaftError;
 
 struct InvalidConfigError {
@@ -89,13 +289,20 @@ struct FatalError {
 
 using RaftErrorInner = std::variant<
     StorageErrorCode, StorageErrorOther, RaftErrorCode, InvalidConfigError, ConfChangeError,
-    FatalError>;
+    FatalError, RpcErrorCode, ConfigErrorCode, ConfChangeErrorCode>;
 
 // RaftError is the universal error type in this lib
 class RaftError {
   public:
-    template <typename... Args>
-    explicit RaftError(Args&&... args);
+    // Default special member functions
+    RaftError(const RaftError&) = default;
+    RaftError(RaftError&&) = default;
+    RaftError& operator=(const RaftError&) = default;
+    RaftError& operator=(RaftError&&) = default;
+
+    // Forwarding constructor for RaftErrorInner types (excludes RaftError itself)
+    template <typename T, typename = std::enable_if_t<!std::is_same_v<std::decay_t<T>, RaftError>>>
+    explicit RaftError(T&& arg) : inner_(std::forward<T>(arg)) {}
 
     template <typename T>
     [[nodiscard]] operator std::expected<T, RaftError>() const;
@@ -116,9 +323,6 @@ class RaftError {
   private:
     RaftErrorInner inner_;
 };
-
-template <typename... Args>
-RaftError::RaftError(Args&&... args) : inner_(std::forward<Args>(args)...) {}
 
 template <typename T>
 RaftError::operator std::expected<T, RaftError>() const {

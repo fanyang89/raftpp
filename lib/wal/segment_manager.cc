@@ -72,7 +72,7 @@ Result<Segment*> SegmentManager::GetCurrentSegment(uint64_t first_index_hint) {
     // Return the current segment
     auto it = segments_.find(current_segment_id_);
     if (it == segments_.end()) {
-        return RaftError(StorageErrorOther{"current segment not found"});
+        return RaftError(StorageErrorCode::CurrentSegmentNotFound);
     }
 
     return it->second.get();

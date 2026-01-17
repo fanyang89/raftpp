@@ -46,7 +46,7 @@ class Transport {
     virtual ~Transport() = default;
 
     /// Start the transport (begin listening and connecting)
-    virtual RpcResult<void> Start() = 0;
+    virtual Result<void> Start() = 0;
 
     /// Stop the transport (close all connections)
     virtual void Stop() = 0;

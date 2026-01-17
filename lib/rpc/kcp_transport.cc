@@ -14,6 +14,10 @@ extern "C" {
 
 namespace raftpp::rpc {
 
+using raftpp::RaftError;
+using raftpp::Result;
+using raftpp::RpcErrorCode;
+
 namespace {
 
 /// Magic number for KCP handshake packets
@@ -45,9 +49,9 @@ struct KcpHandshakePacket {
         return buf;
     }
 
-    static RpcResult<KcpHandshakePacket> Decode(std::span<const uint8_t> buf) {
+    static Result<KcpHandshakePacket> Decode(std::span<const uint8_t> buf) {
         if (buf.size() < kSize) {
-            return std::unexpected(RpcError::InvalidMessage("KCP handshake too short"));
+            return RaftError(RpcErrorCode::HandshakeTooShort);
         }
 
         KcpHandshakePacket pkt;
@@ -57,7 +61,7 @@ struct KcpHandshakePacket {
         std::memcpy(&pkt.node_id, buf.data() + 9, 8);
 
         if (pkt.magic != kKcpHandshakeMagic) {
-            return std::unexpected(RpcError::InvalidMessage("Invalid KCP handshake magic"));
+            return RaftError(RpcErrorCode::HandshakeInvalidMagic);
         }
 
         return pkt;
@@ -65,10 +69,10 @@ struct KcpHandshakePacket {
 };
 
 /// Parse address string "host:port" into components
-RpcResult<std::pair<std::string, int>> ParseAddress(const std::string& addr) {
+Result<std::pair<std::string, int>> ParseAddress(const std::string& addr) {
     auto colon = addr.rfind(':');
     if (colon == std::string::npos) {
-        return std::unexpected(RpcError::InvalidAddress("missing port in address: " + addr));
+        return RaftError(RpcErrorCode::AddressPortMissing);
     }
 
     std::string host = addr.substr(0, colon);
@@ -76,11 +80,11 @@ RpcResult<std::pair<std::string, int>> ParseAddress(const std::string& addr) {
     try {
         port = std::stoi(addr.substr(colon + 1));
     } catch (...) {
-        return std::unexpected(RpcError::InvalidAddress("invalid port in address: " + addr));
+        return RaftError(RpcErrorCode::AddressPortInvalid);
     }
 
     if (port <= 0 || port > 65535) {
-        return std::unexpected(RpcError::InvalidAddress("port out of range: " + addr));
+        return RaftError(RpcErrorCode::AddressPortOutOfRange);
     }
 
     return std::pair{host, port};
@@ -205,7 +209,7 @@ struct KcpTransport::Impl {
         uv_loop_close(&loop);
     }
 
-    RpcResult<void> Start() {
+    Result<void> Start() {
         if (running) {
             return {};
         }
@@ -223,16 +227,12 @@ struct KcpTransport::Impl {
 
         int r = uv_udp_bind(&udp_handle, reinterpret_cast<const sockaddr*>(&addr), 0);
         if (r != 0) {
-            return std::unexpected(
-                RpcError::ConnectionFailed(std::string("UDP bind failed: ") + uv_strerror(r))
-            );
+            return RaftError(RpcErrorCode::UdpBindFailed);
         }
 
         r = uv_udp_recv_start(&udp_handle, OnAlloc, OnRecv);
         if (r != 0) {
-            return std::unexpected(
-                RpcError::ConnectionFailed(std::string("UDP recv start failed: ") + uv_strerror(r))
-            );
+            return RaftError(RpcErrorCode::UdpRecvStartFailed);
         }
 
         uv_timer_init(&loop, &update_timer);
@@ -742,7 +742,7 @@ KcpTransport::KcpTransport(TransportConfig config, KcpConfig kcp_config)
 
 KcpTransport::~KcpTransport() = default;
 
-RpcResult<void> KcpTransport::Start() {
+Result<void> KcpTransport::Start() {
     return impl_->Start();
 }
 

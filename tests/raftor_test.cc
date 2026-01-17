@@ -146,7 +146,7 @@ class MockStateMachine : public StateMachine {
 
 class MockTransport : public rpc::Transport {
   public:
-    rpc::RpcResult<void> Start() override {
+    Result<void> Start() override {
         started_ = true;
         return {};
     }

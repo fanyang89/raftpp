@@ -27,7 +27,7 @@ class TcpTransport : public Transport {
     TcpTransport& operator=(TcpTransport&&) = delete;
 
     // Transport interface
-    RpcResult<void> Start() override;
+    Result<void> Start() override;
     void Stop() override;
     void AddPeer(uint64_t id, const std::string& addr) override;
     void RemovePeer(uint64_t id) override;

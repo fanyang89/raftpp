@@ -10,13 +10,17 @@
 
 namespace raftpp::rpc {
 
+using raftpp::RaftError;
+using raftpp::Result;
+using raftpp::RpcErrorCode;
+
 namespace {
 
 /// Parse address string "host:port" into components
-RpcResult<std::pair<std::string, int>> ParseAddress(const std::string& addr) {
+Result<std::pair<std::string, int>> ParseAddress(const std::string& addr) {
     auto colon = addr.rfind(':');
     if (colon == std::string::npos) {
-        return std::unexpected(RpcError::InvalidAddress("missing port in address: " + addr));
+        return RaftError(RpcErrorCode::AddressPortMissing);
     }
 
     std::string host = addr.substr(0, colon);
@@ -24,11 +28,11 @@ RpcResult<std::pair<std::string, int>> ParseAddress(const std::string& addr) {
     try {
         port = std::stoi(addr.substr(colon + 1));
     } catch (...) {
-        return std::unexpected(RpcError::InvalidAddress("invalid port in address: " + addr));
+        return RaftError(RpcErrorCode::AddressPortInvalid);
     }
 
     if (port <= 0 || port > 65535) {
-        return std::unexpected(RpcError::InvalidAddress("port out of range: " + addr));
+        return RaftError(RpcErrorCode::AddressPortOutOfRange);
     }
 
     return std::pair{host, port};
@@ -75,7 +79,7 @@ struct TcpTransport::Impl {
         uv_loop_close(&loop);
     }
 
-    RpcResult<void> Start() {
+    Result<void> Start() {
         if (running) {
             return {};
         }
@@ -95,16 +99,12 @@ struct TcpTransport::Impl {
 
         int r = uv_tcp_bind(&server, reinterpret_cast<const sockaddr*>(&addr), 0);
         if (r != 0) {
-            return std::unexpected(
-                RpcError::ConnectionFailed(std::string("bind failed: ") + uv_strerror(r))
-            );
+            return RaftError(RpcErrorCode::BindFailed);
         }
 
         r = uv_listen(reinterpret_cast<uv_stream_t*>(&server), 128, OnNewConnection);
         if (r != 0) {
-            return std::unexpected(
-                RpcError::ConnectionFailed(std::string("listen failed: ") + uv_strerror(r))
-            );
+            return RaftError(RpcErrorCode::ListenFailed);
         }
 
         // Initialize reconnect timer
@@ -481,7 +481,7 @@ TcpTransport::TcpTransport(TransportConfig config)
 
 TcpTransport::~TcpTransport() = default;
 
-RpcResult<void> TcpTransport::Start() {
+Result<void> TcpTransport::Start() {
     return impl_->Start();
 }
 

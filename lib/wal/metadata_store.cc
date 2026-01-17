@@ -188,7 +188,7 @@ std::vector<uint8_t> MetadataStore::Serialize(const WALMetadata& meta) const {
 
 Result<WALMetadata> MetadataStore::Deserialize(const std::vector<uint8_t>& data) const {
     if (data.size() < sizeof(MetadataHeader) + sizeof(MetadataContent)) {
-        return RaftError(StorageErrorOther{"metadata file too small"});
+        return RaftError(StorageErrorCode::MetadataFileTooSmall);
     }
 
     const uint8_t* ptr = data.data();
@@ -199,7 +199,7 @@ Result<WALMetadata> MetadataStore::Deserialize(const std::vector<uint8_t>& data)
     ptr += sizeof(MetadataHeader);
 
     if (!header.IsValid()) {
-        return RaftError(StorageErrorOther{"invalid metadata header"});
+        return RaftError(StorageErrorCode::InvalidMetadataHeader);
     }
 
     // Verify CRC
@@ -207,7 +207,7 @@ Result<WALMetadata> MetadataStore::Deserialize(const std::vector<uint8_t>& data)
     CRC32C crc;
     crc.Update(data.data() + crc_offset, data.size() - crc_offset);
     if (crc.Finalize() != header.crc) {
-        return RaftError(StorageErrorOther{"metadata CRC mismatch"});
+        return RaftError(StorageErrorCode::MetadataCrcMismatch);
     }
 
     // Read MetadataContent
@@ -225,7 +225,7 @@ Result<WALMetadata> MetadataStore::Deserialize(const std::vector<uint8_t>& data)
     std::memcpy(&hs_len, ptr, sizeof(hs_len));
     ptr += sizeof(hs_len);
     if (!meta.hard_state.ParseFromArray(ptr, hs_len)) {
-        return RaftError(StorageErrorOther{"failed to parse hard_state"});
+        return RaftError(StorageErrorCode::HardStateParseError);
     }
     ptr += hs_len;
 
@@ -234,7 +234,7 @@ Result<WALMetadata> MetadataStore::Deserialize(const std::vector<uint8_t>& data)
     std::memcpy(&cs_len, ptr, sizeof(cs_len));
     ptr += sizeof(cs_len);
     if (!meta.conf_state.ParseFromArray(ptr, cs_len)) {
-        return RaftError(StorageErrorOther{"failed to parse conf_state"});
+        return RaftError(StorageErrorCode::ConfStateParseError);
     }
 
     SPDLOG_DEBUG(
