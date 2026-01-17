@@ -7,7 +7,7 @@
 
 #include "datadriven.h"
 #include "raftpp/core/joint_conf.h"
-#include "raftpp/majority_conf.h"
+#include "raftpp/core/majority_conf.h"
 
 namespace raftpp {
 namespace test {

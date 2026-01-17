@@ -73,3 +73,63 @@ tasks:
     desc: Clear the default build directory
     cmds:
       - rm -rf ./build
+
+  coverage:
+    desc: Get unit test coverage report (using llvm-cov)
+    env:
+      LLVM_PROFILE_FILE: build-coverage/raftpp-%p.profraw
+    vars:
+      PROF_DATA: build-coverage/coverage.profdata
+    cmds:
+      # build
+      - cmake --preset=coverage
+      - ninja -C build-coverage
+      # clear and re-built coverage data
+      - rm -f build-coverage/*.profraw {{.PROF_DATA}}
+      - ./build-coverage/tests/raftpp-tests
+      # merge coverage data
+      - llvm-profdata merge -sparse build-coverage/*.profraw -o {{.PROF_DATA}}
+      - >
+        llvm-cov show
+        ./build-coverage/tests/raftpp-tests
+        -instr-profile={{.PROF_DATA}}
+        -format=html
+        -output-dir=build-coverage/coverage-report
+        -ignore-filename-regex='(tests|third_party|generated|\.pb\.)'
+        -show-instantiations=false
+      - echo "Coverage report generated at build-coverage/coverage-report/index.html"
+
+  install-tools:
+    desc: Install third-party tools
+    cmds:
+      - cargo install grcov
+
+  lint:
+    desc: Run lint tools
+    cmds:
+      - cppcheck include lib
+
+  analyze:
+    desc: Run clang static analyzer using scan-build
+    cmds:
+      - rm -rf build-clang
+      - cmake --preset=clang
+      - >
+        scan-build
+        -enable-checker core
+        -enable-checker cplusplus
+        -enable-checker deadcode
+        -enable-checker security
+        -enable-checker unix
+        -enable-checker optin.core.EnumCastOutOfRange
+        -enable-checker optin.cplusplus.UninitializedObject
+        -enable-checker optin.cplusplus.VirtualCall
+        -enable-checker optin.performance.Padding
+        -enable-checker optin.taint.GenericTaint
+        -enable-checker alpha.core.Conversion
+        -enable-checker alpha.core.PointerArithm
+        -enable-checker alpha.cplusplus.InvalidatedIterator
+        -enable-checker alpha.cplusplus.IteratorRange
+        -enable-checker alpha.unix.PthreadLock
+        -enable-checker alpha.deadcode.UnreachableCode
+        ninja -C build-clang
