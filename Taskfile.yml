@@ -17,7 +17,7 @@ tasks:
         cmd: >
           ./build/_deps/protobuf-build/protoc
           -I proto
-          --cpp_out=proto/generated/raftpp
+          --cpp_out=proto/generated/raftpp/core
           raftpp.proto
 
   fmt:
