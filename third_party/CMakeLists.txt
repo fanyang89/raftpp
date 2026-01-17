@@ -6,16 +6,7 @@ CPMAddPackage(
 )
 CPMAddPackage("https://github.com/jeremy-rifkin/libassert.git@2.2.1")
 CPMAddPackage("https://github.com/libuv/libuv.git@1.51.0")
-
-# Ensure spdlog uses the same C++ standard as the parent project
-# if(TARGET spdlog)
-#   set_target_properties(spdlog PROPERTIES
-#     CXX_STANDARD 23
-#     CXX_STANDARD_REQUIRED ON
-#   )
-#   # Force rebuild with correct settings
-#   target_compile_options(spdlog PRIVATE -std=c++23)
-# endif()
+CPMAddPackage(URI "https://github.com/abseil/abseil-cpp.git" GIT_TAG "20250512.1")
 
 if (MSVC)
   set(protobuf_MSVC_STATIC_RUNTIME OFF CACHE BOOL "Link Protobuf dynamically" FORCE)
@@ -33,5 +24,4 @@ if (RAFTPP_BUILD_TESTING)
   CPMAddPackage(URI "https://github.com/doctest/doctest.git@2.4.12")
 endif ()
 
-# KCP library (local)
 add_subdirectory(kcp)
