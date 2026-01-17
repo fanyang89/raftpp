@@ -6,19 +6,14 @@ dotenv:
   - .env
 
 tasks:
-  pb:
+  proto:
     desc: Generate C++ protobuf files from raftpp.proto
+    aliases:
+      - pb
+    deps:
+      - build-protoc
     cmds:
-      - platforms: [windows]
-        cmd: >
-          protoc.exe
-          -I proto
-          --cpp_out=proto/generated/raftpp
-          raftpp.proto
-
-      - platforms:
-          - darwin
-          - linux
+      - platforms: [linux, darwin]
         cmd: >
           ./build/_deps/protobuf-build/protoc
           -I proto
@@ -27,11 +22,11 @@ tasks:
 
   fmt:
     desc: Format all C++ source files with clang-format
-    platforms: [linux]
+    platforms: [linux, darwin]
     cmds:
       - >
         clang-format --style=file -i
-        $(git ls-files | grep '.cc$\|.h$\|.hpp$' | grep -v 'sqlite3ext\.\|sqlite3\.\|\.pb\.\|generated')
+        $(git ls-files | grep '.cc$\|.h$\|.hpp$' | grep -v '\.pb\.\|generated')
 
   cmake:
     desc: Configure CMake with dev preset
@@ -40,17 +35,35 @@ tasks:
 
   build:
     desc: Build all test targets
+    deps:
+      - cmake
     cmds:
       - cmake --build build --target raftpp-tests raftpp-datadriven-tests
 
   build-protoc:
+    deps:
+      - cmake
     cmds:
       - cmake --build build --target protoc
 
   test:
-    desc: Run all tests
+    desc: Build and run all tests
     deps:
       - build
     cmds:
+      - task: unit-test
+      - task: data-driven-test
+
+  unit-test:
+    desc: Run unit tests
+    aliases:
+      - ut
+    cmds:
       - ./build/tests/raftpp-tests
+
+  data-driven-test:
+    desc: Run data-driven tests
+    aliases:
+      - dt
+    cmds:
       - ./build/tests/datadriven/raftpp-datadriven-tests

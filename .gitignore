@@ -1,13 +1,14 @@
 /.cache
 /.clangd
+/.claude
 /.env
 /.idea
 /.opencode
 /.roo
+/.task
 /.vs
 /.vscode
 /build
 /build-dev
 /cmake-build-*
 /opencode.json
-/.claude
