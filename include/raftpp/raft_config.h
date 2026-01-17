@@ -28,11 +28,11 @@ struct Config {
     bool disable_proposal_forwarding;
     bool load_state_on_startup = false;
 
-    size_t MinElectionTick() const;
-    size_t MaxElectionTick() const;
-    Result<void> Validate() const;
+    [[nodiscard]] size_t MinElectionTick() const;
+    [[nodiscard]] size_t MaxElectionTick() const;
+    [[nodiscard]] Result<void> Validate() const;
 };
 
-Config DefaultConfig();
+[[nodiscard]] Config DefaultConfig();
 
 }  // namespace raftpp

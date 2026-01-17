@@ -59,16 +59,16 @@ class RawNode {
   public:
     RawNode(const Config& config, const std::shared_ptr<Storage>& store);
 
-    LightReady Advance(const Ready& rd);
-    LightReady AdvanceAppend(const Ready& rd);
-    Ready GetReady();
-    Result<ConfState> ApplyConfChange(const ConfChangeV2& cc);
-    Result<void> Campaign();
-    Result<void> Propose(const std::string& ctx, const std::string& data);
-    Result<void> ProposeConfChange(const std::string& ctx, const ConfChangeV2& cc);
-    Result<void> Step(Message m);
-    bool HasReady() const;
-    bool Tick();
+    [[nodiscard]] LightReady Advance(const Ready& rd);
+    [[nodiscard]] LightReady AdvanceAppend(const Ready& rd);
+    [[nodiscard]] Ready GetReady();
+    [[nodiscard]] Result<ConfState> ApplyConfChange(const ConfChangeV2& cc);
+    [[nodiscard]] Result<void> Campaign();
+    [[nodiscard]] Result<void> Propose(const std::string& ctx, const std::string& data);
+    [[nodiscard]] Result<void> ProposeConfChange(const std::string& ctx, const ConfChangeV2& cc);
+    [[nodiscard]] Result<void> Step(Message m);
+    [[nodiscard]] bool HasReady() const;
+    [[nodiscard]] bool Tick();
     void AdvanceApply();
     void AdvanceApplyTo(uint64_t applied);
     void AdvanceAppendAsync(const Ready& rd);
@@ -77,20 +77,20 @@ class RawNode {
     void OnPersistReady(uint64_t number);
     void Ping();
     void SetPriority(uint64_t priority);
-    Result<void> RequestSnapshot();
+    [[nodiscard]] Result<void> RequestSnapshot();
     void TransferLeader(uint64_t transferee);
     void ReadIndex(const std::string& ctx);
-    Status GetStatus();
+    [[nodiscard]] Status GetStatus();
     void ReportUnreachable(uint64_t id);
     void ReportSnapshot(uint64_t id, SnapshotStatus status);
 
     /// Get a reference to the internal raft (for testing purposes)
-    Raft& raft() { return raft_; }
+    [[nodiscard]] Raft& raft() { return raft_; }
 
-    const Raft& raft() const { return raft_; }
+    [[nodiscard]] const Raft& raft() const { return raft_; }
 
   private:
-    LightReady GetLightReady();
+    [[nodiscard]] LightReady GetLightReady();
 
     Raft raft_;
     SoftState prev_ss_;

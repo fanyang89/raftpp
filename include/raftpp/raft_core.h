@@ -56,13 +56,13 @@ class RaftCore {
   public:
     RaftCore(const Config& config, const std::shared_ptr<Storage>& store);
 
-    bool TryBatching(
+    [[nodiscard]] bool TryBatching(
         uint64_t to, std::vector<Message>& messages, Progress& pr, const std::vector<Entry>& entries
     ) const;
     void PrepareSendEntries(
         Message& message, Progress& pr, uint64_t term, const std::vector<Entry>& entries
     ) const;
-    bool MaybeSendAppend(
+    [[nodiscard]] bool MaybeSendAppend(
         uint64_t to, Progress& pr, bool allow_empty, std::vector<Message>& messages
     );
     void SendAppend(uint64_t to, Progress& pr, std::vector<Message>& messages);
@@ -72,7 +72,7 @@ class RaftCore {
   protected:
     friend class Interface;  // For testing access to protected members
 
-    bool PrepareSendSnapshot(Message& m, Progress& pr, uint64_t to);
+    [[nodiscard]] bool PrepareSendSnapshot(Message& m, Progress& pr, uint64_t to);
 
     uint64_t term_;
     uint64_t vote_;

@@ -6,6 +6,8 @@
 
 namespace raftpp {
 
-Result<void> Restore(ProgressTracker& tracker, uint64_t next_idx, const ConfState& cs);
+[[nodiscard]] Result<void> Restore(
+    ProgressTracker& tracker, uint64_t next_idx, const ConfState& cs
+);
 
 }

@@ -37,8 +37,10 @@ class Progress {
 
     [[nodiscard]] bool IsPaused() const;
     [[nodiscard]] bool IsSnapshotCaughtUp() const;
-    bool MaybeDecTo(uint64_t rejected, uint64_t match_hint, uint64_t request_snapshot);
-    bool MaybeUpdate(uint64_t n);
+    [[nodiscard]] bool MaybeDecTo(
+        uint64_t rejected, uint64_t match_hint, uint64_t request_snapshot
+    );
+    [[nodiscard]] bool MaybeUpdate(uint64_t n);
     [[nodiscard]] uint64_t CommitGroupID() const;
     void SetCommitGroupID(uint64_t group_id);
     [[nodiscard]] uint64_t Matched() const;
@@ -65,9 +67,9 @@ class Progress {
     uint64_t& pending_request_snapshot();
     [[nodiscard]] uint64_t next_idx() const;
     uint64_t& next_idx();
-    Inflights& inflights();
-    const Inflights& inflights() const;
-    ProgressState state() const;
+    [[nodiscard]] Inflights& inflights();
+    [[nodiscard]] const Inflights& inflights() const;
+    [[nodiscard]] ProgressState state() const;
 
   protected:
     friend class ProgressDebug;

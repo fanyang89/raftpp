@@ -12,25 +12,25 @@ class Raft : public RaftCore {
   public:
     Raft(const Config& config, const std::shared_ptr<Storage>& store);
 
-    ConfState PostConfChange();
-    Result<ConfState> ApplyConfChange(const ConfChangeV2& cc);
+    [[nodiscard]] ConfState PostConfChange();
+    [[nodiscard]] Result<ConfState> ApplyConfChange(const ConfChangeV2& cc);
 
-    Result<void> Step(Message& m);
-    Result<void> StepCandidate(const Message& m);
-    Result<void> StepFollower(Message& m);
-    Result<void> StepLeader(const Message& m);
+    [[nodiscard]] Result<void> Step(Message& m);
+    [[nodiscard]] Result<void> StepCandidate(const Message& m);
+    [[nodiscard]] Result<void> StepFollower(Message& m);
+    [[nodiscard]] Result<void> StepLeader(const Message& m);
 
-    VoteResult Poll(uint64_t from, MessageType mt, bool vote);
-    bool AppendEntry(const Entry& entry);
-    bool AppendEntry(std::vector<Entry> entries);
-    bool CheckQuorumActive();
-    bool CommitToCurrentTerm() const;
-    bool HasPendingConf() const;
-    bool Restore(const Snapshot& snapshot);
-    bool ShouldBroadcastCommit() const;
-    bool Tick();
-    bool TickElection();
-    bool TickHeartbeat();
+    [[nodiscard]] VoteResult Poll(uint64_t from, MessageType mt, bool vote);
+    [[nodiscard]] bool AppendEntry(const Entry& entry);
+    [[nodiscard]] bool AppendEntry(std::vector<Entry> entries);
+    [[nodiscard]] bool CheckQuorumActive();
+    [[nodiscard]] bool CommitToCurrentTerm() const;
+    [[nodiscard]] bool HasPendingConf() const;
+    [[nodiscard]] bool Restore(const Snapshot& snapshot);
+    [[nodiscard]] bool ShouldBroadcastCommit() const;
+    [[nodiscard]] bool Tick();
+    [[nodiscard]] bool TickElection();
+    [[nodiscard]] bool TickHeartbeat();
 
     void BecomeCandidate();
     void BecomeFollower(uint64_t term, uint64_t leader_id);
@@ -51,7 +51,7 @@ class Raft : public RaftCore {
     void HandleSnapshotStatus(const Message& m);
     void HandleTransferLeader(const Message& m);
     void HandleUnreachable(const Message& m);
-    std::optional<Message> HandleReadyReadIndex(const Message& req, uint64_t index);
+    [[nodiscard]] std::optional<Message> HandleReadyReadIndex(const Message& req, uint64_t index);
 
     void Hup(bool transfer_leader);
     void LoadState(const HardState& hs);
@@ -59,8 +59,8 @@ class Raft : public RaftCore {
     void OnPersistSnapshot(uint64_t index);
     void Ping();
 
-    bool MaybeCommit();
-    bool MaybeIncreaseUncommittedSize(std::span<const Entry> entries);
+    [[nodiscard]] bool MaybeCommit();
+    [[nodiscard]] bool MaybeIncreaseUncommittedSize(std::span<const Entry> entries);
     void MaybeCommitByVote(const Message& m);
 
     void SendAppend(uint64_t to);
@@ -74,7 +74,7 @@ class Raft : public RaftCore {
     void SetPriority(uint64_t priority);
     void ReduceUncommittedSize(const std::vector<Entry>& ents);
     void CommitApply(uint64_t applied);
-    Result<void> RequestSnapshot();
+    [[nodiscard]] Result<void> RequestSnapshot();
 
     // Group commit API
     void EnableGroupCommit(bool enable);
@@ -82,28 +82,28 @@ class Raft : public RaftCore {
     void AssignCommitGroups(const std::vector<std::pair<uint64_t, uint64_t>>& ids);
     [[nodiscard]] std::optional<bool> CheckGroupCommitConsistent();
 
-    ProgressTracker& progress_tracker();
-    const ProgressTracker& progress_tracker() const;
-    HardState hard_state() const;
-    SoftState soft_state() const;
-    const std::vector<ReadState>& read_states() const;
-    std::vector<ReadState>& read_states();
-    uint64_t id() const;
-    uint64_t term() const;
-    StateRole state() const;
-    const RaftLog& raft_log() const;
-    RaftLog& raft_log();
-    uint64_t max_committed_size_per_ready() const;
-    uint64_t& max_committed_size_per_ready();
-    size_t max_inflight_messages() const;
-    size_t inflight_buffers_size() const;
+    [[nodiscard]] ProgressTracker& progress_tracker();
+    [[nodiscard]] const ProgressTracker& progress_tracker() const;
+    [[nodiscard]] HardState hard_state() const;
+    [[nodiscard]] SoftState soft_state() const;
+    [[nodiscard]] const std::vector<ReadState>& read_states() const;
+    [[nodiscard]] std::vector<ReadState>& read_states();
+    [[nodiscard]] uint64_t id() const;
+    [[nodiscard]] uint64_t term() const;
+    [[nodiscard]] StateRole state() const;
+    [[nodiscard]] const RaftLog& raft_log() const;
+    [[nodiscard]] RaftLog& raft_log();
+    [[nodiscard]] uint64_t max_committed_size_per_ready() const;
+    [[nodiscard]] uint64_t& max_committed_size_per_ready();
+    [[nodiscard]] size_t max_inflight_messages() const;
+    [[nodiscard]] size_t inflight_buffers_size() const;
     void maybe_free_inflight_buffers();
     void adjust_max_inflight_msgs(uint64_t id, size_t max_inflight);
-    static bool ConfStatesEqualIgnoringOrder(const ConfState& a, const ConfState& b);
-    const std::vector<Message>& messages() const;
-    std::vector<Message>& messages();
-    std::optional<std::reference_wrapper<Snapshot>> snapshot();
-    const std::optional<Snapshot>& snapshot() const;
+    [[nodiscard]] static bool ConfStatesEqualIgnoringOrder(const ConfState& a, const ConfState& b);
+    [[nodiscard]] const std::vector<Message>& messages() const;
+    [[nodiscard]] std::vector<Message>& messages();
+    [[nodiscard]] std::optional<std::reference_wrapper<Snapshot>> snapshot();
+    [[nodiscard]] const std::optional<Snapshot>& snapshot() const;
 
   private:
     bool HasUnappliedConfChanges(uint64_t low, uint64_t high, const GetEntriesContext& ctx);
