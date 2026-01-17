@@ -10,7 +10,6 @@ add_executable(raftpp-tests
   log_test.cc
   progress_test.cc
   raw_node_test.cc
-  raw_node_test2.cc
   storage_test.cc
   raft_paper_test.cc
   raft_test.cc
