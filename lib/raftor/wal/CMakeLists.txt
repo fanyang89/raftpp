@@ -1,4 +1,4 @@
-add_library(raftpp-wal
+add_library(raftor-wal
   crc32c.cc
   metadata_store.cc
   record.cc
@@ -9,11 +9,11 @@ add_library(raftpp-wal
   wal_storage.cc
 )
 
-target_include_directories(raftpp-wal PUBLIC
-  "${CMAKE_CURRENT_SOURCE_DIR}/../../include"
+target_include_directories(raftor-wal PUBLIC
+  "${CMAKE_CURRENT_SOURCE_DIR}/../../../include"
 )
 
-target_link_libraries(raftpp-wal PRIVATE
+target_link_libraries(raftor-wal PRIVATE
   raftpp-proto
   crc32c
   libassert::assert

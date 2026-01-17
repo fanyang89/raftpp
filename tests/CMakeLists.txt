@@ -22,9 +22,10 @@ add_executable(raftpp-tests
 )
 
 target_link_libraries(raftpp-tests PRIVATE raftpp)
-target_link_libraries(raftpp-tests PRIVATE raftpp-rpc)
 target_link_libraries(raftpp-tests PRIVATE raftpp-proto)
 target_link_libraries(raftpp-tests PRIVATE raftpp-test-harness)
+
+# TODO
 target_link_libraries(raftpp-tests PRIVATE raftor)
 
 target_link_libraries(raftpp-tests PRIVATE doctest)

@@ -3,9 +3,9 @@
 #include <memory>
 #include <mutex>
 
+#include "raftor/wal/wal.h"
+#include "raftor/wal/wal_config.h"
 #include "raftpp/storage.h"
-#include "raftpp/wal/wal.h"
-#include "raftpp/wal/wal_config.h"
 
 namespace raftpp::wal {
 

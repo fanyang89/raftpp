@@ -1,12 +1,11 @@
 #pragma once
 
 #include <chrono>
-#include <cstdint>
 #include <functional>
 #include <span>
 #include <string>
 
-#include "raftpp/rpc/codec.h"
+#include "raftor/rpc/codec.h"
 
 namespace raftpp::rpc {
 

@@ -1,10 +1,11 @@
+#include "raftpp/raw_node.h"
+
 #include <doctest/doctest.h>
 
 #include "harness/test_util.h"
 #include "raftpp/error.h"
 #include "raftpp/memory_storage.h"
 #include "raftpp/raft_config.h"
-#include "raftpp/raw_node.h"
 
 using namespace raftpp;
 

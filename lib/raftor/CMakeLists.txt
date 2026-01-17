@@ -1,3 +1,6 @@
+add_subdirectory(wal)
+add_subdirectory(rpc)
+
 add_library(raftor
   raftor.cc
   proposal_tracker.cc
@@ -6,6 +9,6 @@ add_library(raftor
 
 target_link_libraries(raftor PUBLIC
   raftpp
-  raftpp-rpc
-  raftpp-wal
+  raftor-rpc
+  raftor-wal
 )

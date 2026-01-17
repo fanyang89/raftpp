@@ -1,4 +1,4 @@
-#include "raftpp/wal/metadata_store.h"
+#include "raftor/wal/metadata_store.h"
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -7,8 +7,8 @@
 
 #include <spdlog/spdlog.h>
 
-#include "raftpp/wal/crc32c.h"
-#include "raftpp/wal/record.h"
+#include "raftor/wal/crc32c.h"
+#include "raftor/wal/record.h"
 
 namespace raftpp::wal {
 

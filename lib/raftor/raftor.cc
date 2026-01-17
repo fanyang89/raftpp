@@ -1,4 +1,4 @@
-#include "raftpp/raftor/raftor.h"
+#include "raftor/raftor.h"
 
 #include <atomic>
 #include <chrono>
@@ -8,8 +8,8 @@
 
 #include <spdlog/spdlog.h>
 
-#include "raftpp/rpc/tcp_transport.h"
-#include "raftpp/wal/wal_storage.h"
+#include "raftor/rpc/tcp_transport.h"
+#include "raftor/wal/wal_storage.h"
 #include "ready_processor.h"
 
 namespace raftpp::raftor {

@@ -7,8 +7,8 @@
 #include <doctest/doctest.h>
 #include <spdlog/fmt/fmt.h>
 
-#include "raftpp/rpc/kcp_transport.h"
-#include "raftpp/rpc/tcp_transport.h"
+#include "raftor/rpc/kcp_transport.h"
+#include "raftor/rpc/tcp_transport.h"
 
 using namespace raftpp;
 using namespace raftpp::rpc;

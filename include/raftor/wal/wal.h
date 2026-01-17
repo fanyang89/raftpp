@@ -7,12 +7,12 @@
 #include <span>
 #include <vector>
 
-#include "raftpp/error.h"
+#include "raftor/wal/metadata_store.h"
+#include "raftor/wal/segment_manager.h"
+#include "raftor/wal/wal_config.h"
+#include "raftor/wal/wal_index.h"
+#include "raftpp/raft.h"
 #include "raftpp/raftpp.pb.h"
-#include "raftpp/wal/metadata_store.h"
-#include "raftpp/wal/segment_manager.h"
-#include "raftpp/wal/wal_config.h"
-#include "raftpp/wal/wal_index.h"
 
 namespace raftpp::wal {
 

@@ -1,10 +1,8 @@
-#include "raftpp/wal/wal.h"
-
-#include <cstring>
+#include "raftor/wal/wal.h"
 
 #include <spdlog/spdlog.h>
 
-#include "raftpp/wal/record.h"
+#include "raftor/wal/record.h"
 
 namespace raftpp::wal {
 

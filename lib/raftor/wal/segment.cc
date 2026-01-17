@@ -1,4 +1,4 @@
-#include "raftpp/wal/segment.h"
+#include "raftor/wal/segment.h"
 
 #include <fcntl.h>
 #include <sys/stat.h>

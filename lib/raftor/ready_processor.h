@@ -1,17 +1,15 @@
 #pragma once
 
-#include <cstdint>
 #include <memory>
-#include <span>
 
+#include "raftor/proposal_tracker.h"
+#include "raftor/rpc/transport.h"
+#include "raftor/state_machine.h"
+#include "raftor/wal/wal_storage.h"
 #include "raftpp/error.h"
 #include "raftpp/raft_core.h"
-#include "raftpp/raftor/proposal_tracker.h"
-#include "raftpp/raftor/state_machine.h"
 #include "raftpp/raw_node.h"
-#include "raftpp/rpc/transport.h"
 #include "raftpp/storage.h"
-#include "raftpp/wal/wal_storage.h"
 
 namespace raftpp::raftor {
 

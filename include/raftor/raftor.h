@@ -1,19 +1,17 @@
 #pragma once
 
 #include <chrono>
-#include <cstdint>
-#include <functional>
 #include <future>
 #include <memory>
 #include <string>
 
+#include "raftor/proposal_tracker.h"
+#include "raftor/raftor_config.h"
+#include "raftor/rpc/transport.h"
+#include "raftor/state_machine.h"
 #include "raftpp/error.h"
 #include "raftpp/raft_core.h"
-#include "raftpp/raftor/proposal_tracker.h"
-#include "raftpp/raftor/raftor_config.h"
-#include "raftpp/raftor/state_machine.h"
 #include "raftpp/raw_node.h"
-#include "raftpp/rpc/transport.h"
 #include "raftpp/storage.h"
 
 namespace raftpp::raftor {

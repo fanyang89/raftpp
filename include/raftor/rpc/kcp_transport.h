@@ -8,8 +8,8 @@ extern "C" {
 
 #include <absl/container/flat_hash_map.h>
 
-#include "raftpp/rpc/peer_manager.h"
-#include "raftpp/rpc/transport.h"
+#include "raftor/rpc/peer_manager.h"
+#include "raftor/rpc/transport.h"
 
 namespace raftpp::rpc {
 

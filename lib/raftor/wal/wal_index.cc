@@ -1,4 +1,4 @@
-#include "raftpp/wal/wal_index.h"
+#include "raftor/wal/wal_index.h"
 
 namespace raftpp::wal {
 

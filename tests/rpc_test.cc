@@ -1,13 +1,12 @@
 #include <doctest/doctest.h>
 
-#include "raftpp/rpc/codec.h"
-#include "raftpp/rpc/peer_manager.h"
+#include "raftor/rpc/codec.h"
+#include "raftor/rpc/peer_manager.h"
 
 using namespace raftpp;
 using namespace raftpp::rpc;
 
 TEST_SUITE("rpc") {
-
     TEST_CASE("Codec encode/decode round-trip") {
         Message msg;
         msg.set_msg_type(MsgAppend);

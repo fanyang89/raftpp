@@ -1,4 +1,4 @@
-#include "raftpp/wal/wal_storage.h"
+#include "raftor/wal/wal_storage.h"
 
 #include <spdlog/spdlog.h>
 

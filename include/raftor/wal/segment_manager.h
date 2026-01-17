@@ -6,9 +6,9 @@
 #include <memory>
 #include <vector>
 
+#include "raftor/wal/segment.h"
+#include "raftor/wal/wal_config.h"
 #include "raftpp/error.h"
-#include "raftpp/wal/segment.h"
-#include "raftpp/wal/wal_config.h"
 
 namespace raftpp::wal {
 

@@ -6,8 +6,8 @@
 #include <span>
 #include <vector>
 
+#include "raftor/wal/record.h"
 #include "raftpp/error.h"
-#include "raftpp/wal/record.h"
 
 namespace raftpp::wal {
 

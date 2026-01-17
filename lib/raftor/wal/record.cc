@@ -1,6 +1,6 @@
-#include "raftpp/wal/record.h"
+#include "raftor/wal/record.h"
 
-#include "raftpp/wal/crc32c.h"
+#include "raftor/wal/crc32c.h"
 
 namespace raftpp::wal {
 
