@@ -104,3 +104,8 @@ if (const auto result = operation(); !result) {
 ### Entry Parameter Order
 
 Entry constructors use `(index, term)` parameter order - be consistent with this convention.
+
+## MCP usage
+
+Always use Context7 MCP when I need library/API documentation,
+code generation, setup or configuration steps without me having to explicitly ask.
