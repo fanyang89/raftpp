@@ -19,9 +19,6 @@ struct TrackerConfiguration {
     bool auto_leave;
 };
 
-void to_json(nlohmann::json& j, const TrackerConfiguration& p);
-void from_json(const nlohmann::json& j, TrackerConfiguration& p);
-
 }  // namespace raftpp
 
 template <>

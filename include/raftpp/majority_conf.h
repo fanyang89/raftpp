@@ -2,7 +2,6 @@
 
 #include <functional>
 
-#include <nlohmann/json.hpp>
 #include <spdlog/fmt/fmt.h>
 
 #include "raftpp/ack_indexer.h"
@@ -22,9 +21,6 @@ class MajorityConfig : public Set<uint64_t> {
         const std::function<std::optional<bool>(uint64_t)>& check
     ) const;
 };
-
-void to_json(nlohmann::json& j, const MajorityConfig& p);
-void from_json(const nlohmann::json& j, MajorityConfig& p);
 
 }  // namespace raftpp
 

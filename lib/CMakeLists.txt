@@ -35,7 +35,6 @@ target_include_directories(raftpp PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../include)
 target_link_libraries(raftpp PUBLIC raftpp-proto)
 target_link_libraries(raftpp PUBLIC magic_enum::magic_enum)
 target_link_libraries(raftpp PUBLIC spdlog)
-target_link_libraries(raftpp PUBLIC nlohmann_json::nlohmann_json)
 target_link_libraries(raftpp PUBLIC libassert::assert)
 
 add_subdirectory(raftor)

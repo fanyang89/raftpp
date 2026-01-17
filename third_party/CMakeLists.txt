@@ -6,7 +6,6 @@ CPMAddPackage(
     "SPDLOG_FMT_EXTERNAL OFF"
 )
 CPMAddPackage("https://github.com/jeremy-rifkin/libassert.git@2.2.1")
-CPMAddPackage(URI "https://github.com/nlohmann/json.git@3.12.0" OPTIONS "JSON_Install off")
 CPMAddPackage("https://github.com/libuv/libuv.git@1.51.0")
 
 # Ensure spdlog uses the same C++ standard as the parent project

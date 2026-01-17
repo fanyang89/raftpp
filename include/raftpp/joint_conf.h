@@ -29,9 +29,6 @@ class JointConfiguration {
     MajorityConfig outgoing_;
 };
 
-void to_json(nlohmann::json& j, const JointConfiguration& p);
-void from_json(const nlohmann::json& j, JointConfiguration& p);
-
 }  // namespace raftpp
 
 template <>

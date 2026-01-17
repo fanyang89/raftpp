@@ -3,7 +3,7 @@
 #include <algorithm>
 
 #include <libassert/assert.hpp>
-#include <nlohmann/json.hpp>
+#include <spdlog/fmt/ranges.h>
 
 namespace raftpp {
 
@@ -95,19 +95,10 @@ VoteResult MajorityConfig::GetVoteResult(
     return VoteResult::Lost;
 }
 
-void to_json(nlohmann::json& j, const MajorityConfig& p) {
-    j["voters"] = Set<uint64_t>(p);
-}
-
-void from_json(const nlohmann::json& j, MajorityConfig& p) {
-    j.at("voters").get_to(p);
-}
-
 }  // namespace raftpp
 
 fmt::context::iterator fmt::formatter<raftpp::MajorityConfig>::format(
     const raftpp::MajorityConfig& value, const format_context& ctx
 ) {
-    const nlohmann::json j = value;
-    return fmt::format_to(ctx.out(), "{}", j.dump());
+    return fmt::format_to(ctx.out(), "({})", fmt::join(value, " "));
 }

@@ -6,7 +6,6 @@ add_executable(raftpp-tests
   test_util.cc
 
   inflights_test.cc
-  json_test.cc
   log_unstable_test.cc
   log_test.cc
   progress_test.cc

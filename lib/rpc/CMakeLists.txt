@@ -15,6 +15,5 @@ target_link_libraries(raftpp-rpc
         raftpp-proto
         uv_a
         spdlog
-        nlohmann_json::nlohmann_json
         kcp
 )

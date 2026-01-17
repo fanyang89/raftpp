@@ -1,5 +1,7 @@
 #include "raftpp/tracker_conf.h"
 
+#include <spdlog/fmt/ranges.h>
+
 namespace raftpp {
 
 TrackerConfiguration::TrackerConfiguration() : auto_leave(false) {}
@@ -39,25 +41,17 @@ ConfState TrackerConfiguration::ToConfState() {
     return cs;
 }
 
-void to_json(nlohmann::json& j, const TrackerConfiguration& p) {
-    j["voters"] = p.voters;
-    j["learners"] = p.learners;
-    j["learners_next"] = p.learners_next;
-    j["auto_leave"] = p.auto_leave;
-}
-
-void from_json(const nlohmann::json& j, TrackerConfiguration& p) {
-    j.at("voters").get_to(p.voters);
-    j.at("learners").get_to(p.learners);
-    j.at("learners_next").get_to(p.learners_next);
-    j.at("auto_leave").get_to(p.auto_leave);
-}
-
 }  // namespace raftpp
 
 fmt::context::iterator fmt::formatter<raftpp::TrackerConfiguration>::format(
     const raftpp::TrackerConfiguration& value, const format_context& ctx
 ) {
-    const nlohmann::json j = value;
-    return fmt::format_to(ctx.out(), "{}", j.dump());
+    return fmt::format_to(
+        ctx.out(),
+        "[voters: {}, learners: ({}), learners_next: ({}), auto_leave: {}]",
+        value.voters,
+        fmt::join(value.learners, " "),
+        fmt::join(value.learners_next, " "),
+        value.auto_leave
+    );
 }
