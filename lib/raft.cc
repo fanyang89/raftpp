@@ -583,9 +583,7 @@ bool Raft::Restore(const Snapshot& snapshot) {
     }
 
     if (state_ != StateRole::Follower) {
-        SPDLOG_WARN(
-            "non-follower attempted to restore snapshot, state={}", magic_enum::enum_name(state_)
-        );
+        SPDLOG_WARN("non-follower attempted to restore snapshot, state={}", format_as(state_));
         BecomeFollower(term_ + 1, INVALID_ID);
         return false;
     }
@@ -1494,7 +1492,7 @@ MessageType Raft::VoteRespMsgType(const MessageType mt) {
         case MsgRequestPreVote:
             return MsgRequestPreVoteResponse;
         default:
-            PANIC("not a vote message: {}", magic_enum::enum_name(mt));
+            PANIC("not a vote message: {}", MessageType_Name(mt));
     }
 }
 
@@ -1552,7 +1550,7 @@ void Raft::BecomeFollower(const uint64_t term, const uint64_t leader_id) {
     pending_request_snapshot_ = pending_request_snapshot;
     raft_log_.max_apply_unpersisted_log_limit() = 0;
 
-    SPDLOG_INFO("became follower, term={}, from_role={}", term, magic_enum::enum_name(from_role));
+    SPDLOG_INFO("became follower, term={}, from_role={}", term, format_as(from_role));
 }
 
 size_t Raft::max_inflight_messages() const {

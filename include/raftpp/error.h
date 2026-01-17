@@ -21,6 +21,22 @@ enum class StorageErrorCode {
     SnapshotTemporarilyUnavailable
 };
 
+constexpr std::string_view format_as(StorageErrorCode ec) {
+    switch (ec) {
+        case StorageErrorCode::Compacted:
+            return "Compacted";
+        case StorageErrorCode::Unavailable:
+            return "Unavailable";
+        case StorageErrorCode::LogTemporarilyUnavailable:
+            return "LogTemporarilyUnavailable";
+        case StorageErrorCode::SnapshotOutOfDate:
+            return "SnapshotOutOfDate";
+        case StorageErrorCode::SnapshotTemporarilyUnavailable:
+            return "SnapshotTemporarilyUnavailable";
+    }
+    return "Unknown";
+}
+
 struct StorageErrorOther {
     std::string message;
     bool operator==(const StorageErrorOther&) const;
@@ -36,6 +52,20 @@ enum class RaftErrorCode {
     /// The request snapshot is dropped.
     RequestSnapshotDropped,
 };
+
+constexpr std::string_view format_as(RaftErrorCode ec) {
+    switch (ec) {
+        case RaftErrorCode::StepLocalMsg:
+            return "StepLocalMsg";
+        case RaftErrorCode::StepPeerNotFound:
+            return "StepPeerNotFound";
+        case RaftErrorCode::ProposalDropped:
+            return "ProposalDropped";
+        case RaftErrorCode::RequestSnapshotDropped:
+            return "RequestSnapshotDropped";
+    }
+    return "Unknown";
+}
 
 class RaftError;
 

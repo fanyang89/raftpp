@@ -2,8 +2,6 @@
 
 #include <string_view>
 
-#include <magic_enum/magic_enum.hpp>
-
 #include "raftpp/ack_indexer.h"
 #include "raftpp/inflights.h"
 #include "raftpp/primitives.h"
@@ -19,8 +17,16 @@ enum class ProgressState : uint8_t {
     Snapshot,
 };
 
-constexpr std::string_view format_as(const ProgressState c) {
-    return magic_enum::enum_name(c);
+constexpr std::string_view format_as(ProgressState c) {
+    switch (c) {
+        case ProgressState::Probe:
+            return "Probe";
+        case ProgressState::Replicate:
+            return "Replicate";
+        case ProgressState::Snapshot:
+            return "Snapshot";
+    }
+    return "Unknown";
 }
 
 class ProgressDebug;

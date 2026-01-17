@@ -1,12 +1,10 @@
 #include "raftpp/error.h"
 
-#include <magic_enum/magic_enum.hpp>
-
 namespace {
 
 struct ToStringVisitor {
     std::string operator()(const raftpp::StorageErrorCode ec) const {
-        return fmt::format("storage error: {}", magic_enum::enum_name(ec));
+        return fmt::format("storage error: {}", format_as(ec));
     }
 
     std::string operator()(raftpp::StorageErrorOther ec) const {
@@ -14,7 +12,7 @@ struct ToStringVisitor {
     }
 
     std::string operator()(const raftpp::RaftErrorCode ec) const {
-        return fmt::format("raft error: {}", magic_enum::enum_name(ec));
+        return fmt::format("raft error: {}", format_as(ec));
     }
 
     std::string operator()(raftpp::InvalidConfigError ec) const {

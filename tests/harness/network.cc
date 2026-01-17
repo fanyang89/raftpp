@@ -2,7 +2,6 @@
 
 #include <cassert>
 
-#include <magic_enum/magic_enum.hpp>
 #include <spdlog/spdlog.h>
 
 #include "harness/test_util.h"
@@ -127,8 +126,8 @@ void Network::Send(std::vector<Message> msgs) {
 
         for (auto& m : msgs) {
             SPDLOG_DEBUG(
-                "Network::Send: type={}, from={}, to={}", magic_enum::enum_name(m.msg_type()),
-                m.from(), m.to()
+                "Network::Send: type={}, from={}, to={}", MessageType_Name(m.msg_type()), m.from(),
+                m.to()
             );
             auto it = peers_.find(m.to());
             if (it == peers_.end()) {

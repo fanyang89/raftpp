@@ -1,7 +1,6 @@
 #include "raftpp/progress.h"
 
 #include <doctest/doctest.h>
-#include <magic_enum/magic_enum.hpp>
 
 #include "raftpp/primitives.h"
 #include "test_util.h"
@@ -25,8 +24,7 @@ struct ProgressPausedTestParams {
     bool w;
 
     friend std::ostream& operator<<(std::ostream& os, const ProgressPausedTestParams& param) {
-        return os << "initial_state=" << magic_enum::enum_name(param.state)
-                  << ", paused=" << param.paused;
+        return os << "initial_state=" << format_as(param.state) << ", paused=" << param.paused;
     }
 };
 

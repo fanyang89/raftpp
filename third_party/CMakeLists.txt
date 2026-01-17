@@ -1,4 +1,3 @@
-CPMAddPackage("https://github.com/Neargye/magic_enum.git@0.9.7")
 CPMAddPackage(
   URI "https://github.com/gabime/spdlog.git@1.16.0"
   OPTIONS

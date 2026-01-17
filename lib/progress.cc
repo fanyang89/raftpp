@@ -1,7 +1,6 @@
 #include "raftpp/progress.h"
 
 #include <libassert/assert.hpp>
-#include <magic_enum/magic_enum.hpp>
 #include <spdlog/spdlog.h>
 
 #include "raftpp/primitives.h"
@@ -124,7 +123,7 @@ bool Progress::MaybeDecTo(
 ) {
     SPDLOG_DEBUG(
         "MaybeDecTo: rejected={}, match_hint={}, request_snapshot={}, state={}, matched={}",
-        rejected, match_hint, request_snapshot, magic_enum::enum_name(state_), matched_
+        rejected, match_hint, request_snapshot, format_as(state_), matched_
     );
     if (state_ == ProgressState::Replicate) {
         if (rejected < matched_ || (rejected == matched_ && request_snapshot == INVALID_INDEX)) {

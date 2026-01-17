@@ -47,11 +47,8 @@ fmt::context::iterator fmt::formatter<raftpp::TrackerConfiguration>::format(
     const raftpp::TrackerConfiguration& value, const format_context& ctx
 ) {
     return fmt::format_to(
-        ctx.out(),
-        "[voters: {}, learners: ({}), learners_next: ({}), auto_leave: {}]",
-        value.voters,
-        fmt::join(value.learners, " "),
-        fmt::join(value.learners_next, " "),
+        ctx.out(), "[voters: {}, learners: ({}), learners_next: ({}), auto_leave: {}]",
+        value.voters, fmt::join(value.learners, " "), fmt::join(value.learners_next, " "),
         value.auto_leave
     );
 }

@@ -108,14 +108,14 @@ void RaftCore::Send(Message& m, std::vector<Message>& messages) const {
         case MsgRequestVote:
         case MsgRequestVoteResponse:
             if (m.term() == 0) {
-                PANIC("term should be set when sending {}", magic_enum::enum_name(m.msg_type()));
+                PANIC("term should be set when sending {}", MessageType_Name(m.msg_type()));
             }
             break;
         default:
             if (m.term() != 0) {
                 PANIC(
                     "term should not be set when sending {} (was {})",
-                    magic_enum::enum_name(m.msg_type()), m.term()
+                    MessageType_Name(m.msg_type()), m.term()
                 );
             }
             // do not attach term to MsgPropose, MsgReadIndex

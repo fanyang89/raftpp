@@ -22,6 +22,20 @@ enum class StateRole : uint8_t {
     PreCandidate,
 };
 
+constexpr std::string_view format_as(StateRole role) {
+    switch (role) {
+        case StateRole::Follower:
+            return "Follower";
+        case StateRole::Candidate:
+            return "Candidate";
+        case StateRole::Leader:
+            return "Leader";
+        case StateRole::PreCandidate:
+            return "PreCandidate";
+    }
+    return "Unknown";
+}
+
 struct SoftState {
     uint64_t leader_id;
     StateRole raft_state;
