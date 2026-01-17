@@ -34,3 +34,6 @@ CPMAddPackage(
 if (RAFTPP_BUILD_TESTING)
   CPMAddPackage(URI "https://github.com/doctest/doctest.git@2.4.12")
 endif ()
+
+# KCP library (local)
+add_subdirectory(kcp)
