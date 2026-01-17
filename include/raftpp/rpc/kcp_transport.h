@@ -111,7 +111,8 @@ class KcpTransport : public Transport {
     void OnAppHandshakeReceived(KcpSession* session, uint64_t remote_id);
     void ProcessUdpPacket(const char* data, size_t len, const sockaddr* addr, socklen_t addr_len);
     void TryReceive(KcpSession* session);
-    void ProcessReceivedData(KcpSession* session);
+    /// Returns false if session was destroyed during processing
+    bool ProcessReceivedData(KcpSession* session);
     void SendUdp(const void* data, size_t len, const sockaddr* addr, socklen_t addr_len);
     void UpdateAllKcpSessions();
 

@@ -194,7 +194,9 @@ void KcpTransport::Stop() {
     }
     stopped_ = true;
 
-    for (auto& [_, session] : sessions_by_peer_) {
+    // Use sessions_by_conv_ to delete all sessions, as it contains all sessions
+    // (sessions_by_peer_ may not contain sessions with peer_id == 0)
+    for (auto& [_, session] : sessions_by_conv_) {
         delete session;
     }
     sessions_by_peer_.clear();
@@ -403,9 +405,28 @@ void KcpTransport::HandleKcpHandshake(
     std::memcpy(&storage, addr, addr_len);
 
     if (type == KcpHandshakeType::Request) {
+        uint64_t remote_id = pkt.node_id;
+
+        // Check for simultaneous handshake: are we also trying to connect to them?
+        auto* peer = peer_manager_.GetPeer(remote_id);
+        if (peer && peer->state == PeerState::Connecting) {
+            // Simultaneous handshake detected
+            // Use node_id comparison: lower node_id becomes the initiator
+            if (config_.node_id < remote_id) {
+                // We should be the initiator, ignore their Request
+                SPDLOG_DEBUG(
+                    "Simultaneous handshake with {}: we are initiator, ignoring request", remote_id
+                );
+                return;
+            }
+            // We should be the acceptor, continue with normal Request handling
+            SPDLOG_DEBUG("Simultaneous handshake with {}: we are acceptor", remote_id);
+        }
+
         uint32_t their_conv = pkt.conv;
         uint32_t our_index = AllocateConvId();
-        uint32_t final_conv = (their_conv & 0xFFFF0000) | (our_index & 0x0000FFFF);
+        // Combine both sides' conv values: initiator's conv in upper 16 bits, acceptor's in lower
+        uint32_t final_conv = ((their_conv & 0xFFFF) << 16) | (our_index & 0xFFFF);
 
         KcpHandshakePacket response{};
         response.magic = kKcpHandshakeMagic;
@@ -416,20 +437,37 @@ void KcpTransport::HandleKcpHandshake(
         auto buf = response.Encode();
         SendUdp(buf.data(), buf.size(), addr, addr_len);
 
-        auto* session = CreateSession(final_conv, pkt.node_id, storage, addr_len, false);
-        peer_manager_.UpdateState(pkt.node_id, PeerState::Connecting);
+        auto* session = CreateSession(final_conv, remote_id, storage, addr_len, false);
+        peer_manager_.UpdateState(remote_id, PeerState::Connecting);
 
         SendAppHandshake(session);
 
-        SPDLOG_DEBUG("Accepted KCP handshake from {} with conv {}", pkt.node_id, final_conv);
+        SPDLOG_DEBUG("Accepted KCP handshake from {} with conv {}", remote_id, final_conv);
 
     } else if (type == KcpHandshakeType::Response) {
         uint32_t final_conv = pkt.conv;
         uint64_t remote_id = pkt.node_id;
 
-        AddrKey key{storage};
-        if (auto it = sessions_by_addr_.find(key); it != sessions_by_addr_.end()) {
+        // Check if we already have a session with this peer (from simultaneous handshake)
+        if (auto it = sessions_by_peer_.find(remote_id); it != sessions_by_peer_.end()) {
+            // Simultaneous handshake - we created a session when we received their Request
+            // Use node_id comparison: lower node_id becomes the initiator
+            if (config_.node_id > remote_id) {
+                // We should be the acceptor, keep the existing session
+                SPDLOG_DEBUG("Simultaneous handshake with {}: keeping acceptor session", remote_id);
+                return;
+            }
+            // We should be the initiator, destroy the acceptor session
+            SPDLOG_DEBUG(
+                "Simultaneous handshake with {}: switching to initiator session", remote_id
+            );
             DestroySession(it->second);
+        } else {
+            // Check by address for sessions without peer_id set yet
+            AddrKey key{storage};
+            if (auto it2 = sessions_by_addr_.find(key); it2 != sessions_by_addr_.end()) {
+                DestroySession(it2->second);
+            }
         }
 
         auto* session = CreateSession(final_conv, remote_id, storage, addr_len, true);
@@ -516,11 +554,14 @@ void KcpTransport::TryReceive(KcpSession* session) {
             break;
         }
 
-        ProcessReceivedData(session);
+        if (!ProcessReceivedData(session)) {
+            // Session was destroyed during processing
+            return;
+        }
     }
 }
 
-void KcpTransport::ProcessReceivedData(KcpSession* session) {
+bool KcpTransport::ProcessReceivedData(KcpSession* session) {
     auto& buf = session->recv_buf;
 
     if (!session->handshake_done) {
@@ -529,17 +570,15 @@ void KcpTransport::ProcessReceivedData(KcpSession* session) {
             if (!hs_result) {
                 SPDLOG_WARN("Invalid app handshake: {}", hs_result.error().ToString());
                 DestroySession(session);
-                return;
+                return false;
             }
 
             OnAppHandshakeReceived(session, hs_result->node_id);
             buf.erase(buf.begin(), buf.begin() + Handshake::kSize);
-
-            if (!session->is_initiator) {
-                SendAppHandshake(session);
-            }
+            // Note: both sides send app handshake in HandleKcpHandshake when creating the session,
+            // so no need to send another one here.
         }
-        return;
+        return true;
     }
 
     while (true) {
@@ -547,7 +586,7 @@ void KcpTransport::ProcessReceivedData(KcpSession* session) {
         if (!frame_result) {
             SPDLOG_WARN("Invalid frame: {}", frame_result.error().ToString());
             DestroySession(session);
-            return;
+            return false;
         }
 
         size_t frame_size = *frame_result;
@@ -559,7 +598,7 @@ void KcpTransport::ProcessReceivedData(KcpSession* session) {
         if (!decode_result) {
             SPDLOG_WARN("Decode failed: {}", decode_result.error().ToString());
             DestroySession(session);
-            return;
+            return false;
         }
 
         auto [header, msg, consumed] = std::move(*decode_result);
@@ -574,6 +613,7 @@ void KcpTransport::ProcessReceivedData(KcpSession* session) {
             on_message_(std::move(msg));
         }
     }
+    return true;
 }
 
 void KcpTransport::SendUdp(
