@@ -9,6 +9,6 @@
 /.vs
 /.vscode
 /build
-/build-dev
+/build-*
 /cmake-build-*
 /opencode.json

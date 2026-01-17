@@ -11,6 +11,7 @@ option(RAFTPP_WITH_CCACHE "Build with ccache" ON)
 option(RAFTPP_WITH_LLD "Build with lld" OFF)
 option(RAFTPP_SANITIZE "Build with address sanitizer" OFF)
 option(RAFTPP_ENABLE_UBSAN "Build with undefined sanitizer when address sanitizer is enabled" ON)
+option(RAFTPP_COVERAGE "Build with code coverage instrumentation" OFF)
 
 # cpm.cmake cache directory
 # https://github.com/cpm-cmake/CPM.cmake/issues/563
@@ -32,6 +33,11 @@ if (RAFTPP_SANITIZE)
     add_compile_options(-fsanitize=undefined)
     add_link_options(-fsanitize=undefined)
   endif ()
+endif ()
+
+if (RAFTPP_COVERAGE)
+  add_compile_options(--coverage)
+  add_link_options(--coverage)
 endif ()
 
 if (MSVC)

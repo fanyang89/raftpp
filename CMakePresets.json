@@ -48,6 +48,16 @@
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_CXX_SCAN_FOR_MODULES": "OFF"
       }
+    },
+    {
+      "name": "coverage",
+      "binaryDir": "${sourceDir}/build-coverage",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_CXX_SCAN_FOR_MODULES": "OFF",
+        "RAFTPP_COVERAGE": "ON"
+      }
     }
   ]
 }
