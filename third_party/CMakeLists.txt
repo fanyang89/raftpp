@@ -25,3 +25,17 @@ if (RAFTPP_BUILD_TESTING)
 endif ()
 
 add_subdirectory(kcp)
+
+# Disable UBSan for KCP library as it has false positives from its queue macros
+# kcp/ikcp.c:317:10: runtime error: member access within null pointer of type 'IKCPSEG' (aka 'struct IKCPSEG')
+# SUMMARY: UndefinedBehaviorSanitizer: undefined-behavior kcp/ikcp.c:317:10
+if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
+    target_compile_options(kcp PRIVATE -fno-sanitize=undefined)
+endif()
+
+set(CRC32C_BUILD_TESTS OFF)
+set(CRC32C_BUILD_BENCHMARKS OFF)
+set(CRC32C_USE_GLOG OFF)
+set(CRC32C_INSTALL OFF)
+
+add_subdirectory(crc32c)

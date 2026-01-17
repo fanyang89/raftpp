@@ -11,18 +11,18 @@ namespace raftpp::wal {
 
 class CRC32C {
   public:
-    CRC32C() : crc_(0xFFFFFFFF) {}
+    CRC32C();
 
-    explicit CRC32C(uint32_t initial) : crc_(initial ^ 0xFFFFFFFF) {}
+    explicit CRC32C(const uint32_t initial) : crc_(initial ^ 0xFFFFFFFF) {}
 
     void Update(const void* data, size_t len);
     void Update(std::span<const uint8_t> data);
 
     // Finalize and return the CRC value
-    [[nodiscard]] uint32_t Finalize() const { return crc_ ^ 0xFFFFFFFF; }
+    [[nodiscard]] uint32_t Finalize() const;
 
     // Reset to initial state
-    void Reset() { crc_ = 0xFFFFFFFF; }
+    void Reset();
 
     // Convenience static methods
     [[nodiscard]] static uint32_t Compute(const void* data, size_t len);

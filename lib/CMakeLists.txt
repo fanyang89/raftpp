@@ -19,15 +19,6 @@ add_library(raftpp
   tracker_conf.cc
   unstable_log.cc
   util.cc
-  # WAL implementation
-  wal/crc32c.cc
-  wal/record.cc
-  wal/segment.cc
-  wal/segment_manager.cc
-  wal/wal_index.cc
-  wal/metadata_store.cc
-  wal/wal.cc
-  wal/wal_storage.cc
 )
 
 target_include_directories(raftpp PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../include)
@@ -36,5 +27,6 @@ target_link_libraries(raftpp PUBLIC raftpp-proto)
 target_link_libraries(raftpp PUBLIC spdlog)
 target_link_libraries(raftpp PUBLIC libassert::assert)
 
-add_subdirectory(raftor)
+add_subdirectory(wal)
 add_subdirectory(rpc)
+add_subdirectory(raftor)

@@ -7,4 +7,5 @@ add_library(raftor
 target_link_libraries(raftor PUBLIC
   raftpp
   raftpp-rpc
+  raftpp-wal
 )
