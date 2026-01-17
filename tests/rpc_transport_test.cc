@@ -5,7 +5,7 @@
 #include <vector>
 
 #include <doctest/doctest.h>
-#include <fmt/format.h>
+#include <spdlog/fmt/fmt.h>
 
 #include "raftpp/rpc/kcp_transport.h"
 #include "raftpp/rpc/tcp_transport.h"

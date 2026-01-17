@@ -105,6 +105,18 @@ if (const auto result = operation(); !result) {
 
 Entry constructors use `(index, term)` parameter order - be consistent with this convention.
 
+### Using fmt Library
+
+Always use spdlog's bundled fmt instead of the system fmt library:
+
+```cpp
+// Correct
+#include <spdlog/fmt/fmt.h>
+
+// Wrong - causes linker errors
+#include <fmt/format.h>
+```
+
 ## MCP usage
 
 Always use Context7 MCP when I need library/API documentation,
