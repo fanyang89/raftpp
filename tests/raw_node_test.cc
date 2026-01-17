@@ -98,10 +98,10 @@ TEST_CASE("raw_node: propose data") {
     while (true) {
         auto rd = raw_node.GetReady();
         if (rd.ss.has_value() && rd.ss->leader_id == 1) {
-            raw_node.Advance(rd);
+            std::ignore = raw_node.Advance(rd);
             break;
         }
-        raw_node.Advance(rd);
+        std::ignore = raw_node.Advance(rd);
     }
 
     auto result = raw_node.Propose("", "testdata");
@@ -110,7 +110,7 @@ TEST_CASE("raw_node: propose data") {
     auto rd = raw_node.GetReady();
     CHECK(rd.entries.size() >= 1);
     CHECK_EQ(rd.entries.back().data(), "testdata");
-    raw_node.Advance(rd);
+    std::ignore = raw_node.Advance(rd);
 }
 
 TEST_CASE("raw_node: set priority") {
@@ -143,7 +143,7 @@ void PrepareAsyncEntries(RawNode& raw_node, const std::shared_ptr<MemoryStorage>
 
     auto rd = raw_node.GetReady();
     std::ignore = storage->Append(rd.entries);
-    raw_node.Advance(rd);
+    std::ignore = raw_node.Advance(rd);
 
     // Propose 10 entries
     std::string data(1000, '\x01');
@@ -160,7 +160,7 @@ void PrepareAsyncEntries(RawNode& raw_node, const std::shared_ptr<MemoryStorage>
     CHECK_EQ(msgs.size(), 1);
     CHECK_EQ(msgs[0].msg_type(), MsgAppend);
     CHECK_EQ(msgs[0].entries_size(), 2);
-    raw_node.AdvanceAppend(rd);
+    std::ignore = raw_node.AdvanceAppend(rd);
 
     // Enable "slow storage" - next fetch will be async
     storage->TriggerLogUnavailable(true);
@@ -202,7 +202,7 @@ TEST_CASE("raw_node: async entry fetching") {
     std::ignore = storage->Append(rd.entries);
     auto msgs = rd.Messages();
     CHECK_EQ(msgs.size(), 0);
-    raw_node.AdvanceAppend(rd);
+    std::ignore = raw_node.AdvanceAppend(rd);
 
     // Entries are sent when the entries are ready which is informed by `on_entries_fetched`.
     storage->TriggerLogUnavailable(false);
@@ -216,7 +216,7 @@ TEST_CASE("raw_node: async entry fetching") {
     CHECK(msgs.size() > 0);
     CHECK_EQ(msgs[0].msg_type(), MsgAppend);
     CHECK(msgs[0].entries_size() > 0);
-    raw_node.AdvanceAppend(rd);
+    std::ignore = raw_node.AdvanceAppend(rd);
 }
 
 // Test if async fetch entries works well when there is a remove node conf-change.
@@ -259,7 +259,7 @@ TEST_CASE("raw_node: async entry fetching to removed node") {
     for (const auto& msg : msgs) {
         CHECK_NE(msg.to(), 2);
     }
-    raw_node.AdvanceAppend(rd);
+    std::ignore = raw_node.AdvanceAppend(rd);
 }
 
 TEST_SUITE_END();

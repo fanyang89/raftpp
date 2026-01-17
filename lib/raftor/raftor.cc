@@ -209,7 +209,7 @@ void RaftorImpl::EventLoop() {
 
         // 2. Check tick timer
         if (ShouldTick()) {
-            raw_node_->Tick();
+            std::ignore = raw_node_->Tick();
             last_tick_ = std::chrono::steady_clock::now();
         }
 
@@ -230,7 +230,7 @@ void RaftorImpl::Poll(std::chrono::milliseconds timeout) {
     transport_->Poll(timeout);
 
     if (ShouldTick()) {
-        raw_node_->Tick();
+        std::ignore = raw_node_->Tick();
         last_tick_ = std::chrono::steady_clock::now();
     }
 

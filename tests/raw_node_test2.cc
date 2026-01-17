@@ -87,13 +87,13 @@ TEST_CASE("raw_node: read index") {
         auto rd = raw_node.GetReady();
         storage->Append(rd.entries).value();
         if (rd.ss.has_value() && rd.ss->leader_id == 1) {
-            raw_node.Advance(rd);
+            std::ignore = raw_node.Advance(rd);
 
             // Once we are the leader, issue a read index request
             raw_node.ReadIndex(request_ctx);
             break;
         }
-        raw_node.Advance(rd);
+        std::ignore = raw_node.Advance(rd);
     }
 
     // Ensure read_states can be read out
@@ -101,7 +101,7 @@ TEST_CASE("raw_node: read index") {
     auto rd = raw_node.GetReady();
     CHECK_EQ(rd.read_states, wrs);
     storage->Append(rd.entries).value();
-    raw_node.Advance(rd);
+    std::ignore = raw_node.Advance(rd);
 
     // Ensure raft.read_states is reset after advance
     CHECK_FALSE(raw_node.HasReady());
@@ -117,7 +117,7 @@ TEST_CASE("raw_node: start") {
 
     auto rd = raw_node.GetReady();
     MustCmpReady(rd, std::nullopt, std::nullopt, {}, {}, std::nullopt, true, true, false);
-    raw_node.Advance(rd);
+    std::ignore = raw_node.Advance(rd);
 
     raw_node.Campaign().value();
     auto rd2 = raw_node.GetReady();
@@ -178,7 +178,7 @@ TEST_CASE("raw_node: restart") {
     MustCmpReady(
         rd, std::nullopt, std::nullopt, {}, {EmptyEntry(1, 1)}, std::nullopt, true, true, false
     );
-    raw_node.Advance(rd);
+    std::ignore = raw_node.Advance(rd);
     CHECK_FALSE(raw_node.HasReady());
 }
 
@@ -212,7 +212,7 @@ TEST_CASE("raw_node: restart from snapshot") {
 
     auto rd = raw_node.GetReady();
     MustCmpReady(rd, std::nullopt, std::nullopt, {}, entries, std::nullopt, true, true, false);
-    raw_node.Advance(rd);
+    std::ignore = raw_node.Advance(rd);
     CHECK_FALSE(raw_node.HasReady());
 }
 
@@ -251,10 +251,10 @@ TEST_CASE("raw_node: propose add duplicate node") {
         auto rd = raw_node.GetReady();
         storage->Append(rd.entries).value();
         if (rd.ss.has_value() && rd.ss->leader_id == 1) {
-            raw_node.Advance(rd);
+            std::ignore = raw_node.Advance(rd);
             break;
         }
-        raw_node.Advance(rd);
+        std::ignore = raw_node.Advance(rd);
     }
 
     auto propose_conf_change_and_apply = [&](const ConfChange& cc) {
@@ -305,17 +305,17 @@ TEST_CASE("raw_node: propose add learner node") {
 
     auto rd = raw_node.GetReady();
     MustCmpReady(rd, std::nullopt, std::nullopt, {}, {}, std::nullopt, true, true, false);
-    raw_node.Advance(rd);
+    std::ignore = raw_node.Advance(rd);
 
     raw_node.Campaign().value();
     while (true) {
         auto rd2 = raw_node.GetReady();
         storage->Append(rd2.entries).value();
         if (rd2.ss.has_value() && rd2.ss->leader_id == 1) {
-            raw_node.Advance(rd2);
+            std::ignore = raw_node.Advance(rd2);
             break;
         }
-        raw_node.Advance(rd2);
+        std::ignore = raw_node.Advance(rd2);
     }
 
     // Propose add learner node and check apply state
@@ -636,13 +636,13 @@ TEST_CASE("raw_node: joint auto leave") {
     // Move RawNode along. It should not leave joint because it's follower.
     auto rd = raw_node.GetReady();
     CHECK(rd.entries.empty());
-    raw_node.Advance(rd);
+    std::ignore = raw_node.Advance(rd);
 
     // Make it leader again. It should leave joint automatically after moving apply index.
     raw_node.Campaign().value();
     auto rd2 = raw_node.GetReady();
     storage->Append(rd2.entries).value();
-    raw_node.Advance(rd2);
+    std::ignore = raw_node.Advance(rd2);
 
     auto rd3 = raw_node.GetReady();
     storage->Append(rd3.entries).value();
@@ -686,10 +686,10 @@ TEST_CASE("raw_node: bounded_uncommitted_entries_growth_with_partition") {
         }
         storage->Append(rd.entries).value();
         if (rd.ss.has_value() && rd.ss->leader_id == raw_node.GetStatus().id) {
-            raw_node.Advance(rd);
+            std::ignore = raw_node.Advance(rd);
             break;
         }
-        raw_node.Advance(rd);
+        std::ignore = raw_node.Advance(rd);
     }
 
     // Should be accepted
@@ -704,7 +704,7 @@ TEST_CASE("raw_node: bounded_uncommitted_entries_growth_with_partition") {
     // Should be accepted when previous data has been committed
     auto rd = raw_node.GetReady();
     storage->Append(rd.entries).value();
-    raw_node.Advance(rd);
+    std::ignore = raw_node.Advance(rd);
 
     raw_node.Propose("", data).value();
 }
@@ -728,7 +728,7 @@ TEST_CASE("raw_node: with async apply") {
     CHECK(rd.ss.has_value());
     CHECK_EQ(rd.ss->leader_id, raw_node.GetStatus().id);
     storage->Append(rd.entries).value();
-    raw_node.Advance(rd);
+    std::ignore = raw_node.Advance(rd);
 
     // raft-rs uses: raw_node.raft.raft_log.last_index()
     // In raftpp we get this from storage after appending

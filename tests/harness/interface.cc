@@ -52,7 +52,7 @@ void Interface::Persist() {
         }
         // Also update the external storage for test verification
         if (storage_) {
-            storage_->ApplySnapshot(snap);
+            std::ignore = storage_->ApplySnapshot(snap);
         }
         // Now mark snapshot as stable (this clears unstable snapshot)
         raft_log.StableSnapshot(index);
@@ -78,7 +78,7 @@ void Interface::Persist() {
         }
         // Also update the external storage for test verification
         if (storage_) {
-            storage_->Append(entries_to_persist);
+            std::ignore = storage_->Append(entries_to_persist);
         }
         // Now mark entries as stable (this clears unstable entries)
         raft_log.StableEntries(last_idx, last_term);

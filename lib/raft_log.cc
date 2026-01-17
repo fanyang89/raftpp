@@ -125,7 +125,7 @@ bool RaftLog::MaybePersistSnapshot(const uint64_t index) {
 
 bool RaftLog::MaybeCommit(const uint64_t max_index, const uint64_t term) {
     if (max_index > committed_ && Term(max_index) == term) {
-        CommitTo(max_index);
+        std::ignore = CommitTo(max_index);
         return true;
     }
     return false;
@@ -159,7 +159,7 @@ Result<RaftLog::MaybeAppendResult> RaftLog::MaybeAppend(
     }
 
     const uint64_t last_new_idx = idx + entries.size();
-    CommitTo(std::min(committed, last_new_idx));
+    std::ignore = CommitTo(std::min(committed, last_new_idx));
     return MaybeAppendResult{true, conflict_idx, last_new_idx};
 }
 

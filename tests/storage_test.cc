@@ -124,7 +124,7 @@ TEST_CASE("storage: last index") {
     auto result = storage.LastIndex();
     CHECK_EQ(5, result);
 
-    storage.Append({NewEntry(6, 5)});
+    std::ignore = storage.Append({NewEntry(6, 5)});
     result = storage.LastIndex();
     CHECK_EQ(6, result);
 }
@@ -140,7 +140,7 @@ TEST_CASE("storage: first index") {
     storage.SetEntries(ents);
     CHECK_EQ(3, storage.FirstIndex());
 
-    storage.Compact(4);
+    std::ignore = storage.Compact(4);
     CHECK_EQ(4, storage.FirstIndex());
 }
 
@@ -164,7 +164,7 @@ TEST_CASE("storage: compact") {
 
     MemoryStorage storage;
     storage.SetEntries(ents);
-    storage.Compact(idx);
+    std::ignore = storage.Compact(idx);
 
     uint64_t index = 0;
     if (const auto r = storage.FirstIndex(); r) {
@@ -283,7 +283,7 @@ TEST_CASE("storage: append") {
     storage.SetEntries(ents);
 
     if (w_entries) {
-        storage.Append(entries);
+        std::ignore = storage.Append(entries);
         CHECK_EQ(*w_entries, storage.AllEntries());
     } else {
         const auto r = storage.MayAppend(entries);

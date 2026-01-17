@@ -127,7 +127,7 @@ ConfState Raft::PostConfChange() {
             if (id == id_) {
                 continue;
             }
-            MaybeSendAppend(id, p, false, messages_);
+            std::ignore = MaybeSendAppend(id, p, false, messages_);
         }
     }
 
@@ -181,7 +181,7 @@ bool Raft::AppendEntry(std::vector<Entry> entries) {
         entry.set_index(last_index + i + 1);
     }
 
-    raft_log_.Append(entries);
+    std::ignore = raft_log_.Append(entries);
     return true;
 }
 
@@ -234,7 +234,7 @@ void Raft::OnPersistEntries(const uint64_t index, const uint64_t term) {
 }
 
 void Raft::OnPersistSnapshot(const uint64_t index) {
-    raft_log_.MaybePersistSnapshot(index);
+    std::ignore = raft_log_.MaybePersistSnapshot(index);
 }
 
 void Raft::BecomePreCandidate() {
@@ -563,7 +563,7 @@ void Raft::SendRequestSnapshot() {
 }
 
 void Raft::HandleHeartbeat(const Message& m) {
-    raft_log_.CommitTo(m.commit());
+    std::ignore = raft_log_.CommitTo(m.commit());
     if (pending_request_snapshot_ != INVALID_INDEX) {
         SendRequestSnapshot();
         return;
@@ -612,11 +612,11 @@ bool Raft::Restore(const Snapshot& snapshot) {
     if (pending_request_snapshot_ == INVALID_INDEX &&
         raft_log_.MatchTerm(meta.index(), meta.term())) {
         SPDLOG_INFO("fast-forwarded commit to snapshot");
-        raft_log_.CommitTo(meta.index());
+        std::ignore = raft_log_.CommitTo(meta.index());
         return false;
     }
 
-    raft_log_.Restore(snapshot);
+    std::ignore = raft_log_.Restore(snapshot);
 
     pending_request_snapshot_ = INVALID_INDEX;
 
@@ -684,7 +684,7 @@ Result<void> Raft::StepCandidate(const Message& m) {
                 (state_ == StateRole::Candidate && m.msg_type() != MsgRequestVoteResponse)) {
                 return {};
             }
-            Poll(m.from(), m.msg_type(), !m.reject());
+            std::ignore = Poll(m.from(), m.msg_type(), !m.reject());
             MaybeCommitByVote(m);
             break;
 
@@ -774,7 +774,7 @@ Result<void> Raft::StepFollower(Message& m) {
             rs.request_ctx = m.entries().at(0).data();
 
             read_states_.emplace_back(rs);
-            raft_log_.MaybeCommit(m.index(), m.term());
+            std::ignore = raft_log_.MaybeCommit(m.index(), m.term());
             break;
         }
 

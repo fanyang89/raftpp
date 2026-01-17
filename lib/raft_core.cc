@@ -90,7 +90,7 @@ void RaftCore::PrepareSendEntries(
 }
 
 void RaftCore::SendAppend(const uint64_t to, Progress& pr, std::vector<Message>& messages) {
-    MaybeSendAppend(to, pr, true, messages);
+    std::ignore = MaybeSendAppend(to, pr, true, messages);
 }
 
 void RaftCore::SendAppendAggressively(uint64_t to, Progress& pr, std::vector<Message>& messages) {

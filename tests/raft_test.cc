@@ -407,7 +407,7 @@ TEST_CASE("raft: group commit") {
 
             if (sm->progress_tracker().get(id) == nullptr) {
                 auto cc = MakeAddNodeCC(id);
-                sm->ApplyConfChange(cc);
+                std::ignore = sm->ApplyConfChange(cc);
             }
             auto* pr = sm->progress_tracker().get(id);
             pr->matched() = m;
@@ -508,7 +508,7 @@ TEST_CASE("raft: group commit consistent") {
 
             if (sm->progress_tracker().get(id) == nullptr) {
                 auto cc = MakeAddNodeCC(id);
-                sm->ApplyConfChange(cc);
+                std::ignore = sm->ApplyConfChange(cc);
             }
             auto* pr = sm->progress_tracker().get(id);
             pr->matched() = m;

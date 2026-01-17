@@ -377,7 +377,7 @@ void CommitNoopEntry(Network& network, MemoryStorage& storage, Raft& raft) {
     Entry noop_entry;
     noop_entry.set_term(raft.term());
     noop_entry.set_index(raft.raft_log().LastIndex() + 1);
-    raft.AppendEntry(noop_entry);
+    std::ignore = raft.AppendEntry(noop_entry);
 
     // Now broadcast append messages (which will include the no-op entry)
     raft.BroadcastAppend();
@@ -395,7 +395,7 @@ void CommitNoopEntry(Network& network, MemoryStorage& storage, Raft& raft) {
             resp.set_term(raft.term());
             resp.set_index(msg.index() + msg.entries_size());
 
-            raft.Step(resp);
+            std::ignore = raft.Step(resp);
         }
     }
 

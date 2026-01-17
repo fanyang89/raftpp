@@ -33,11 +33,11 @@ TEST_SUITE_BEGIN("progress");
 TEST_CASE("progress: resume") {
     ProgressDebug p(2);
     p.paused() = true;
-    p.MaybeDecTo(1, 1, INVALID_INDEX);
+    std::ignore = p.MaybeDecTo(1, 1, INVALID_INDEX);
     CHECK_FALSE(p.paused());
 
     p.paused() = true;
-    p.MaybeUpdate(2);
+    std::ignore = p.MaybeUpdate(2);
     CHECK_FALSE(p.paused());
 }
 

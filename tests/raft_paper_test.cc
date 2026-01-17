@@ -103,7 +103,7 @@ void TestNonleaderStartElection(StateRole state) {
     }
 
     for (size_t i = 1; i < 2 * et; ++i) {
-        r->Tick();
+        std::ignore = r->Tick();
     }
 
     CHECK_EQ(r->term(), 2);
@@ -146,7 +146,7 @@ void TestNonLeaderElectionTimeoutRandomized(StateRole state) {
 
         size_t time = 0;
         while (r.ReadMessages().empty()) {
-            r->Tick();
+            std::ignore = r->Tick();
             ++time;
         }
         timeouts[time] = true;
@@ -195,7 +195,7 @@ void TestNonleadersElectionTimeoutNonconflict(StateRole state) {
         int timeout_num = 0;
         while (timeout_num == 0) {
             for (auto& r : rs) {
-                r->Tick();
+                std::ignore = r->Tick();
                 if (!r.ReadMessages().empty()) {
                     ++timeout_num;
                 }
@@ -245,11 +245,11 @@ TEST_CASE("raft paper: leader bcast beat") {
 
     for (size_t i = 0; i < 10; ++i) {
         std::vector<Entry> entries = {EmptyEntry(i + 1, 0)};
-        r->AppendEntry(entries);
+        std::ignore = r->AppendEntry(entries);
     }
 
     for (size_t i = 0; i < hi; ++i) {
-        r->Tick();
+        std::ignore = r->Tick();
     }
 
     auto msgs = r.ReadMessages();
@@ -567,7 +567,7 @@ TEST_CASE("raft paper: vote request") {
 
         size_t election_timeout = 10;  // from config
         for (size_t i = 1; i < election_timeout * 2; ++i) {
-            r->TickElection();
+            std::ignore = r->TickElection();
         }
 
         auto msgs = r.ReadMessages();
@@ -619,7 +619,7 @@ TEST_CASE("raft paper: voter") {
         conf_state.add_voters(1);
         conf_state.add_voters(2);
         storage->SetConfState(conf_state);
-        storage->Append(ents);
+        std::ignore = storage->Append(ents);
 
         auto r = NewTestRaftWithConfig(NewTestConfig(1, 10, 1), storage);
 
@@ -665,7 +665,7 @@ TEST_CASE("raft paper: leader only commits log from current term") {
         conf_state.add_voters(1);
         conf_state.add_voters(2);
         storage->SetConfState(conf_state);
-        storage->Append(ents);
+        std::ignore = storage->Append(ents);
 
         auto r = NewTestRaftWithConfig(NewTestConfig(1, 10, 1), storage);
         r->LoadState(MakeHardState(2, 0, 0));

@@ -195,8 +195,8 @@ TEST_SUITE("wal") {
             auto segment = Segment::Create(path, 1, 1, false, 0);
             REQUIRE(segment.has_value());
             std::vector<uint8_t> data = {1, 2, 3, 4, 5};
-            (*segment)->Append(data);
-            (*segment)->Sync();
+            std::ignore = (*segment)->Append(data);
+            std::ignore = (*segment)->Sync();
         }
 
         // Open and verify
@@ -270,7 +270,7 @@ TEST_SUITE("wal") {
         entries.push_back(MakeEntry(1, 1));
         entries.push_back(MakeEntry(2, 1));
         entries.push_back(MakeEntry(3, 2));
-        (*wal)->Append(entries);
+        std::ignore = (*wal)->Append(entries);
 
         auto term = (*wal)->Term(1);
         REQUIRE(term.has_value());
@@ -342,7 +342,7 @@ TEST_SUITE("wal") {
             for (uint64_t i = 1; i <= 100; ++i) {
                 entries.push_back(MakeEntry(i, 1, "data" + std::to_string(i)));
             }
-            (*wal)->Append(entries);
+            std::ignore = (*wal)->Append(entries);
         }
 
         // Reopen and verify
@@ -375,7 +375,7 @@ TEST_SUITE("wal") {
         for (uint64_t i = 1; i <= 10; ++i) {
             entries.push_back(MakeEntry(i, 1));
         }
-        (*wal)->Append(entries);
+        std::ignore = (*wal)->Append(entries);
 
         // Compact
         auto result = (*wal)->Compact(5);
@@ -475,7 +475,7 @@ TEST_SUITE("wal") {
         for (uint64_t i = 1; i <= 10; ++i) {
             entries.push_back(MakeEntry(i, 1, std::string(100, 'x')));
         }
-        (*wal)->Append(entries);
+        std::ignore = (*wal)->Append(entries);
 
         // Read with size limit - should return at least one entry
         auto read_result = (*wal)->ReadEntries(1, 11, 50);
