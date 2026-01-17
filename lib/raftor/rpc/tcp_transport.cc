@@ -1,8 +1,11 @@
-#include "raftor/rpc/tcp_transport.h"
+#include "raftpp/raftor/rpc/tcp_transport.h"
 
 #include <spdlog/spdlog.h>
 
-namespace raftpp::rpc {
+using raftpp::RaftError;
+using raftpp::Result;
+
+namespace raftpp::raftor::rpc {
 
 TcpTransport::TcpTransport(TransportConfig config) : config_(std::move(config)) {
     uv_loop_init(&loop_);
@@ -421,4 +424,4 @@ void TcpTransport::OnReconnectTimer(uv_timer_t* timer) {
     }
 }
 
-}  // namespace raftpp::rpc
+}  // namespace raftpp::raftor::rpc

@@ -5,9 +5,9 @@
 #include <doctest/doctest.h>
 #include <spdlog/fmt/fmt.h>
 
-#include "raftpp/raftpp.pb.h"
-#include "raftpp/unstable_log.h"
-#include "raftpp/util.h"
+#include "raftpp/core/raftpp.pb.h"
+#include "raftpp/core/unstable_log.h"
+#include "raftpp/core/util.h"
 #include "test_util.h"
 
 using namespace raftpp;

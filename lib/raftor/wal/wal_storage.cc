@@ -1,8 +1,8 @@
-#include "raftor/wal/wal_storage.h"
+#include "raftpp/raftor/wal/wal_storage.h"
 
 #include <spdlog/spdlog.h>
 
-namespace raftpp::wal {
+namespace raftpp::raftor::wal {
 
 WALStorage::~WALStorage() = default;
 
@@ -137,4 +137,4 @@ std::vector<Entry> WALStorage::AllEntries() {
     return *result;
 }
 
-}  // namespace raftpp::wal
+}  // namespace raftpp::raftor::wal

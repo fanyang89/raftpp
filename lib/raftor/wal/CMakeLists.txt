@@ -9,9 +9,7 @@ add_library(raftor-wal
   wal_storage.cc
 )
 
-target_include_directories(raftor-wal PUBLIC
-  "${CMAKE_CURRENT_SOURCE_DIR}/../../../include"
-)
+target_include_directories(raftor-wal PUBLIC ${RAFTPP_INCLUDE_DIR})
 
 target_link_libraries(raftor-wal PRIVATE
   raftpp-proto

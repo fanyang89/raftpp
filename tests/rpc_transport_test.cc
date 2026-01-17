@@ -7,11 +7,11 @@
 #include <doctest/doctest.h>
 #include <spdlog/fmt/fmt.h>
 
-#include "raftor/rpc/kcp_transport.h"
-#include "raftor/rpc/tcp_transport.h"
+#include "raftpp/raftor/rpc/kcp_transport.h"
+#include "raftpp/raftor/rpc/tcp_transport.h"
 
 using namespace raftpp;
-using namespace raftpp::rpc;
+using namespace raftor::rpc;
 using namespace std::chrono_literals;
 
 // =============================================================================

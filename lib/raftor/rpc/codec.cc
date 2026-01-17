@@ -1,13 +1,9 @@
-#include "raftor/rpc/codec.h"
+#include "raftpp/raftor/rpc/codec.h"
 
 #include <charconv>
 #include <cstring>
 
-namespace raftpp::rpc {
-
-using raftpp::RaftError;
-using raftpp::Result;
-using raftpp::RpcErrorCode;
+namespace raftpp::raftor::rpc {
 
 std::vector<uint8_t> Codec::Encode(
     const Message& msg, uint64_t from_node, uint64_t to_node, uint64_t request_id
@@ -223,4 +219,4 @@ Result<std::pair<std::string, int>> ParseAddress(const std::string& addr) {
     return std::pair{host, port};
 }
 
-}  // namespace raftpp::rpc
+}  // namespace raftpp::raftor::rpc

@@ -1,8 +1,8 @@
-#include "raftor/rpc/peer_manager.h"
+#include "raftpp/raftor/rpc/peer_manager.h"
 
 #include <algorithm>
 
-namespace raftpp::rpc {
+namespace raftpp::raftor::rpc {
 
 void PeerManager::AddPeer(uint64_t id, std::string addr) {
     PeerInfo info;
@@ -100,4 +100,4 @@ std::chrono::milliseconds PeerManager::CalculateBackoff(uint32_t failure_count) 
     return std::chrono::milliseconds(std::min(delay_ms, kMaxMs));
 }
 
-}  // namespace raftpp::rpc
+}  // namespace raftpp::raftor::rpc

@@ -1,2 +1,2 @@
-add_subdirectory(raftpp)
+add_subdirectory(core)
 add_subdirectory(raftor)

@@ -2,14 +2,14 @@
 
 #include <memory>
 
-#include "raftor/proposal_tracker.h"
-#include "raftor/rpc/transport.h"
-#include "raftor/state_machine.h"
-#include "raftor/wal/wal_storage.h"
-#include "raftpp/error.h"
-#include "raftpp/raft_core.h"
-#include "raftpp/raw_node.h"
-#include "raftpp/storage.h"
+#include "raftpp/core/error.h"
+#include "raftpp/core/raft_core.h"
+#include "raftpp/core/raw_node.h"
+#include "raftpp/core/storage.h"
+#include "raftpp/raftor/proposal_tracker.h"
+#include "raftpp/raftor/rpc/transport.h"
+#include "raftpp/raftor/state_machine.h"
+#include "raftpp/raftor/wal/wal_storage.h"
 
 namespace raftpp::raftor {
 

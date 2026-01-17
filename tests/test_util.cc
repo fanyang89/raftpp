@@ -4,8 +4,8 @@
 #include <google/protobuf/util/message_differencer.h>
 #include <spdlog/fmt/fmt.h>
 
-#include "raftpp/raft_core.h"
-#include "raftpp/raftpp.pb.h"
+#include "raftpp/core/raft_core.h"
+#include "raftpp/core/raftpp.pb.h"
 
 namespace raftpp {
 

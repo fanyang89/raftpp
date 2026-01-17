@@ -4,8 +4,8 @@
 #include <doctest/doctest.h>
 
 #include "datadriven.h"
-#include "raftpp/conf_changer.h"
-#include "raftpp/progress_tracker.h"
+#include "raftpp/core/conf_changer.h"
+#include "raftpp/core/progress_tracker.h"
 
 namespace raftpp {
 namespace test {

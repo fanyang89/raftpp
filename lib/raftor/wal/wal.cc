@@ -1,10 +1,10 @@
-#include "raftor/wal/wal.h"
+#include "raftpp/raftor/wal/wal.h"
 
 #include <spdlog/spdlog.h>
 
-#include "raftor/wal/record.h"
+#include "raftpp/raftor/wal/record.h"
 
-namespace raftpp::wal {
+namespace raftpp::raftor::wal {
 
 WAL::~WAL() {
     auto result = Close();
@@ -690,4 +690,4 @@ Result<void> WAL::MaybeRollSegment() {
     return {};
 }
 
-}  // namespace raftpp::wal
+}  // namespace raftpp::raftor::wal

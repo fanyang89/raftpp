@@ -1,13 +1,12 @@
-#include "raftpp/storage.h"
+#include "raftpp/core/storage.h"
 
 #include <absl/strings/str_join.h>
 #include <doctest/doctest.h>
 #include <google/protobuf/util/message_differencer.h>
 #include <spdlog/fmt/fmt.h>
-#include <spdlog/spdlog.h>
 
 #include "harness/test_util.h"
-#include "raftpp/memory_storage.h"
+#include "raftpp/core/memory_storage.h"
 #include "test_util.h"
 
 using namespace raftpp;

@@ -1,8 +1,8 @@
-#include "raftpp/inflights.h"
+#include "raftpp/core/inflights.h"
 
 #include <doctest/doctest.h>
 
-#include "raftpp/primitives.h"
+#include "raftpp/core/primitives.h"
 #include "test_util.h"
 
 using namespace raftpp;

@@ -1,4 +1,4 @@
-#include "raftor/wal/metadata_store.h"
+#include "raftpp/raftor/wal/metadata_store.h"
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -7,10 +7,10 @@
 
 #include <spdlog/spdlog.h>
 
-#include "raftor/wal/crc32c.h"
-#include "raftor/wal/record.h"
+#include "raftpp/raftor/wal/crc32c.h"
+#include "raftpp/raftor/wal/record.h"
 
-namespace raftpp::wal {
+namespace raftpp::raftor::wal {
 
 MetadataStore::MetadataStore(const std::filesystem::path& dir)
     : path_(dir / "metadata"), tmp_path_(dir / "metadata.tmp") {}
@@ -245,4 +245,4 @@ Result<WALMetadata> MetadataStore::Deserialize(const std::vector<uint8_t>& data)
     return meta;
 }
 
-}  // namespace raftpp::wal
+}  // namespace raftpp::raftor::wal

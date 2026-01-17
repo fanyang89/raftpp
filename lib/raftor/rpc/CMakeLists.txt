@@ -5,10 +5,7 @@ add_library(raftor-rpc
   kcp_transport.cc
 )
 
-target_include_directories(raftor-rpc PUBLIC
-  ${CMAKE_SOURCE_DIR}/include
-  ${CMAKE_SOURCE_DIR}/third_party/kcp
-)
+target_include_directories(raftor-rpc PUBLIC ${RAFTPP_INCLUDE_DIR} ${KCP_INCLUDE_DIR})
 
 target_link_libraries(raftor-rpc PUBLIC
   raftpp-proto

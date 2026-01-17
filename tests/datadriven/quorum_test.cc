@@ -6,7 +6,7 @@
 #include <doctest/doctest.h>
 
 #include "datadriven.h"
-#include "raftpp/joint_conf.h"
+#include "raftpp/core/joint_conf.h"
 #include "raftpp/majority_conf.h"
 
 namespace raftpp {

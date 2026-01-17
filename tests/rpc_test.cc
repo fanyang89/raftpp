@@ -1,10 +1,10 @@
 #include <doctest/doctest.h>
 
-#include "raftor/rpc/codec.h"
-#include "raftor/rpc/peer_manager.h"
+#include "raftpp/raftor/rpc/codec.h"
+#include "raftpp/raftor/rpc/peer_manager.h"
 
 using namespace raftpp;
-using namespace raftpp::rpc;
+using namespace raftor::rpc;
 
 TEST_SUITE("rpc") {
     TEST_CASE("Codec encode/decode round-trip") {

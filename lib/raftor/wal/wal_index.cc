@@ -1,6 +1,6 @@
-#include "raftor/wal/wal_index.h"
+#include "raftpp/raftor/wal/wal_index.h"
 
-namespace raftpp::wal {
+namespace raftpp::raftor::wal {
 
 void WALIndex::Insert(
     uint64_t index, uint64_t segment_id, uint64_t offset, uint32_t length, uint64_t term
@@ -99,4 +99,4 @@ void WALIndex::SetFirstIndex(uint64_t first_index) {
     first_index_ = first_index;
 }
 
-}  // namespace raftpp::wal
+}  // namespace raftpp::raftor::wal

@@ -3,9 +3,9 @@
 #include <doctest/doctest.h>
 
 #include "harness/test_util.h"
-#include "raftpp/error.h"
-#include "raftpp/raft_core.h"
-#include "raftpp/raftpp.pb.h"
+#include "raftpp/core/error.h"
+#include "raftpp/core/raft_core.h"
+#include "raftpp/core/raftpp.pb.h"
 
 #define DOCTEST_VALUE_PARAMETERIZED_DATA(data, data_container)                           \
     do {                                                                                 \

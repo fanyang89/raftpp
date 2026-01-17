@@ -1,4 +1,4 @@
-#include "raftor/raftor.h"
+#include "raftpp/raftor/raftor.h"
 
 #include <atomic>
 #include <chrono>
@@ -7,12 +7,12 @@
 
 #include <doctest/doctest.h>
 
-#include "raftor/proposal_tracker.h"
-#include "raftor/raftor_config.h"
-#include "raftor/rpc/transport.h"
-#include "raftor/state_machine.h"
-#include "raftor/wal/wal_storage.h"
-#include "raftpp/memory_storage.h"
+#include "raftpp/core/memory_storage.h"
+#include "raftpp/raftor/proposal_tracker.h"
+#include "raftpp/raftor/raftor_config.h"
+#include "raftpp/raftor/rpc/transport.h"
+#include "raftpp/raftor/state_machine.h"
+#include "raftpp/raftor/wal/wal_storage.h"
 #include "test_util.h"
 
 using namespace raftpp;

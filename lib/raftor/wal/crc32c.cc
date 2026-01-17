@@ -1,8 +1,8 @@
-#include "raftor/wal/crc32c.h"
+#include "raftpp/raftor/wal/crc32c.h"
 
 #include <crc32c/crc32c.h>
 
-namespace raftpp::wal {
+namespace raftpp::raftor::wal {
 
 CRC32C::CRC32C() : crc_(0) {}
 
@@ -34,4 +34,4 @@ uint32_t CRC32C::Compute(const std::span<const uint8_t> data) {
     return c.Finalize();
 }
 
-}  // namespace raftpp::wal
+}  // namespace raftpp::raftor::wal

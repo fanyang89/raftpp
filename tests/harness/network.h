@@ -1,6 +1,5 @@
 #pragma once
 
-#include <cstdint>
 #include <functional>
 #include <memory>
 #include <random>
@@ -8,10 +7,10 @@
 #include <vector>
 
 #include "harness/interface.h"
-#include "raftpp/memory_storage.h"
-#include "raftpp/raft.h"
-#include "raftpp/raft_config.h"
-#include "raftpp/raftpp.pb.h"
+#include "raftpp/core/memory_storage.h"
+#include "raftpp/core/raft.h"
+#include "raftpp/core/raft_config.h"
+#include "raftpp/core/raftpp.pb.h"
 
 namespace raftpp {
 

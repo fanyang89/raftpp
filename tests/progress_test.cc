@@ -1,8 +1,8 @@
-#include "raftpp/progress.h"
+#include "raftpp/core/progress.h"
 
 #include <doctest/doctest.h>
 
-#include "raftpp/primitives.h"
+#include "raftpp/core/primitives.h"
 #include "test_util.h"
 
 using namespace raftpp;

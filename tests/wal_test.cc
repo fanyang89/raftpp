@@ -1,18 +1,18 @@
-#include "raftor/wal/wal.h"
+#include "raftpp/raftor/wal/wal.h"
 
 #include <filesystem>
 #include <random>
 
 #include <doctest/doctest.h>
 
-#include "raftor/wal/crc32c.h"
-#include "raftor/wal/record.h"
-#include "raftor/wal/segment.h"
-#include "raftor/wal/wal_index.h"
-#include "raftor/wal/wal_storage.h"
+#include "raftpp/raftor/wal/crc32c.h"
+#include "raftpp/raftor/wal/record.h"
+#include "raftpp/raftor/wal/segment.h"
+#include "raftpp/raftor/wal/wal_index.h"
+#include "raftpp/raftor/wal/wal_storage.h"
 
 using namespace raftpp;
-using namespace raftpp::wal;
+using namespace raftor::wal;
 
 namespace {
 

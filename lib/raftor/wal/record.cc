@@ -1,8 +1,8 @@
-#include "raftor/wal/record.h"
+#include "raftpp/raftor/wal/record.h"
 
-#include "raftor/wal/crc32c.h"
+#include "raftpp/raftor/wal/crc32c.h"
 
-namespace raftpp::wal {
+namespace raftpp::raftor::wal {
 
 void RecordBuilder::SetPayload(std::span<const uint8_t> payload) {
     payload_.assign(payload.begin(), payload.end());
@@ -67,4 +67,4 @@ RecordParser::RecordParser(std::span<const uint8_t> data) {
     valid_ = true;
 }
 
-}  // namespace raftpp::wal
+}  // namespace raftpp::raftor::wal

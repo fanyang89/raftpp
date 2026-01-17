@@ -9,13 +9,13 @@
 
 #include "harness/interface.h"
 #include "harness/network.h"
-#include "raftpp/memory_storage.h"
-#include "raftpp/raft.h"
-#include "raftpp/raft_config.h"
-#include "raftpp/raft_core.h"
-#include "raftpp/raft_log.h"
-#include "raftpp/raftpp.pb.h"
-#include "raftpp/raw_node.h"
+#include "raftpp/core/memory_storage.h"
+#include "raftpp/core/raft.h"
+#include "raftpp/core/raft_config.h"
+#include "raftpp/core/raft_core.h"
+#include "raftpp/core/raft_log.h"
+#include "raftpp/core/raftpp.pb.h"
+#include "raftpp/core/raw_node.h"
 
 namespace raftpp {
 

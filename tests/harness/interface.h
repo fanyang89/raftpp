@@ -3,9 +3,9 @@
 #include <memory>
 #include <vector>
 
-#include "raftpp/memory_storage.h"
-#include "raftpp/raft.h"
-#include "raftpp/raftpp.pb.h"
+#include "raftpp/core/memory_storage.h"
+#include "raftpp/core/raft.h"
+#include "raftpp/core/raftpp.pb.h"
 
 namespace raftpp {
 

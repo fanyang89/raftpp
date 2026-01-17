@@ -1,10 +1,10 @@
-#include "raftor/wal/segment_manager.h"
+#include "raftpp/raftor/wal/segment_manager.h"
 
 #include <algorithm>
 
 #include <spdlog/spdlog.h>
 
-namespace raftpp::wal {
+namespace raftpp::raftor::wal {
 
 SegmentManager::SegmentManager(const std::filesystem::path& dir, const WALConfig& config)
     : dir_(dir), config_(config) {}
@@ -219,4 +219,4 @@ uint64_t SegmentManager::NextSegmentId() const {
     return current_segment_id_ + 1;
 }
 
-}  // namespace raftpp::wal
+}  // namespace raftpp::raftor::wal

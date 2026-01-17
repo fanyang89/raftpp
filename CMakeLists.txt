@@ -16,6 +16,7 @@ option(RAFTPP_COVERAGE "Build with code coverage instrumentation" OFF)
 # cpm.cmake cache directory
 # https://github.com/cpm-cmake/CPM.cmake/issues/563
 set(CPM_SOURCE_CACHE "${CMAKE_CURRENT_SOURCE_DIR}/.cache/cpm" CACHE STRING "CPM cache path")
+include(cmake/CPM.cmake)
 
 if (RAFTPP_WITH_LLD)
   find_program(LLD_FOUND lld)
@@ -46,7 +47,9 @@ if (MSVC)
   add_compile_options(/MP)
 endif ()
 
-include(cmake/CPM.cmake)
+set(RAFTPP_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
+set(KCP_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/kcp)
+
 add_subdirectory(third_party)
 add_subdirectory(lib)
 add_subdirectory(proto)

@@ -1,4 +1,4 @@
-#include "raftor/wal/segment.h"
+#include "raftpp/raftor/wal/segment.h"
 
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -10,7 +10,7 @@
 
 #include <spdlog/spdlog.h>
 
-namespace raftpp::wal {
+namespace raftpp::raftor::wal {
 
 Segment::~Segment() {
     if (fd_ >= 0) {
@@ -246,4 +246,4 @@ std::string Segment::MakeSegmentFilename(uint64_t segment_id) {
     return fmt::format("segment-{:06d}.wal", segment_id);
 }
 
-}  // namespace raftpp::wal
+}  // namespace raftpp::raftor::wal

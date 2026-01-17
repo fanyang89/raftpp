@@ -1,8 +1,8 @@
 #include <doctest/doctest.h>
 
-#include "raftpp/memory_storage.h"
-#include "raftpp/raft_log.h"
-#include "raftpp/raftpp.pb.h"
+#include "raftpp/core/memory_storage.h"
+#include "raftpp/core/raft_log.h"
+#include "raftpp/core/raftpp.pb.h"
 #include "test_util.h"
 
 using namespace raftpp;
