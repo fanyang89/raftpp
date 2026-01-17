@@ -1,10 +1,23 @@
 #pragma once
 
-#include <memory>
+#include <uv.h>
 
+#include "raftpp/rpc/peer_manager.h"
 #include "raftpp/rpc/transport.h"
 
 namespace raftpp::rpc {
+
+/// Connection context for both client and server connections
+struct Connection {
+    uv_tcp_t handle;
+    uint64_t peer_id = 0;         // 0 until handshake completes
+    bool is_outgoing = false;     // true for client connections
+    bool handshake_done = false;  // true after handshake exchange
+    std::vector<uint8_t> read_buf;
+    void* transport = nullptr;  // Pointer to TcpTransport
+
+    Connection() { handle.data = this; }
+};
 
 /// TCP-based transport implementation using libuv
 ///
@@ -38,8 +51,34 @@ class TcpTransport : public Transport {
     void Run() override;
 
   private:
-    struct Impl;
-    std::unique_ptr<Impl> impl_;
+    void TryConnect(uint64_t peer_id);
+    void CloseConnection(Connection* conn);
+    void SendRaw(Connection* conn, std::vector<uint8_t> data);
+    void SendHandshake(Connection* conn);
+    void OnHandshakeReceived(Connection* conn, uint64_t remote_id);
+    void ProcessReadBuffer(Connection* conn);
+
+    // Static callbacks for libuv
+    static void OnNewConnection(uv_stream_t* server, int status);
+    static void OnConnect(uv_connect_t* req, int status);
+    static void OnAlloc(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf);
+    static void OnRead(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf);
+    static void OnReconnectTimer(uv_timer_t* timer);
+
+    TransportConfig config_;
+    uv_loop_t loop_{};
+    uv_tcp_t server_{};
+    uv_timer_t reconnect_timer_{};
+
+    PeerManager peer_manager_;
+    Map<uint64_t, Connection*> connections_;      // peer_id -> connection
+    Map<uv_tcp_t*, Connection*> handle_to_conn_;  // handle -> connection
+
+    MessageCallback on_message_;
+    ErrorCallback on_error_;
+
+    bool running_ = false;
+    bool stopped_ = false;
 };
 
 }  // namespace raftpp::rpc

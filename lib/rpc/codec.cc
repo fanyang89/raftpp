@@ -1,5 +1,6 @@
 #include "raftpp/rpc/codec.h"
 
+#include <charconv>
 #include <cstring>
 
 namespace raftpp::rpc {
@@ -198,6 +199,28 @@ Result<Handshake> Handshake::Decode(std::span<const uint8_t> buffer) {
     legacy.node_id = hs.node_id();
     legacy.cluster_id = hs.cluster_id();
     return legacy;
+}
+
+Result<std::pair<std::string, int>> ParseAddress(const std::string& addr) {
+    auto colon = addr.rfind(':');
+    if (colon == std::string::npos) {
+        return RaftError(RpcErrorCode::AddressPortMissing);
+    }
+
+    std::string host = addr.substr(0, colon);
+    std::string_view port_str = std::string_view(addr).substr(colon + 1);
+
+    int port = 0;
+    auto [ptr, ec] = std::from_chars(port_str.data(), port_str.data() + port_str.size(), port);
+    if (ec != std::errc{} || ptr != port_str.data() + port_str.size()) {
+        return RaftError(RpcErrorCode::AddressPortInvalid);
+    }
+
+    if (port <= 0 || port > 65535) {
+        return RaftError(RpcErrorCode::AddressPortOutOfRange);
+    }
+
+    return std::pair{host, port};
 }
 
 }  // namespace raftpp::rpc

@@ -1,7 +1,14 @@
 #pragma once
 
-#include <memory>
+#include <uv.h>
 
+extern "C" {
+#include "ikcp.h"
+}
+
+#include <absl/container/flat_hash_map.h>
+
+#include "raftpp/rpc/peer_manager.h"
 #include "raftpp/rpc/transport.h"
 
 namespace raftpp::rpc {
@@ -31,6 +38,33 @@ struct KcpConfig {
 
     /// Session timeout in milliseconds (detect dead connections)
     uint32_t session_timeout_ms = 30000;
+};
+
+/// Represents a KCP session with a specific peer
+struct KcpSession {
+    ikcpcb* kcp = nullptr;
+    uint32_t conv = 0;
+    uint64_t peer_id = 0;
+    sockaddr_storage remote_addr{};
+    socklen_t addr_len = 0;
+    bool handshake_done = false;
+    bool is_initiator = false;
+    std::vector<uint8_t> recv_buf;
+    std::chrono::steady_clock::time_point last_activity;
+    void* transport = nullptr;
+
+    ~KcpSession();
+};
+
+/// Address key for hash map
+struct AddrKey {
+    sockaddr_storage addr{};
+
+    bool operator==(const AddrKey& other) const;
+};
+
+struct AddrKeyHash {
+    size_t operator()(const AddrKey& k) const;
 };
 
 /// KCP-based transport implementation using libuv UDP
@@ -65,8 +99,52 @@ class KcpTransport : public Transport {
     void Run() override;
 
   private:
-    struct Impl;
-    std::unique_ptr<Impl> impl_;
+    uint32_t AllocateConvId();
+    KcpSession* CreateSession(
+        uint32_t conv, uint64_t peer_id, const sockaddr_storage& addr, socklen_t addr_len,
+        bool is_initiator
+    );
+    void DestroySession(KcpSession* session);
+    void InitiateHandshake(uint64_t peer_id);
+    void HandleKcpHandshake(const char* data, size_t len, const sockaddr* addr, socklen_t addr_len);
+    void SendAppHandshake(KcpSession* session);
+    void OnAppHandshakeReceived(KcpSession* session, uint64_t remote_id);
+    void ProcessUdpPacket(const char* data, size_t len, const sockaddr* addr, socklen_t addr_len);
+    void TryReceive(KcpSession* session);
+    void ProcessReceivedData(KcpSession* session);
+    void SendUdp(const void* data, size_t len, const sockaddr* addr, socklen_t addr_len);
+    void UpdateAllKcpSessions();
+
+    // Static callbacks for libuv and KCP
+    static int KcpOutput(const char* buf, int len, ikcpcb* kcp, void* user);
+    static void OnAlloc(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf);
+    static void OnRecv(
+        uv_udp_t* handle, ssize_t nread, const uv_buf_t* buf, const sockaddr* addr, unsigned flags
+    );
+    static void OnKcpUpdate(uv_timer_t* timer);
+    static void OnReconnectTimer(uv_timer_t* timer);
+
+    TransportConfig config_;
+    KcpConfig kcp_config_;
+
+    uv_loop_t loop_{};
+    uv_udp_t udp_handle_{};
+    uv_timer_t update_timer_{};
+    uv_timer_t reconnect_timer_{};
+
+    PeerManager peer_manager_;
+    Map<uint64_t, KcpSession*> sessions_by_peer_;
+    Map<uint32_t, KcpSession*> sessions_by_conv_;
+    absl::flat_hash_map<AddrKey, KcpSession*, AddrKeyHash> sessions_by_addr_;
+    Map<uint64_t, sockaddr_storage> peer_addresses_;
+
+    uint32_t next_conv_id_ = 1;
+
+    MessageCallback on_message_;
+    ErrorCallback on_error_;
+
+    bool running_ = false;
+    bool stopped_ = false;
 };
 
 }  // namespace raftpp::rpc

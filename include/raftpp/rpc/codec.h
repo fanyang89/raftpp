@@ -110,4 +110,9 @@ struct Handshake {
     static Result<Handshake> Decode(std::span<const uint8_t> buffer);
 };
 
+/// Parse address string "host:port" into components
+/// @param addr Address string in the format "host:port"
+/// @return Pair of (host, port) on success, or RaftError on failure
+[[nodiscard]] Result<std::pair<std::string, int>> ParseAddress(const std::string& addr);
+
 }  // namespace raftpp::rpc
