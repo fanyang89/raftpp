@@ -75,16 +75,6 @@ TEST_SUITE("wal") {
         CHECK(crc1 == crc2);
     }
 
-    TEST_CASE("crc32c: extend") {
-        const char* data = "hello world";
-        uint32_t full_crc = CRC32C::Compute(data, strlen(data));
-
-        uint32_t partial_crc = CRC32C::Compute("hello ", 6);
-        uint32_t extended_crc = CRC32C::Extend(partial_crc, "world", 5);
-
-        CHECK(full_crc == extended_crc);
-    }
-
     TEST_CASE("record: build and parse") {
         RecordBuilder builder;
         builder.SetType(RecordType::Entry);

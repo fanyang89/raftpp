@@ -4,7 +4,6 @@
 
 #include <spdlog/spdlog.h>
 
-#include "raftpp/wal/crc32c.h"
 #include "raftpp/wal/record.h"
 
 namespace raftpp::wal {

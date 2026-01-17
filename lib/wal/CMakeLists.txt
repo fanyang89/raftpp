@@ -1,11 +1,11 @@
 add_library(raftpp-wal
   crc32c.cc
+  metadata_store.cc
   record.cc
   segment.cc
   segment_manager.cc
-  wal_index.cc
-  metadata_store.cc
   wal.cc
+  wal_index.cc
   wal_storage.cc
 )
 
