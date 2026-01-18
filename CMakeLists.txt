@@ -4,8 +4,7 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-project(
-  raftpp
+project(raftpp
   VERSION 0.1.0
   DESCRIPTION "C++ RAFT"
   LANGUAGES C CXX)
@@ -19,9 +18,7 @@ option(RAFTPP_COVERAGE "Build with code coverage instrumentation" OFF)
 
 # cpm.cmake cache directory
 # https://github.com/cpm-cmake/CPM.cmake/issues/563
-set(CPM_SOURCE_CACHE
-    "${CMAKE_CURRENT_SOURCE_DIR}/.cache/cpm"
-    CACHE STRING "CPM cache path")
+set(CPM_SOURCE_CACHE "${CMAKE_CURRENT_SOURCE_DIR}/.cache/cpm" CACHE STRING "CPM cache path")
 include(cmake/CPM.cmake)
 
 if (RAFTPP_WITH_LLD)
@@ -61,8 +58,12 @@ endif ()
 
 if (RAFTPP_COVERAGE)
   if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-    target_compile_options(raftpp PUBLIC -fprofile-instr-generate -fcoverage-mapping)
-    target_link_options(raftpp PUBLIC -fprofile-instr-generate -fcoverage-mapping)
+    target_compile_options(raftpp PUBLIC
+      -fprofile-instr-generate
+      -fcoverage-mapping)
+    target_link_options(raftpp PUBLIC
+      -fprofile-instr-generate
+      -fcoverage-mapping)
   else ()
     target_compile_options(raftpp PUBLIC --coverage)
     target_link_options(raftpp PUBLIC --coverage)

@@ -26,7 +26,7 @@ task fmt      # Format code with clang-format
 ./build/tests/raftpp-tests
 
 # Run data-driven tests only (alias: task dt)
-./build/tests/datadriven/raftpp-datadriven-tests
+./build/tests/datadriven/data-driven-tests
 ```
 
 ### Build Options

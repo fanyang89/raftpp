@@ -1,5 +1,4 @@
-add_library(
-  raftpp
+add_library(raftpp
   ack_indexer.cc
   conf_changer.cc
   conf_restore.cc

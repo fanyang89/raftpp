@@ -20,14 +20,9 @@ add_executable(
   rpc_transport_test.cc
   raftor_test.cc)
 
-target_link_libraries(raftpp-tests PRIVATE raftpp)
-target_link_libraries(raftpp-tests PRIVATE raftpp-proto)
 target_link_libraries(raftpp-tests PRIVATE raftpp-test-harness)
-
-# TODO
 target_link_libraries(raftpp-tests PRIVATE raftor)
 
 target_link_libraries(raftpp-tests PRIVATE doctest)
 target_compile_definitions(raftpp-tests PUBLIC DOCTEST_CONFIG_USE_STD_HEADERS=1)
-target_compile_definitions(raftpp-tests
-                           PUBLIC DOCTEST_CONFIG_SUPER_FAST_ASSERTS=1)
+target_compile_definitions(raftpp-tests PUBLIC DOCTEST_CONFIG_SUPER_FAST_ASSERTS=1)
