@@ -68,7 +68,7 @@ Result<void> ReadyProcessor::PersistEntries(const Ready& rd) {
 
     if (auto result = storage_->Append(rd.entries); !result) {
         spdlog::error("Failed to persist entries: {}", result.error().ToString());
-        return std::unexpected(RaftError(RaftErrorCode::ProposalDropped));
+        return result;
     }
 
     return {};
@@ -86,7 +86,7 @@ Result<void> ReadyProcessor::PersistHardState(const Ready& rd) {
     if (rd.must_sync) {
         if (auto result = storage_->Sync(); !result) {
             spdlog::error("Failed to sync storage: {}", result.error().ToString());
-            return std::unexpected(RaftError(RaftErrorCode::ProposalDropped));
+            return result;
         }
     }
 
@@ -114,7 +114,7 @@ Result<void> ReadyProcessor::ApplySnapshot(const Ready& rd) {
     // Then apply to storage
     if (auto result = storage_->ApplySnapshot(snapshot); !result) {
         spdlog::error("Failed to apply snapshot to storage: {}", result.error().ToString());
-        return std::unexpected(RaftError(RaftErrorCode::ProposalDropped));
+        return result;
     }
 
     applied_index_ = snapshot.metadata().index();
@@ -151,7 +151,7 @@ Result<void> ReadyProcessor::ApplyEntry(const Entry& entry) {
             // Convert ConfChange to ConfChangeV2
             ConfChange cc_v1;
             if (!cc_v1.ParseFromString(entry.data())) {
-                return std::unexpected(RaftError(RaftErrorCode::ProposalDropped));
+                return std::unexpected(RaftError(RaftErrorCode::ConfChangeParseError));
             }
             auto* single = cc.add_changes();
             single->set_change_type(cc_v1.change_type());
@@ -159,7 +159,7 @@ Result<void> ReadyProcessor::ApplyEntry(const Entry& entry) {
             cc.set_context(cc_v1.context());
         } else {
             if (!cc.ParseFromString(entry.data())) {
-                return std::unexpected(RaftError(RaftErrorCode::ProposalDropped));
+                return std::unexpected(RaftError(RaftErrorCode::ConfChangeParseError));
             }
         }
 
@@ -255,7 +255,7 @@ void ReadyProcessor::CheckLeadershipChange(const Ready& rd) {
 
         // If we lost leadership, fail all pending proposals
         if (was_leader && !is_leader) {
-            proposal_tracker_.FailAll(RaftError(RaftErrorCode::ProposalDropped));
+            proposal_tracker_.FailAll(RaftError(RaftErrorCode::LostLeadership));
         }
     }
 

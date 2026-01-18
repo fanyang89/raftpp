@@ -18,16 +18,16 @@ namespace raftpp::raftor {
 
 Result<void> RaftorConfig::Validate() const {
     if (node_id == 0) {
-        return std::unexpected(RaftError(RaftErrorCode::ProposalDropped));
+        return std::unexpected(RaftError(ConfigErrorCode::InvalidNodeId));
     }
     if (listen_addr.empty()) {
-        return std::unexpected(RaftError(RaftErrorCode::ProposalDropped));
+        return std::unexpected(RaftError(ConfigErrorCode::ListenAddressEmpty));
     }
     if (data_dir.empty()) {
-        return std::unexpected(RaftError(RaftErrorCode::ProposalDropped));
+        return std::unexpected(RaftError(ConfigErrorCode::DataDirectoryEmpty));
     }
     if (election_tick <= heartbeat_tick) {
-        return std::unexpected(RaftError(RaftErrorCode::ProposalDropped));
+        return std::unexpected(RaftError(ConfigErrorCode::ElectionTickTooSmall));
     }
     return {};
 }
@@ -158,13 +158,13 @@ RaftorImpl::~RaftorImpl() {
 
 Result<void> RaftorImpl::Start() {
     if (started_.exchange(true)) {
-        return std::unexpected(RaftError(RaftErrorCode::ProposalDropped));
+        return std::unexpected(RaftError(RaftErrorCode::AlreadyStarted));
     }
 
     // Start transport
     if (auto result = transport_->Start(); !result) {
         started_ = false;
-        return std::unexpected(RaftError(RaftErrorCode::ProposalDropped));
+        return result;
     }
 
     running_ = true;
@@ -189,7 +189,7 @@ void RaftorImpl::Stop() {
     }
 
     // Fail all pending proposals
-    proposal_tracker_.FailAll(RaftError(RaftErrorCode::ProposalDropped));
+    proposal_tracker_.FailAll(RaftError(RaftErrorCode::ShuttingDown));
 
     // Stop transport
     transport_->Stop();
@@ -321,7 +321,7 @@ Result<std::string> RaftorImpl::ProposeSync(std::string data, std::chrono::milli
     });
 
     if (future.wait_for(timeout) == std::future_status::timeout) {
-        return std::unexpected(RaftError(RaftErrorCode::ProposalDropped));
+        return std::unexpected(RaftError(RpcErrorCode::Timeout));
     }
 
     return future.get();
@@ -351,7 +351,7 @@ Result<void> RaftorImpl::ReadIndexSync(std::string ctx, std::chrono::millisecond
     });
 
     if (future.wait_for(timeout) == std::future_status::timeout) {
-        return std::unexpected(RaftError(RaftErrorCode::ProposalDropped));
+        return std::unexpected(RaftError(RpcErrorCode::Timeout));
     }
 
     return future.get();
@@ -446,7 +446,7 @@ Result<void> RaftorImpl::TakeSnapshot() {
 
     // Apply to storage (this will compact the log)
     if (auto result = storage_->ApplySnapshot(snapshot); !result) {
-        return std::unexpected(RaftError(RaftErrorCode::ProposalDropped));
+        return result;
     }
 
     return {};
@@ -473,7 +473,7 @@ Result<std::unique_ptr<Raftor>> Raftor::Create(
 
     auto storage_result = wal::WALStorage::Open(wal_config);
     if (!storage_result) {
-        return std::unexpected(RaftError(RaftErrorCode::ProposalDropped));
+        return storage_result.error();
     }
 
     // Create TCP transport
@@ -501,7 +501,7 @@ Result<std::unique_ptr<Raftor>> Raftor::Create(
     // Cast to WALStorage if possible
     auto wal_storage = std::dynamic_pointer_cast<wal::WALStorage>(storage);
     if (!wal_storage) {
-        return std::unexpected(RaftError(RaftErrorCode::ProposalDropped));
+        return std::unexpected(RaftError(RaftErrorCode::IncompatibleStorage));
     }
 
     return std::make_unique<RaftorImpl>(
