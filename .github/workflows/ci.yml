@@ -1,0 +1,150 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CMAKE_GENERATOR: Ninja
+
+jobs:
+  format-check:
+    name: Format Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install clang-format
+        run: sudo apt-get update && sudo apt-get install -y clang-format
+
+      - name: Check formatting
+        run: |
+          find include lib tests -type f \( -name '*.cc' -o -name '*.h' -o -name '*.hpp' \) \
+            ! -path '*/generated/*' ! -name '*.pb.*' \
+            -exec clang-format --style=file --dry-run --Werror {} +
+
+  lint:
+    name: Lint (cppcheck)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install cppcheck
+        run: sudo apt-get update && sudo apt-get install -y cppcheck
+
+      - name: Run cppcheck
+        run: cppcheck --error-exitcode=1 --enable=warning,performance include lib
+
+  build-and-test:
+    name: Build (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - preset: dev
+            name: "Debug + Sanitizers"
+            build_dir: build
+          - preset: clang
+            name: "Release"
+            build_dir: build-clang
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build ccache
+
+      - name: Setup Clang
+        uses: egor-tensin/setup-clang@v1
+        with:
+          version: latest
+
+      - name: Cache CPM dependencies
+        uses: actions/cache@v4
+        with:
+          path: .cache/cpm
+          key: cpm-${{ runner.os }}-${{ hashFiles('third_party/CMakeLists.txt', 'cmake/CPM.cmake') }}
+          restore-keys: |
+            cpm-${{ runner.os }}-
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: ccache-${{ runner.os }}-${{ matrix.preset }}-${{ github.sha }}
+          restore-keys: |
+            ccache-${{ runner.os }}-${{ matrix.preset }}-
+            ccache-${{ runner.os }}-
+
+      - name: Configure ccache
+        run: |
+          ccache --set-config=max_size=500M
+          ccache --set-config=compression=true
+          ccache -z
+
+      - name: Configure CMake
+        run: cmake --preset=${{ matrix.preset }}
+
+      - name: Build
+        run: cmake --build ${{ matrix.build_dir }} --target raftpp-tests data-driven-tests
+
+      - name: Show ccache stats
+        run: ccache -s
+
+      - name: Run Unit Tests
+        run: ./${{ matrix.build_dir }}/tests/raftpp-tests
+
+      - name: Run Data-Driven Tests
+        run: ./${{ matrix.build_dir }}/tests/datadriven/data-driven-tests
+
+  static-analysis:
+    name: Static Analysis (scan-build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build clang clang-tools
+
+      - name: Cache CPM dependencies
+        uses: actions/cache@v4
+        with:
+          path: .cache/cpm
+          key: cpm-${{ runner.os }}-${{ hashFiles('third_party/CMakeLists.txt', 'cmake/CPM.cmake') }}
+          restore-keys: |
+            cpm-${{ runner.os }}-
+
+      - name: Configure CMake
+        run: cmake --preset=clang
+
+      - name: Run scan-build
+        run: |
+          scan-build \
+            -enable-checker core \
+            -enable-checker cplusplus \
+            -enable-checker deadcode \
+            -enable-checker security \
+            -enable-checker unix \
+            -enable-checker optin.core.EnumCastOutOfRange \
+            -enable-checker optin.cplusplus.UninitializedObject \
+            -enable-checker optin.cplusplus.VirtualCall \
+            -enable-checker optin.performance.Padding \
+            -enable-checker optin.taint.GenericTaint \
+            -enable-checker alpha.core.Conversion \
+            -enable-checker alpha.core.PointerArithm \
+            -enable-checker alpha.cplusplus.InvalidatedIterator \
+            -enable-checker alpha.cplusplus.IteratorRange \
+            -enable-checker alpha.unix.PthreadLock \
+            -enable-checker alpha.deadcode.UnreachableCode \
+            cmake --build build-clang
