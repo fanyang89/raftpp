@@ -1,7 +1,5 @@
 #include "raftpp/raftor/rpc/kcp_transport.h"
 
-#include <cstring>
-
 #include <spdlog/spdlog.h>
 
 namespace raftpp::raftor::rpc {

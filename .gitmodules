@@ -1,6 +1,0 @@
-[submodule "third_party/kcp"]
-	path = third_party/kcp
-	url = https://github.com/skywind3000/kcp.git
-[submodule "third_party/crc32c"]
-	path = third_party/crc32c
-	url = https://github.com/google/crc32c.git

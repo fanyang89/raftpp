@@ -32,18 +32,25 @@ if(RAFTPP_BUILD_TESTING)
   CPMAddPackage(URI "https://github.com/fanyang89/doctest.git" GIT_TAG master)
 endif()
 
-add_subdirectory(kcp)
-
 # Disable UBSan for KCP library as it has false positives from its queue macros
 # kcp/ikcp.c:317:10: runtime error: member access within null pointer of type 'IKCPSEG' (aka 'struct IKCPSEG')
 # SUMMARY: UndefinedBehaviorSanitizer: undefined-behavior kcp/ikcp.c:317:10
-if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
-  target_compile_options(kcp PRIVATE -fno-sanitize=undefined)
-endif()
+#if(CMAKE_C_COMPILER_ID MATCHES "Clang|GNU")
+#  target_compile_options(kcp PRIVATE -fno-sanitize=undefined)
+#endif()
 
-set(CRC32C_BUILD_TESTS OFF)
-set(CRC32C_BUILD_BENCHMARKS OFF)
-set(CRC32C_USE_GLOG OFF)
-set(CRC32C_INSTALL OFF)
+CPMAddPackage(
+  URI "https://github.com/google/crc32c.git"
+  GIT_TAG "1.1.2"
+  OPTIONS
+    "CMAKE_POLICY_VERSION_MINIMUM 3.5"
+    "CRC32C_BUILD_TESTS OFF"
+    "CRC32C_BUILD_BENCHMARKS OFF"
+    "CRC32C_USE_GLOG OFF"
+    "CRC32C_INSTALL OFF"
+)
 
-add_subdirectory(crc32c)
+CPMAddPackage(
+  URI "https://github.com/fanyang89/rpclib.git"
+  GIT_TAG "master"
+)

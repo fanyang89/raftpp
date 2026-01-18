@@ -46,7 +46,6 @@ if (MSVC)
 endif ()
 
 set(RAFTPP_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
-set(KCP_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/kcp)
 
 add_subdirectory(third_party)
 add_subdirectory(lib)
