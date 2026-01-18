@@ -48,13 +48,12 @@ void ProposalTracker::FailAll(RaftError error) {
         callbacks = std::move(proposals_);
         proposals_.clear();
     }
-    // Use ProposalDropped for all failures in FailAll
+    // Use the actual error for all failures
     for (auto& [ctx, callback] : callbacks) {
         if (callback) {
-            callback(std::unexpected(RaftError(RaftErrorCode::ProposalDropped)));
+            callback(std::unexpected(error));
         }
     }
-    (void)error;  // error parameter indicates the reason but we use a fresh error each time
 }
 
 void ProposalTracker::TrackRead(const std::string& ctx, ReadIndexCallback callback) {

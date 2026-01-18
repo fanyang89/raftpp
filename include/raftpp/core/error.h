@@ -104,6 +104,16 @@ enum class RaftErrorCode {
     ProposalDropped,
     /// The request snapshot is dropped.
     RequestSnapshotDropped,
+    /// Raftor already started.
+    AlreadyStarted,
+    /// Raftor shutting down.
+    ShuttingDown,
+    /// Lost leadership while proposals pending.
+    LostLeadership,
+    /// Storage type mismatch.
+    IncompatibleStorage,
+    /// Failed to parse conf change.
+    ConfChangeParseError,
 };
 
 constexpr std::string_view format_as(RaftErrorCode ec) {
@@ -116,6 +126,16 @@ constexpr std::string_view format_as(RaftErrorCode ec) {
             return "ProposalDropped";
         case RaftErrorCode::RequestSnapshotDropped:
             return "RequestSnapshotDropped";
+        case RaftErrorCode::AlreadyStarted:
+            return "AlreadyStarted";
+        case RaftErrorCode::ShuttingDown:
+            return "ShuttingDown";
+        case RaftErrorCode::LostLeadership:
+            return "LostLeadership";
+        case RaftErrorCode::IncompatibleStorage:
+            return "IncompatibleStorage";
+        case RaftErrorCode::ConfChangeParseError:
+            return "ConfChangeParseError";
     }
     return "Unknown";
 }
@@ -208,6 +228,10 @@ enum class ConfigErrorCode {
     MaxInflightMessagesTooSmall,
     /// LeaseBased read-only option requires check_quorum to be true
     LeaseBasedReadRequiresCheckQuorum,
+    /// Empty listen address
+    ListenAddressEmpty,
+    /// Empty data directory
+    DataDirectoryEmpty,
 };
 
 constexpr std::string_view format_as(ConfigErrorCode ec) {
@@ -222,6 +246,10 @@ constexpr std::string_view format_as(ConfigErrorCode ec) {
             return "MaxInflightMessagesTooSmall";
         case ConfigErrorCode::LeaseBasedReadRequiresCheckQuorum:
             return "LeaseBasedReadRequiresCheckQuorum";
+        case ConfigErrorCode::ListenAddressEmpty:
+            return "ListenAddressEmpty";
+        case ConfigErrorCode::DataDirectoryEmpty:
+            return "DataDirectoryEmpty";
     }
     return "Unknown";
 }

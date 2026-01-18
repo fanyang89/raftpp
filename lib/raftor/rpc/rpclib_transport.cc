@@ -105,8 +105,10 @@ void RpclibTransport::Send(std::span<const Message> messages) {
         // Check actual connection state
         auto conn_state = it->second->get_connection_state();
         if (conn_state != ::rpc::client::connection_state::connected) {
-            SPDLOG_DEBUG("Dropping message to {}: rpc client not connected (state={})",
-                        to, static_cast<int>(conn_state));
+            SPDLOG_DEBUG(
+                "Dropping message to {}: rpc client not connected (state={})", to,
+                static_cast<int>(conn_state)
+            );
             continue;
         }
 
