@@ -28,6 +28,26 @@ tasks:
         find include lib tests -type f \( -name '*.cc' -o -name '*.h' -o -name '*.hpp' \)
         ! -path '*/generated/*' ! -name '*.pb.*'
         -exec clang-format --style=file -i {} +
+      - >
+        uvx --from cmakelang cmake-format
+        --line-width 100
+        --command-case canonical
+        --keyword-case upper
+        --enable-markup false
+        --separate-ctrl-name-with-space true
+        --dangle-align prefix-indent
+        -i
+        CMakeLists.txt
+        lib/CMakeLists.txt
+        lib/core/CMakeLists.txt
+        lib/raftor/CMakeLists.txt
+        lib/raftor/rpc/CMakeLists.txt
+        lib/raftor/wal/CMakeLists.txt
+        proto/CMakeLists.txt
+        tests/CMakeLists.txt
+        tests/datadriven/CMakeLists.txt
+        tests/harness/CMakeLists.txt
+        third_party/CMakeLists.txt
 
   cmake:
     desc: Configure CMake with dev preset

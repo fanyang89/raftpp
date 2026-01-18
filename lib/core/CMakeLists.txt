@@ -1,4 +1,5 @@
-add_library(raftpp
+add_library(
+  raftpp
   ack_indexer.cc
   conf_changer.cc
   conf_restore.cc
@@ -18,8 +19,7 @@ add_library(raftpp
   storage.cc
   tracker_conf.cc
   unstable_log.cc
-  util.cc
-)
+  util.cc)
 
 target_include_directories(raftpp PUBLIC ${RAFTPP_INCLUDE_DIR})
 

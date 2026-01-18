@@ -1,10 +1,10 @@
 add_subdirectory(harness)
 add_subdirectory(datadriven)
 
-add_executable(raftpp-tests
+add_executable(
+  raftpp-tests
   test_main.cc
   test_util.cc
-
   inflights_test.cc
   log_unstable_test.cc
   log_test.cc
@@ -18,8 +18,7 @@ add_executable(raftpp-tests
   wal_test.cc
   rpc_test.cc
   rpc_transport_test.cc
-  raftor_test.cc
-)
+  raftor_test.cc)
 
 target_link_libraries(raftpp-tests PRIVATE raftpp)
 target_link_libraries(raftpp-tests PRIVATE raftpp-proto)
@@ -30,4 +29,5 @@ target_link_libraries(raftpp-tests PRIVATE raftor)
 
 target_link_libraries(raftpp-tests PRIVATE doctest)
 target_compile_definitions(raftpp-tests PUBLIC DOCTEST_CONFIG_USE_STD_HEADERS=1)
-target_compile_definitions(raftpp-tests PUBLIC DOCTEST_CONFIG_SUPER_FAST_ASSERTS=1)
+target_compile_definitions(raftpp-tests
+                           PUBLIC DOCTEST_CONFIG_SUPER_FAST_ASSERTS=1)
