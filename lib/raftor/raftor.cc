@@ -8,7 +8,7 @@
 
 #include <spdlog/spdlog.h>
 
-#include "raftpp/raftor/rpc/tcp_transport.h"
+#include "raftpp/raftor/rpc/rpclib_transport.h"
 #include "raftpp/raftor/wal/wal_storage.h"
 #include "ready_processor.h"
 
@@ -482,7 +482,7 @@ Result<std::unique_ptr<Raftor>> Raftor::Create(
     transport_config.node_id = config.node_id;
     transport_config.connect_timeout = config.connect_timeout;
 
-    auto transport = std::make_unique<rpc::TcpTransport>(transport_config);
+    auto transport = std::make_unique<rpc::RpclibTransport>(transport_config);
 
     return Create(
         config, std::move(state_machine), std::move(*storage_result), std::move(transport)

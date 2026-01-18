@@ -70,10 +70,9 @@ cmake --preset=dev -DRAFTPP_SANITIZE=address
    - Index for fast entry lookup
    - Log compaction via snapshots
 
-8. **RPC Transport** (`include/raftpp/rpc/`) - Network layer with pluggable transports:
+8. **RPC Transport** (`include/raftpp/raftor/rpc/`) - Network layer with pluggable transports:
    - `Transport` - Abstract interface for message passing
-   - `TcpTransport` - TCP implementation using libuv
-   - `KcpTransport` - UDP/KCP implementation for low-latency messaging
+   - `RpclibTransport` - Implementation using rpclib (msgpack-RPC)
 
 ### Key Patterns
 

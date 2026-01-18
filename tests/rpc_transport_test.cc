@@ -7,8 +7,7 @@
 #include <doctest/doctest.h>
 #include <spdlog/fmt/fmt.h>
 
-#include "raftpp/raftor/rpc/kcp_transport.h"
-#include "raftpp/raftor/rpc/tcp_transport.h"
+#include "raftpp/raftor/rpc/rpclib_transport.h"
 
 using namespace raftpp;
 using namespace raftor::rpc;
@@ -173,19 +172,19 @@ Message MakeMessage(uint64_t from, uint64_t to, MessageType type = MsgAppend) {
 }  // namespace
 
 // =============================================================================
-// TCP Transport Tests
+// Rpclib Transport Tests
 // =============================================================================
 
-TEST_SUITE("rpc::tcp") {
+TEST_SUITE("rpc::rpclib") {
 
-    TEST_CASE("tcp_start_stop" * doctest::timeout(5)) {
+    TEST_CASE("rpclib_start_stop" * doctest::timeout(5)) {
         auto port = PortAllocator::GetNextPort();
         TransportConfig config{
             .listen_addr = fmt::format("127.0.0.1:{}", port),
             .node_id = 1,
         };
 
-        TcpTransport transport(config);
+        RpclibTransport transport(config);
 
         auto result = transport.Start();
         REQUIRE(result.has_value());
@@ -197,27 +196,27 @@ TEST_SUITE("rpc::tcp") {
         transport.Stop();
     }
 
-    TEST_CASE("tcp_start_invalid_address" * doctest::timeout(5)) {
+    TEST_CASE("rpclib_start_invalid_address" * doctest::timeout(5)) {
         TransportConfig config{
             .listen_addr = "invalid:not-a-port",
             .node_id = 1,
         };
 
-        TcpTransport transport(config);
+        RpclibTransport transport(config);
 
         auto result = transport.Start();
         CHECK(!result.has_value());
     }
 
-    TEST_CASE("tcp_start_port_already_in_use" * doctest::timeout(5)) {
+    TEST_CASE("rpclib_start_port_already_in_use" * doctest::timeout(5)) {
         auto port = PortAllocator::GetNextPort();
         TransportConfig config{
             .listen_addr = fmt::format("127.0.0.1:{}", port),
             .node_id = 1,
         };
 
-        TcpTransport t1(config);
-        TcpTransport t2(config);
+        RpclibTransport t1(config);
+        RpclibTransport t2(config);
 
         auto r1 = t1.Start();
         REQUIRE(r1.has_value());
@@ -229,14 +228,14 @@ TEST_SUITE("rpc::tcp") {
         t1.Stop();
     }
 
-    TEST_CASE("tcp_add_remove_peer" * doctest::timeout(5)) {
+    TEST_CASE("rpclib_add_remove_peer" * doctest::timeout(5)) {
         auto port = PortAllocator::GetNextPort();
         TransportConfig config{
             .listen_addr = fmt::format("127.0.0.1:{}", port),
             .node_id = 1,
         };
 
-        TcpTransport transport(config);
+        RpclibTransport transport(config);
         REQUIRE(transport.Start().has_value());
 
         // Add peers
@@ -254,15 +253,15 @@ TEST_SUITE("rpc::tcp") {
         transport.Stop();
     }
 
-    TEST_CASE("tcp_connect_single_peer" * doctest::timeout(10)) {
+    TEST_CASE("rpclib_connect_single_peer" * doctest::timeout(10)) {
         auto port1 = PortAllocator::GetNextPort();
         auto port2 = PortAllocator::GetNextPort();
 
         TransportConfig cfg1{.listen_addr = fmt::format("127.0.0.1:{}", port1), .node_id = 1};
         TransportConfig cfg2{.listen_addr = fmt::format("127.0.0.1:{}", port2), .node_id = 2};
 
-        TcpTransport t1(cfg1);
-        TcpTransport t2(cfg2);
+        RpclibTransport t1(cfg1);
+        RpclibTransport t2(cfg2);
 
         MessageCollector collector1, collector2;
         t1.SetMessageCallback([&](Message m) { collector1.OnMessage(std::move(m)); });
@@ -297,15 +296,15 @@ TEST_SUITE("rpc::tcp") {
         t2.Stop();
     }
 
-    TEST_CASE("tcp_bidirectional_messages" * doctest::timeout(10)) {
+    TEST_CASE("rpclib_bidirectional_messages" * doctest::timeout(10)) {
         auto port1 = PortAllocator::GetNextPort();
         auto port2 = PortAllocator::GetNextPort();
 
         TransportConfig cfg1{.listen_addr = fmt::format("127.0.0.1:{}", port1), .node_id = 1};
         TransportConfig cfg2{.listen_addr = fmt::format("127.0.0.1:{}", port2), .node_id = 2};
 
-        TcpTransport t1(cfg1);
-        TcpTransport t2(cfg2);
+        RpclibTransport t1(cfg1);
+        RpclibTransport t2(cfg2);
 
         MessageCollector collector1, collector2;
         t1.SetMessageCallback([&](Message m) { collector1.OnMessage(std::move(m)); });
@@ -340,15 +339,15 @@ TEST_SUITE("rpc::tcp") {
         t2.Stop();
     }
 
-    TEST_CASE("tcp_message_callback_invoked" * doctest::timeout(10)) {
+    TEST_CASE("rpclib_message_callback_invoked" * doctest::timeout(10)) {
         auto port1 = PortAllocator::GetNextPort();
         auto port2 = PortAllocator::GetNextPort();
 
         TransportConfig cfg1{.listen_addr = fmt::format("127.0.0.1:{}", port1), .node_id = 1};
         TransportConfig cfg2{.listen_addr = fmt::format("127.0.0.1:{}", port2), .node_id = 2};
 
-        TcpTransport t1(cfg1);
-        TcpTransport t2(cfg2);
+        RpclibTransport t1(cfg1);
+        RpclibTransport t2(cfg2);
 
         std::atomic<int> callback_count{0};
         t2.SetMessageCallback([&](Message) { callback_count++; });
@@ -375,15 +374,15 @@ TEST_SUITE("rpc::tcp") {
         t2.Stop();
     }
 
-    TEST_CASE("tcp_error_callback_invoked" * doctest::timeout(10)) {
+    TEST_CASE("rpclib_error_callback_invoked" * doctest::timeout(10)) {
         auto port1 = PortAllocator::GetNextPort();
         auto port2 = PortAllocator::GetNextPort();
 
         TransportConfig cfg1{.listen_addr = fmt::format("127.0.0.1:{}", port1), .node_id = 1};
         TransportConfig cfg2{.listen_addr = fmt::format("127.0.0.1:{}", port2), .node_id = 2};
 
-        TcpTransport t1(cfg1);
-        TcpTransport t2(cfg2);
+        RpclibTransport t1(cfg1);
+        RpclibTransport t2(cfg2);
 
         ErrorCollector errors1;
         t1.SetErrorCallback([&](uint64_t peer_id, std::string err) {
@@ -412,7 +411,7 @@ TEST_SUITE("rpc::tcp") {
         t1.Stop();
     }
 
-    TEST_CASE("tcp_multiple_peers" * doctest::timeout(10)) {
+    TEST_CASE("rpclib_multiple_peers" * doctest::timeout(10)) {
         auto port1 = PortAllocator::GetNextPort();
         auto port2 = PortAllocator::GetNextPort();
         auto port3 = PortAllocator::GetNextPort();
@@ -421,9 +420,9 @@ TEST_SUITE("rpc::tcp") {
         TransportConfig cfg2{.listen_addr = fmt::format("127.0.0.1:{}", port2), .node_id = 2};
         TransportConfig cfg3{.listen_addr = fmt::format("127.0.0.1:{}", port3), .node_id = 3};
 
-        TcpTransport t1(cfg1);
-        TcpTransport t2(cfg2);
-        TcpTransport t3(cfg3);
+        RpclibTransport t1(cfg1);
+        RpclibTransport t2(cfg2);
+        RpclibTransport t3(cfg3);
 
         MessageCollector collector2, collector3;
         t2.SetMessageCallback([&](Message m) { collector2.OnMessage(std::move(m)); });
@@ -461,14 +460,14 @@ TEST_SUITE("rpc::tcp") {
         t3.Stop();
     }
 
-    TEST_CASE("tcp_send_to_unknown_peer" * doctest::timeout(5)) {
+    TEST_CASE("rpclib_send_to_unknown_peer" * doctest::timeout(5)) {
         auto port = PortAllocator::GetNextPort();
         TransportConfig config{
             .listen_addr = fmt::format("127.0.0.1:{}", port),
             .node_id = 1,
         };
 
-        TcpTransport transport(config);
+        RpclibTransport transport(config);
         REQUIRE(transport.Start().has_value());
 
         // Send to unknown peer - should be silently dropped
@@ -481,15 +480,15 @@ TEST_SUITE("rpc::tcp") {
         transport.Stop();
     }
 
-    TEST_CASE("tcp_large_message" * doctest::timeout(10)) {
+    TEST_CASE("rpclib_large_message" * doctest::timeout(10)) {
         auto port1 = PortAllocator::GetNextPort();
         auto port2 = PortAllocator::GetNextPort();
 
         TransportConfig cfg1{.listen_addr = fmt::format("127.0.0.1:{}", port1), .node_id = 1};
         TransportConfig cfg2{.listen_addr = fmt::format("127.0.0.1:{}", port2), .node_id = 2};
 
-        TcpTransport t1(cfg1);
-        TcpTransport t2(cfg2);
+        RpclibTransport t1(cfg1);
+        RpclibTransport t2(cfg2);
 
         MessageCollector collector;
         t2.SetMessageCallback([&](Message m) { collector.OnMessage(std::move(m)); });
@@ -532,15 +531,15 @@ TEST_SUITE("rpc::tcp") {
         t2.Stop();
     }
 
-    TEST_CASE("tcp_message_with_entries" * doctest::timeout(10)) {
+    TEST_CASE("rpclib_message_with_entries" * doctest::timeout(10)) {
         auto port1 = PortAllocator::GetNextPort();
         auto port2 = PortAllocator::GetNextPort();
 
         TransportConfig cfg1{.listen_addr = fmt::format("127.0.0.1:{}", port1), .node_id = 1};
         TransportConfig cfg2{.listen_addr = fmt::format("127.0.0.1:{}", port2), .node_id = 2};
 
-        TcpTransport t1(cfg1);
-        TcpTransport t2(cfg2);
+        RpclibTransport t1(cfg1);
+        RpclibTransport t2(cfg2);
 
         MessageCollector collector;
         t2.SetMessageCallback([&](Message m) { collector.OnMessage(std::move(m)); });
@@ -584,7 +583,7 @@ TEST_SUITE("rpc::tcp") {
         t2.Stop();
     }
 
-    TEST_CASE("tcp_auto_reconnect" * doctest::timeout(10)) {
+    TEST_CASE("rpclib_auto_reconnect" * doctest::timeout(10)) {
         auto port1 = PortAllocator::GetNextPort();
         auto port2 = PortAllocator::GetNextPort();
 
@@ -595,7 +594,7 @@ TEST_SUITE("rpc::tcp") {
         };
         TransportConfig cfg2{.listen_addr = fmt::format("127.0.0.1:{}", port2), .node_id = 2};
 
-        TcpTransport t1(cfg1);
+        RpclibTransport t1(cfg1);
         MessageCollector collector;
 
         REQUIRE(t1.Start().has_value());
@@ -607,7 +606,7 @@ TEST_SUITE("rpc::tcp") {
         PollFor(t1, 300ms);
 
         // Now start t2
-        TcpTransport t2(cfg2);
+        RpclibTransport t2(cfg2);
         t2.SetMessageCallback([&](Message m) { collector.OnMessage(std::move(m)); });
         REQUIRE(t2.Start().has_value());
         t2.AddPeer(1, fmt::format("127.0.0.1:{}", port1));
@@ -626,371 +625,4 @@ TEST_SUITE("rpc::tcp") {
         t2.Stop();
     }
 
-}  // TEST_SUITE("rpc::tcp")
-
-// =============================================================================
-// KCP Transport Tests
-// =============================================================================
-
-TEST_SUITE("rpc::kcp") {
-
-    TEST_CASE("kcp_start_stop" * doctest::timeout(5)) {
-        auto port = PortAllocator::GetNextPort();
-        TransportConfig config{
-            .listen_addr = fmt::format("127.0.0.1:{}", port),
-            .node_id = 1,
-        };
-
-        KcpTransport transport(config);
-
-        auto result = transport.Start();
-        REQUIRE(result.has_value());
-
-        PollFor(transport, 50ms);
-
-        transport.Stop();
-    }
-
-    TEST_CASE("kcp_start_invalid_address" * doctest::timeout(5)) {
-        TransportConfig config{
-            .listen_addr = "invalid:not-a-port",
-            .node_id = 1,
-        };
-
-        KcpTransport transport(config);
-
-        auto result = transport.Start();
-        CHECK(!result.has_value());
-    }
-
-    TEST_CASE("kcp_add_remove_peer" * doctest::timeout(5)) {
-        auto port = PortAllocator::GetNextPort();
-        TransportConfig config{
-            .listen_addr = fmt::format("127.0.0.1:{}", port),
-            .node_id = 1,
-        };
-
-        KcpTransport transport(config);
-        REQUIRE(transport.Start().has_value());
-
-        transport.AddPeer(2, "127.0.0.1:19997");
-        transport.AddPeer(3, "127.0.0.1:19996");
-
-        PollFor(transport, 50ms);
-
-        transport.RemovePeer(2);
-
-        PollFor(transport, 50ms);
-
-        transport.Stop();
-    }
-
-    TEST_CASE("kcp_connect_single_peer" * doctest::timeout(15)) {
-        auto port1 = PortAllocator::GetNextPort();
-        auto port2 = PortAllocator::GetNextPort();
-
-        TransportConfig cfg1{.listen_addr = fmt::format("127.0.0.1:{}", port1), .node_id = 1};
-        TransportConfig cfg2{.listen_addr = fmt::format("127.0.0.1:{}", port2), .node_id = 2};
-
-        KcpTransport t1(cfg1);
-        KcpTransport t2(cfg2);
-
-        MessageCollector collector1, collector2;
-        t1.SetMessageCallback([&](Message m) { collector1.OnMessage(std::move(m)); });
-        t2.SetMessageCallback([&](Message m) { collector2.OnMessage(std::move(m)); });
-
-        REQUIRE(t1.Start().has_value());
-        REQUIRE(t2.Start().has_value());
-
-        t1.AddPeer(2, fmt::format("127.0.0.1:{}", port2));
-        t2.AddPeer(1, fmt::format("127.0.0.1:{}", port1));
-
-        // KCP needs more time for handshake
-        PollBoth(t1, t2, 1s);
-
-        auto msg = MakeMessage(1, 2);
-        t1.Send(std::span(&msg, 1));
-
-        bool received = WaitForBoth(t1, t2, [&] { return collector2.Count() >= 1; }, 3s);
-        CHECK(received);
-
-        if (received) {
-            auto messages = collector2.GetMessages();
-            CHECK(messages.size() >= 1);
-            CHECK(messages[0].from() == 1);
-            CHECK(messages[0].to() == 2);
-        }
-
-        t1.Stop();
-        t2.Stop();
-    }
-
-    TEST_CASE("kcp_bidirectional_messages" * doctest::timeout(15)) {
-        auto port1 = PortAllocator::GetNextPort();
-        auto port2 = PortAllocator::GetNextPort();
-
-        TransportConfig cfg1{.listen_addr = fmt::format("127.0.0.1:{}", port1), .node_id = 1};
-        TransportConfig cfg2{.listen_addr = fmt::format("127.0.0.1:{}", port2), .node_id = 2};
-
-        KcpTransport t1(cfg1);
-        KcpTransport t2(cfg2);
-
-        MessageCollector collector1, collector2;
-        t1.SetMessageCallback([&](Message m) { collector1.OnMessage(std::move(m)); });
-        t2.SetMessageCallback([&](Message m) { collector2.OnMessage(std::move(m)); });
-
-        REQUIRE(t1.Start().has_value());
-        REQUIRE(t2.Start().has_value());
-
-        t1.AddPeer(2, fmt::format("127.0.0.1:{}", port2));
-        t2.AddPeer(1, fmt::format("127.0.0.1:{}", port1));
-
-        PollBoth(t1, t2, 1s);
-
-        auto msg1 = MakeMessage(1, 2);
-        t1.Send(std::span(&msg1, 1));
-
-        auto msg2 = MakeMessage(2, 1);
-        t2.Send(std::span(&msg2, 1));
-
-        bool received = WaitForBoth(
-            t1, t2, [&] { return collector1.Count() >= 1 && collector2.Count() >= 1; }, 3s
-        );
-        CHECK(received);
-
-        CHECK(collector1.Count() >= 1);
-        CHECK(collector2.Count() >= 1);
-
-        t1.Stop();
-        t2.Stop();
-    }
-
-    TEST_CASE("kcp_message_callback_invoked" * doctest::timeout(15)) {
-        auto port1 = PortAllocator::GetNextPort();
-        auto port2 = PortAllocator::GetNextPort();
-
-        TransportConfig cfg1{.listen_addr = fmt::format("127.0.0.1:{}", port1), .node_id = 1};
-        TransportConfig cfg2{.listen_addr = fmt::format("127.0.0.1:{}", port2), .node_id = 2};
-
-        KcpTransport t1(cfg1);
-        KcpTransport t2(cfg2);
-
-        std::atomic<int> callback_count{0};
-        t2.SetMessageCallback([&](Message) { callback_count++; });
-
-        REQUIRE(t1.Start().has_value());
-        REQUIRE(t2.Start().has_value());
-
-        t1.AddPeer(2, fmt::format("127.0.0.1:{}", port2));
-        t2.AddPeer(1, fmt::format("127.0.0.1:{}", port1));
-
-        PollBoth(t1, t2, 1s);
-
-        for (int i = 0; i < 3; i++) {
-            auto msg = MakeMessage(1, 2);
-            t1.Send(std::span(&msg, 1));
-        }
-
-        bool received = WaitForBoth(t1, t2, [&] { return callback_count >= 3; }, 3s);
-        CHECK(received);
-        CHECK(callback_count >= 3);
-
-        t1.Stop();
-        t2.Stop();
-    }
-
-    TEST_CASE("kcp_multiple_sessions" * doctest::timeout(15)) {
-        auto port1 = PortAllocator::GetNextPort();
-        auto port2 = PortAllocator::GetNextPort();
-        auto port3 = PortAllocator::GetNextPort();
-
-        TransportConfig cfg1{.listen_addr = fmt::format("127.0.0.1:{}", port1), .node_id = 1};
-        TransportConfig cfg2{.listen_addr = fmt::format("127.0.0.1:{}", port2), .node_id = 2};
-        TransportConfig cfg3{.listen_addr = fmt::format("127.0.0.1:{}", port3), .node_id = 3};
-
-        KcpTransport t1(cfg1);
-        KcpTransport t2(cfg2);
-        KcpTransport t3(cfg3);
-
-        MessageCollector collector2, collector3;
-        t2.SetMessageCallback([&](Message m) { collector2.OnMessage(std::move(m)); });
-        t3.SetMessageCallback([&](Message m) { collector3.OnMessage(std::move(m)); });
-
-        REQUIRE(t1.Start().has_value());
-        REQUIRE(t2.Start().has_value());
-        REQUIRE(t3.Start().has_value());
-
-        t1.AddPeer(2, fmt::format("127.0.0.1:{}", port2));
-        t1.AddPeer(3, fmt::format("127.0.0.1:{}", port3));
-        t2.AddPeer(1, fmt::format("127.0.0.1:{}", port1));
-        t3.AddPeer(1, fmt::format("127.0.0.1:{}", port1));
-
-        PollAll(t1, t2, t3, 1s);
-
-        auto msg2 = MakeMessage(1, 2);
-        t1.Send(std::span(&msg2, 1));
-
-        auto msg3 = MakeMessage(1, 3);
-        t1.Send(std::span(&msg3, 1));
-
-        bool received = WaitForAll(
-            t1, t2, t3, [&] { return collector2.Count() >= 1 && collector3.Count() >= 1; }, 3s
-        );
-        CHECK(received);
-        CHECK(collector2.Count() >= 1);
-        CHECK(collector3.Count() >= 1);
-
-        t1.Stop();
-        t2.Stop();
-        t3.Stop();
-    }
-
-    TEST_CASE("kcp_send_to_unknown_peer" * doctest::timeout(5)) {
-        auto port = PortAllocator::GetNextPort();
-        TransportConfig config{
-            .listen_addr = fmt::format("127.0.0.1:{}", port),
-            .node_id = 1,
-        };
-
-        KcpTransport transport(config);
-        REQUIRE(transport.Start().has_value());
-
-        auto msg = MakeMessage(1, 999);
-        transport.Send(std::span(&msg, 1));
-
-        PollFor(transport, 100ms);
-
-        transport.Stop();
-    }
-
-    TEST_CASE("kcp_large_message" * doctest::timeout(15)) {
-        auto port1 = PortAllocator::GetNextPort();
-        auto port2 = PortAllocator::GetNextPort();
-
-        TransportConfig cfg1{.listen_addr = fmt::format("127.0.0.1:{}", port1), .node_id = 1};
-        TransportConfig cfg2{.listen_addr = fmt::format("127.0.0.1:{}", port2), .node_id = 2};
-
-        KcpTransport t1(cfg1);
-        KcpTransport t2(cfg2);
-
-        MessageCollector collector;
-        t2.SetMessageCallback([&](Message m) { collector.OnMessage(std::move(m)); });
-
-        REQUIRE(t1.Start().has_value());
-        REQUIRE(t2.Start().has_value());
-
-        t1.AddPeer(2, fmt::format("127.0.0.1:{}", port2));
-        t2.AddPeer(1, fmt::format("127.0.0.1:{}", port1));
-
-        PollBoth(t1, t2, 1s);
-
-        // Create large message
-        Message msg;
-        msg.set_from(1);
-        msg.set_to(2);
-        msg.set_msg_type(MsgAppend);
-        msg.set_term(1);
-
-        std::string large_data(1024, 'Y');
-        for (int i = 0; i < 50; i++) {
-            auto* entry = msg.add_entries();
-            entry->set_term(1);
-            entry->set_index(i + 1);
-            entry->set_data(large_data);
-        }
-
-        t1.Send(std::span(&msg, 1));
-
-        // KCP may need more time for large fragmented messages
-        bool received = WaitForBoth(t1, t2, [&] { return collector.Count() >= 1; }, 5s);
-        CHECK(received);
-
-        if (received) {
-            auto messages = collector.GetMessages();
-            CHECK(messages[0].entries_size() == 50);
-        }
-
-        t1.Stop();
-        t2.Stop();
-    }
-
-    TEST_CASE("kcp_message_with_entries" * doctest::timeout(15)) {
-        auto port1 = PortAllocator::GetNextPort();
-        auto port2 = PortAllocator::GetNextPort();
-
-        TransportConfig cfg1{.listen_addr = fmt::format("127.0.0.1:{}", port1), .node_id = 1};
-        TransportConfig cfg2{.listen_addr = fmt::format("127.0.0.1:{}", port2), .node_id = 2};
-
-        KcpTransport t1(cfg1);
-        KcpTransport t2(cfg2);
-
-        MessageCollector collector;
-        t2.SetMessageCallback([&](Message m) { collector.OnMessage(std::move(m)); });
-
-        REQUIRE(t1.Start().has_value());
-        REQUIRE(t2.Start().has_value());
-
-        t1.AddPeer(2, fmt::format("127.0.0.1:{}", port2));
-        t2.AddPeer(1, fmt::format("127.0.0.1:{}", port1));
-
-        PollBoth(t1, t2, 1s);
-
-        Message msg;
-        msg.set_from(1);
-        msg.set_to(2);
-        msg.set_msg_type(MsgAppend);
-        msg.set_term(7);
-        msg.set_index(200);
-        msg.set_commit(150);
-
-        for (int i = 0; i < 5; i++) {
-            auto* entry = msg.add_entries();
-            entry->set_term(7);
-            entry->set_index(201 + i);
-            entry->set_data("kcp_entry_" + std::to_string(i));
-        }
-
-        t1.Send(std::span(&msg, 1));
-
-        bool received = WaitForBoth(t1, t2, [&] { return collector.Count() >= 1; }, 3s);
-        REQUIRE(received);
-
-        auto messages = collector.GetMessages();
-        REQUIRE(messages.size() >= 1);
-        CHECK(messages[0].term() == 7);
-        CHECK(messages[0].entries_size() == 5);
-        CHECK(messages[0].entries(3).data() == "kcp_entry_3");
-
-        t1.Stop();
-        t2.Stop();
-    }
-
-    TEST_CASE("kcp_config_options" * doctest::timeout(5)) {
-        auto port = PortAllocator::GetNextPort();
-        TransportConfig config{
-            .listen_addr = fmt::format("127.0.0.1:{}", port),
-            .node_id = 1,
-        };
-
-        KcpConfig kcp_config{
-            .nodelay = 1,
-            .interval = 20,  // Different from default
-            .resend = 3,
-            .nc = 1,
-            .snd_wnd = 64,
-            .rcv_wnd = 64,
-            .mtu = 1200,
-            .session_timeout_ms = 10000,
-        };
-
-        KcpTransport transport(config, kcp_config);
-
-        auto result = transport.Start();
-        REQUIRE(result.has_value());
-
-        PollFor(transport, 50ms);
-
-        transport.Stop();
-    }
-
-}  // TEST_SUITE("rpc::kcp")
+}  // TEST_SUITE("rpc::rpclib")
