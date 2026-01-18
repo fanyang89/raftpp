@@ -7,6 +7,8 @@
       "generator": "Ninja",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++",
         "CMAKE_CXX_SCAN_FOR_MODULES": "OFF",
         "RAFTPP_SANITIZE": "address"
       }
