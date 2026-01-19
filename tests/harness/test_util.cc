@@ -1,9 +1,9 @@
 #include "harness/test_util.h"
 
+#include <set>
+
 #include <doctest/doctest.h>
 #include <spdlog/fmt/fmt.h>
-
-#include <set>
 
 #include "raftpp/core/capnp_message.h"
 
@@ -327,22 +327,28 @@ Entry NewEntry(
     builder.setTerm(term);
     if (data.has_value()) {
         builder.setData(
-            ::capnp::Data::Reader(reinterpret_cast<const ::capnp::byte*>(data->data()), data->size())
+            ::capnp::Data::Reader(
+                reinterpret_cast<const ::capnp::byte*>(data->data()), data->size()
+            )
         );
         // Always set context when data is set, to match Raft's internal behavior
         // (HandleAppendEntries always calls setContext, even if empty)
         if (context.has_value()) {
-            builder.setContext(::capnp::Data::Reader(
-                reinterpret_cast<const ::capnp::byte*>(context->data()), context->size()
-            ));
+            builder.setContext(
+                ::capnp::Data::Reader(
+                    reinterpret_cast<const ::capnp::byte*>(context->data()), context->size()
+                )
+            );
         } else {
             // Set empty context to match Raft's behavior
             builder.setContext(::capnp::Data::Reader(nullptr, 0));
         }
     } else if (context.has_value()) {
-        builder.setContext(::capnp::Data::Reader(
-            reinterpret_cast<const ::capnp::byte*>(context->data()), context->size()
-        ));
+        builder.setContext(
+            ::capnp::Data::Reader(
+                reinterpret_cast<const ::capnp::byte*>(context->data()), context->size()
+            )
+        );
     }
     return e;
 }
@@ -640,7 +646,8 @@ RawNode NewRawNode(
     config.load_state_on_startup = true;
 
     auto initial_state = storage->InitialState();
-    bool is_initialized = initial_state && initial_state->conf_state.reader().getVoters().size() > 0;
+    bool is_initialized =
+        initial_state && initial_state->conf_state.reader().getVoters().size() > 0;
 
     // If storage is already initialized, just use it as-is (empty peers means use existing config)
     // If storage is NOT initialized and peers is provided, initialize with snapshot
@@ -655,7 +662,8 @@ RawNode NewRawNodeWithConfig(
     const std::vector<uint64_t>& peers, const Config& config, std::shared_ptr<MemoryStorage> storage
 ) {
     auto initial_state = storage->InitialState();
-    bool is_initialized = initial_state && initial_state->conf_state.reader().getVoters().size() > 0;
+    bool is_initialized =
+        initial_state && initial_state->conf_state.reader().getVoters().size() > 0;
 
     // If storage is already initialized, just use it as-is (empty peers means use existing config)
     // If storage is NOT initialized and peers is provided, initialize with snapshot

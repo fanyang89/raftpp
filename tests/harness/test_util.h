@@ -14,8 +14,8 @@
 #include "raftpp/core/raft_config.h"
 #include "raftpp/core/raft_core.h"
 #include "raftpp/core/raft_log.h"
-#include "raftpp/core/types.h"
 #include "raftpp/core/raw_node.h"
+#include "raftpp/core/types.h"
 
 namespace raftpp {
 

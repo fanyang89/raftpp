@@ -4,8 +4,8 @@
 #include <vector>
 
 #include "raft.h"
-#include "types.h"
 #include "status.h"
+#include "types.h"
 
 namespace raftpp {
 

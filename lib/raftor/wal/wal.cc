@@ -51,7 +51,8 @@ Result<void> WAL::Initialize(const WALConfig& config) {
 
     SPDLOG_INFO(
         "WAL opened at {}: first_index={}, last_index={}, term={}, vote={}", config_.dir.string(),
-        first_index_, LastIndexUnlocked(), hard_state_.reader().getTerm(), hard_state_.reader().getVote()
+        first_index_, LastIndexUnlocked(), hard_state_.reader().getTerm(),
+        hard_state_.reader().getVote()
     );
 
     return {};
@@ -176,9 +177,11 @@ Result<void> WAL::ReplaySegment(Segment* segment) {
                 Entry entry;
                 try {
                     auto payload = parser.Payload();
-                    const ::capnp::word* words = reinterpret_cast<const ::capnp::word*>(payload.data());
+                    const ::capnp::word* words =
+                        reinterpret_cast<const ::capnp::word*>(payload.data());
                     size_t word_count = payload.size() / sizeof(::capnp::word);
-                    entry = Entry::parseFromWords(kj::ArrayPtr<const ::capnp::word>(words, word_count));
+                    entry =
+                        Entry::parseFromWords(kj::ArrayPtr<const ::capnp::word>(words, word_count));
                 } catch (...) {
                     SPDLOG_WARN("failed to parse entry at offset {}", offset);
                     break;
@@ -188,7 +191,8 @@ Result<void> WAL::ReplaySegment(Segment* segment) {
                 // Only add entries >= first_index (entries before may have been compacted)
                 if (entry_reader.getIndex() >= first_index_) {
                     index_.Insert(
-                        entry_reader.getIndex(), segment->segment_id(), offset, total_size, entry_reader.getTerm()
+                        entry_reader.getIndex(), segment->segment_id(), offset, total_size,
+                        entry_reader.getTerm()
                     );
                 }
                 break;
@@ -210,9 +214,12 @@ Result<void> WAL::ReplaySegment(Segment* segment) {
 
                     Entry entry;
                     try {
-                        const ::capnp::word* words = reinterpret_cast<const ::capnp::word*>(payload.data() + pos);
+                        const ::capnp::word* words =
+                            reinterpret_cast<const ::capnp::word*>(payload.data() + pos);
                         size_t word_count = entry_len / sizeof(::capnp::word);
-                        entry = Entry::parseFromWords(kj::ArrayPtr<const ::capnp::word>(words, word_count));
+                        entry = Entry::parseFromWords(
+                            kj::ArrayPtr<const ::capnp::word>(words, word_count)
+                        );
 
                         auto entry_reader = entry.reader();
                         if (entry_reader.getIndex() >= first_index_) {
@@ -233,9 +240,12 @@ Result<void> WAL::ReplaySegment(Segment* segment) {
                 HardState hs;
                 try {
                     auto payload = parser.Payload();
-                    const ::capnp::word* words = reinterpret_cast<const ::capnp::word*>(payload.data());
+                    const ::capnp::word* words =
+                        reinterpret_cast<const ::capnp::word*>(payload.data());
                     size_t word_count = payload.size() / sizeof(::capnp::word);
-                    hs = HardState::parseFromWords(kj::ArrayPtr<const ::capnp::word>(words, word_count));
+                    hs = HardState::parseFromWords(
+                        kj::ArrayPtr<const ::capnp::word>(words, word_count)
+                    );
 
                     // Only update if this is newer
                     if (hs.reader().getTerm() >= hard_state_.reader().getTerm()) {
@@ -266,7 +276,8 @@ Result<void> WAL::Append(std::span<const Entry> entries) {
     auto first_entry_reader = entries.front().reader();
     if (first_entry_reader.getIndex() != expected_index) {
         // Handle truncation case - entries may be replacing existing ones
-        if (first_entry_reader.getIndex() < expected_index && first_entry_reader.getIndex() >= first_index_) {
+        if (first_entry_reader.getIndex() < expected_index &&
+            first_entry_reader.getIndex() >= first_index_) {
             // Truncate the index
             index_.TruncateFrom(first_entry_reader.getIndex());
         } else if (first_entry_reader.getIndex() != expected_index) {
@@ -291,7 +302,9 @@ Result<void> WAL::Append(std::span<const Entry> entries) {
 
         RecordBuilder builder;
         builder.SetType(RecordType::Entry);
-        builder.SetPayload(std::string(reinterpret_cast<const char*>(serialized.data()), serialized.size()));
+        builder.SetPayload(
+            std::string(reinterpret_cast<const char*>(serialized.data()), serialized.size())
+        );
         auto record = builder.Build();
 
         auto entry_reader = entry.reader();
@@ -345,7 +358,9 @@ Result<void> WAL::SaveHardState(const HardState& hs) {
     auto serialized = hs.serializeAsBytes();
     RecordBuilder builder;
     builder.SetType(RecordType::HardState);
-    builder.SetPayload(std::string(reinterpret_cast<const char*>(serialized.data()), serialized.size()));
+    builder.SetPayload(
+        std::string(reinterpret_cast<const char*>(serialized.data()), serialized.size())
+    );
     auto record = builder.Build();
 
     auto segment_result = segment_manager_->GetCurrentSegment(first_index_);

@@ -71,7 +71,8 @@ uint64_t RaftLog::FindConflict(const std::vector<Entry>& entries) const {
                 SPDLOG_INFO(
                     "found conflict at index({}), existing_term={}, "
                     "conflicting_term={}",
-                    e_reader.getIndex(), UnwrapOr(Term(e_reader.getIndex()), uint64_t{0}), e_reader.getTerm()
+                    e_reader.getIndex(), UnwrapOr(Term(e_reader.getIndex()), uint64_t{0}),
+                    e_reader.getTerm()
                 );
             }
             return e_reader.getIndex();
@@ -216,7 +217,7 @@ Result<void> RaftLog::MustCheckOutOfBounds(uint64_t low, uint64_t high) const {
     }
 
     const auto length = LastIndex() + 1 - first_index;
-    if (low < first_index || high > first_index + length) {
+    if (high > first_index + length) {
         const auto slice_low = low;
         const auto slice_high = high;
         const auto bound_first_index = first_index;

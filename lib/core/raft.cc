@@ -152,7 +152,8 @@ ConfState Raft::PostConfChange() {
 
 void Raft::LoadState(const HardState& hs) {
     auto hs_reader = hs.reader();
-    if (hs_reader.getCommit() < raft_log_.committed() || hs_reader.getCommit() > raft_log_.LastIndex()) {
+    if (hs_reader.getCommit() < raft_log_.committed() ||
+        hs_reader.getCommit() > raft_log_.LastIndex()) {
         PANIC(
             "hs.commit {} is out of range [{}, {}]", hs_reader.getCommit(), raft_log_.committed(),
             raft_log_.LastIndex()
@@ -348,9 +349,11 @@ void Raft::Campaign(std::string_view campaign_type) {
         m_builder.setCommit(commit);
         m_builder.setCommitTerm(commit_term);
         if (campaign_type == CAMPAIGN_TRANSFER) {
-            m_builder.setContext(kj::arrayPtr(
-                reinterpret_cast<const kj::byte*>(campaign_type.data()), campaign_type.size()
-            ));
+            m_builder.setContext(
+                kj::arrayPtr(
+                    reinterpret_cast<const kj::byte*>(campaign_type.data()), campaign_type.size()
+                )
+            );
         }
 
         Send(m, messages_);
@@ -437,9 +440,9 @@ void Raft::CommitApplyInternal(uint64_t applied, bool skip_check) {
         Entry ent;
         auto ent_builder = ent.builder();
         ent_builder.setEntryType(EntryType::ENTRY_CONF_CHANGE_V2);
-        ent_builder.setData(kj::arrayPtr(
-            reinterpret_cast<const kj::byte*>(serialized.data()), serialized.size()
-        ));
+        ent_builder.setData(
+            kj::arrayPtr(reinterpret_cast<const kj::byte*>(serialized.data()), serialized.size())
+        );
         if (!AppendEntry(ent)) {
             PANIC("appending an empty EntryConfChangeV2 should never be dropped");
         }
@@ -466,7 +469,8 @@ void Raft::MaybeCommitByVote(const Message& m) {
     SPDLOG_INFO(
         "[commit: {}, last_index: {}, last_term: {}] fast-forwarded commit to vote request [index: "
         "{}, term: {}]",
-        log.committed(), log.LastIndex(), log.LastTerm(), m_reader.getCommit(), m_reader.getCommitTerm()
+        log.committed(), log.LastIndex(), log.LastTerm(), m_reader.getCommit(),
+        m_reader.getCommitTerm()
     );
 
     if (state_ != StateRole::Candidate && state_ != StateRole::PreCandidate) {
@@ -499,7 +503,8 @@ void Raft::HandleAppendResponse(const Message& m) {
     auto next_probe_index = m_reader.getRejectHint();
     // pull out find_conflict_by_term for immutable borrow
     if (m_reader.getReject() && m_reader.getLogTerm() > 0) {
-        next_probe_index = raft_log_.FindConflictByTerm(m_reader.getRejectHint(), m_reader.getLogTerm()).first;
+        next_probe_index =
+            raft_log_.FindConflictByTerm(m_reader.getRejectHint(), m_reader.getLogTerm()).first;
     }
 
     auto* p = progress_tracker_.get(m_reader.getFrom());
@@ -511,14 +516,15 @@ void Raft::HandleAppendResponse(const Message& m) {
     Progress& pr = *p;
     pr.recent_active() = true;
     SPDLOG_DEBUG(
-        "HandleAppendResponse: from={}, index={}, reject={}", m_reader.getFrom(), m_reader.getIndex(), m_reader.getReject()
+        "HandleAppendResponse: from={}, index={}, reject={}", m_reader.getFrom(),
+        m_reader.getIndex(), m_reader.getReject()
     );
     pr.UpdateCommitted(m_reader.getCommit());
 
     if (m_reader.getReject()) {
         SPDLOG_DEBUG(
-            "HandleAppendResponse: reject from {}, index={}, reject_hint={}, log_term={}", m_reader.getFrom(),
-            m_reader.getIndex(), m_reader.getRejectHint(), m_reader.getLogTerm()
+            "HandleAppendResponse: reject from {}, index={}, reject_hint={}, log_term={}",
+            m_reader.getFrom(), m_reader.getIndex(), m_reader.getRejectHint(), m_reader.getLogTerm()
         );
         if (pr.MaybeDecTo(m_reader.getIndex(), next_probe_index, m_reader.getRequestSnapshot())) {
             if (pr.state() == ProgressState::Replicate) {
@@ -630,9 +636,7 @@ bool Raft::Restore(const Snapshot& snapshot) {
         cs_ids.insert(voter);
     }
     if (!cs_ids.contains(id_)) {
-        SPDLOG_WARN(
-            "attempted to restore snapshot but it is not in the ConfState"
-        );
+        SPDLOG_WARN("attempted to restore snapshot but it is not in the ConfState");
         return false;
     }
 
@@ -761,8 +765,10 @@ Result<void> Raft::StepCandidate(const Message& m) {
             // Only handle vote responses corresponding to our candidacy (while in
             // state Candidate, we may get stale MsgPreVoteResp messages in this term from
             // our pre-candidate state).
-            if ((state_ == StateRole::PreCandidate && m_reader.getMsgType() != MessageType::MSG_REQUEST_PRE_VOTE_RESPONSE) ||
-                (state_ == StateRole::Candidate && m_reader.getMsgType() != MessageType::MSG_REQUEST_VOTE_RESPONSE)) {
+            if ((state_ == StateRole::PreCandidate &&
+                 m_reader.getMsgType() != MessageType::MSG_REQUEST_PRE_VOTE_RESPONSE) ||
+                (state_ == StateRole::Candidate &&
+                 m_reader.getMsgType() != MessageType::MSG_REQUEST_VOTE_RESPONSE)) {
                 return {};
             }
             std::ignore = Poll(m_reader.getFrom(), m_reader.getMsgType(), !m_reader.getReject());
@@ -770,7 +776,9 @@ Result<void> Raft::StepCandidate(const Message& m) {
             break;
 
         case MessageType::MSG_TIMEOUT_NOW:
-            SPDLOG_DEBUG("ignored MsgTimeoutNow, term={}, from={}", m_reader.getTerm(), m_reader.getFrom());
+            SPDLOG_DEBUG(
+                "ignored MsgTimeoutNow, term={}, from={}", m_reader.getTerm(), m_reader.getFrom()
+            );
             break;
 
         case MessageType::MSG_READ_INDEX:
@@ -829,7 +837,9 @@ Result<void> Raft::StepFollower(Message& m) {
             if (promotable_) {
                 Hup(true);
             } else {
-                SPDLOG_INFO("received MsgTimeoutNow from {} but is not promotable", m_reader.getFrom());
+                SPDLOG_INFO(
+                    "received MsgTimeoutNow from {} but is not promotable", m_reader.getFrom()
+                );
             }
             break;
 
@@ -846,8 +856,8 @@ Result<void> Raft::StepFollower(Message& m) {
             auto entries = m_reader.getEntries();
             if (entries.size() != 1) {
                 SPDLOG_ERROR(
-                    "invalid format of MsgReadIndexResp from {}, entries_size={}", m_reader.getFrom(),
-                    entries.size()
+                    "invalid format of MsgReadIndexResp from {}, entries_size={}",
+                    m_reader.getFrom(), entries.size()
                 );
                 return {};
             }
@@ -891,7 +901,8 @@ void Raft::HandleHeartbeatResponse(const Message& m) {
     pr.UpdateCommitted(m_reader.getCommit());
     pr.recent_active() = true;
     SPDLOG_DEBUG(
-        "HandleHeartbeatResponse: from={}, index={}, reject={}", m_reader.getFrom(), m_reader.getIndex(), m_reader.getReject()
+        "HandleHeartbeatResponse: from={}, index={}, reject={}", m_reader.getFrom(),
+        m_reader.getIndex(), m_reader.getReject()
     );
     pr.Resume();
 
@@ -901,8 +912,8 @@ void Raft::HandleHeartbeatResponse(const Message& m) {
 
     // Does it request snapshot?
     SPDLOG_DEBUG(
-        "HandleHeartbeatResp check: from={}, matched={}, next={}, last_index={}", m_reader.getFrom(),
-        pr.matched(), pr.next_idx(), raft_log_.LastIndex()
+        "HandleHeartbeatResp check: from={}, matched={}, next={}, last_index={}",
+        m_reader.getFrom(), pr.matched(), pr.next_idx(), raft_log_.LastIndex()
     );
     if (pr.matched() < raft_log_.LastIndex() || pr.pending_request_snapshot() != INVALID_INDEX) {
         SPDLOG_DEBUG("HandleHeartbeatResp: sending append to {}", m_reader.getFrom());
@@ -943,8 +954,8 @@ void Raft::HandleSnapshotStatus(const Message& m) {
 
     if (m_reader.getReject()) {
         SPDLOG_DEBUG(
-            "HandleSnapshotStatus: reject from {}, index={}, reject_hint={}, log_term={}", m_reader.getFrom(),
-            m_reader.getIndex(), m_reader.getRejectHint(), m_reader.getLogTerm()
+            "HandleSnapshotStatus: reject from {}, index={}, reject_hint={}, log_term={}",
+            m_reader.getFrom(), m_reader.getIndex(), m_reader.getRejectHint(), m_reader.getLogTerm()
         );
         pr.SnapshotFailure();
         pr.BecomeProbe();
@@ -1021,9 +1032,9 @@ void Raft::SendHeartbeat(
     m_builder.setMsgType(MessageType::MSG_HEARTBEAT);
     m_builder.setCommit(std::min(pr.matched(), raft_log_.committed()));
     if (ctx) {
-        m_builder.setContext(kj::arrayPtr(
-            reinterpret_cast<const kj::byte*>(ctx->data()), ctx->size()
-        ));
+        m_builder.setContext(
+            kj::arrayPtr(reinterpret_cast<const kj::byte*>(ctx->data()), ctx->size())
+        );
     }
     Send(m, messages);
 }
@@ -1184,7 +1195,8 @@ Result<void> Raft::Step(Message& m) {
     if (m_reader.getTerm() == 0) {
         // local message - fall through to process based on current state
     } else if (m_reader.getTerm() > term_) {
-        if (m_reader.getMsgType() == MessageType::MSG_REQUEST_VOTE || m_reader.getMsgType() == MessageType::MSG_REQUEST_PRE_VOTE) {
+        if (m_reader.getMsgType() == MessageType::MSG_REQUEST_VOTE ||
+            m_reader.getMsgType() == MessageType::MSG_REQUEST_PRE_VOTE) {
             auto ctx = m_reader.getContext();
             std::string ctx_str(reinterpret_cast<const char*>(ctx.begin()), ctx.size());
             const bool force = (ctx_str == CAMPAIGN_TRANSFER);
@@ -1198,12 +1210,14 @@ Result<void> Raft::Step(Message& m) {
         }
 
         if (m_reader.getMsgType() == MessageType::MSG_REQUEST_PRE_VOTE ||
-            (m_reader.getMsgType() == MessageType::MSG_REQUEST_PRE_VOTE_RESPONSE && !m_reader.getReject())) {
+            (m_reader.getMsgType() == MessageType::MSG_REQUEST_PRE_VOTE_RESPONSE &&
+             !m_reader.getReject())) {
             // For a pre-vote request:
             // Never change our term in response to a pre-vote request.
         } else {
             SPDLOG_INFO("received a message with higher term from {}", m_reader.getFrom());
-            if (m_reader.getMsgType() == MessageType::MSG_APPEND || m_reader.getMsgType() == MessageType::MSG_HEARTBEAT ||
+            if (m_reader.getMsgType() == MessageType::MSG_APPEND ||
+                m_reader.getMsgType() == MessageType::MSG_HEARTBEAT ||
                 m_reader.getMsgType() == MessageType::MSG_SNAPSHOT) {
                 BecomeFollower(m_reader.getTerm(), m_reader.getFrom());
             } else {
@@ -1213,7 +1227,8 @@ Result<void> Raft::Step(Message& m) {
         // Fall through to process the message
     } else if (m_reader.getTerm() < term_) {
         if ((check_quorum_ || pre_vote_) &&
-            (m_reader.getMsgType() == MessageType::MSG_HEARTBEAT || m_reader.getMsgType() == MessageType::MSG_APPEND)) {
+            (m_reader.getMsgType() == MessageType::MSG_HEARTBEAT ||
+             m_reader.getMsgType() == MessageType::MSG_APPEND)) {
             Message to_send;
             auto to_send_builder = to_send.builder();
             to_send_builder.setTo(m_reader.getFrom());
@@ -1244,10 +1259,12 @@ Result<void> Raft::Step(Message& m) {
         case MessageType::MSG_REQUEST_PRE_VOTE: {
             const bool can_vote = (vote_ == m_reader.getFrom()) ||
                 (vote_ == INVALID_ID && leader_id_ == INVALID_ID) ||
-                (m_reader.getMsgType() == MessageType::MSG_REQUEST_PRE_VOTE && m_reader.getTerm() > term_);
+                (m_reader.getMsgType() == MessageType::MSG_REQUEST_PRE_VOTE &&
+                 m_reader.getTerm() > term_);
 
             if (can_vote && raft_log_.IsUpToDate(m_reader.getIndex(), m_reader.getLogTerm()) &&
-                (m_reader.getIndex() > raft_log_.LastIndex() || priority_ <= m_reader.getPriority())) {
+                (m_reader.getIndex() > raft_log_.LastIndex() ||
+                 priority_ <= m_reader.getPriority())) {
                 Message to_send;
                 auto to_send_builder = to_send.builder();
                 to_send_builder.setTo(m_reader.getFrom());
@@ -1320,8 +1337,9 @@ void Raft::HandleAppendEntries(const Message& m) {
     to_send_builder.setMsgType(MessageType::MSG_APPEND_RESPONSE);
 
     SPDLOG_INFO(
-        "HandleAppendEntries: index={}, log_term={}, commit={}, num_entries={}", m_reader.getIndex(),
-        m_reader.getLogTerm(), m_reader.getCommit(), m_reader.getEntries().size()
+        "HandleAppendEntries: index={}, log_term={}, commit={}, num_entries={}",
+        m_reader.getIndex(), m_reader.getLogTerm(), m_reader.getCommit(),
+        m_reader.getEntries().size()
     );
 
     // Convert entries to vector
@@ -1348,8 +1366,9 @@ void Raft::HandleAppendEntries(const Message& m) {
     } else if (r->term_matched) {
         to_send_builder.setIndex(r->last_index);
     } else {
-        const auto [hint_index, hint_term] =
-            raft_log_.FindConflictByTerm(std::min(m_reader.getIndex(), raft_log_.LastIndex()), m_reader.getLogTerm());
+        const auto [hint_index, hint_term] = raft_log_.FindConflictByTerm(
+            std::min(m_reader.getIndex(), raft_log_.LastIndex()), m_reader.getLogTerm()
+        );
 
         if (!hint_term.has_value()) {
             PANIC("term({}) must be valid", hint_index);
@@ -1579,12 +1598,14 @@ void Raft::Ping() {
 
 bool LeaveJoint(const ConfChangeV2& cc) {
     auto cc_reader = cc.reader();
-    return cc_reader.getTransition() == ConfChangeTransition::AUTO && cc_reader.getChanges().size() == 0;
+    return cc_reader.getTransition() == ConfChangeTransition::AUTO &&
+        cc_reader.getChanges().size() == 0;
 }
 
 std::optional<bool> EnterJoint(const ConfChangeV2& cc) {
     auto cc_reader = cc.reader();
-    if (cc_reader.getTransition() != ConfChangeTransition::AUTO || cc_reader.getChanges().size() > 1) {
+    if (cc_reader.getTransition() != ConfChangeTransition::AUTO ||
+        cc_reader.getChanges().size() > 1) {
         switch (cc_reader.getTransition()) {
             case ConfChangeTransition::AUTO:
             case ConfChangeTransition::IMPLICIT:
@@ -1753,8 +1774,10 @@ bool Raft::ConfStatesEqualIgnoringOrder(const ConfState& a, const ConfState& b) 
     }
     std::vector<uint64_t> a_voters;
     std::vector<uint64_t> b_voters;
-    for (auto v : a_voters_list) a_voters.push_back(v);
-    for (auto v : b_voters_list) b_voters.push_back(v);
+    for (auto v : a_voters_list)
+        a_voters.push_back(v);
+    for (auto v : b_voters_list)
+        b_voters.push_back(v);
     std::sort(a_voters.begin(), a_voters.end());
     std::sort(b_voters.begin(), b_voters.end());
     if (a_voters != b_voters) {
@@ -1769,8 +1792,10 @@ bool Raft::ConfStatesEqualIgnoringOrder(const ConfState& a, const ConfState& b) 
     }
     std::vector<uint64_t> a_learners;
     std::vector<uint64_t> b_learners;
-    for (auto l : a_learners_list) a_learners.push_back(l);
-    for (auto l : b_learners_list) b_learners.push_back(l);
+    for (auto l : a_learners_list)
+        a_learners.push_back(l);
+    for (auto l : b_learners_list)
+        b_learners.push_back(l);
     std::sort(a_learners.begin(), a_learners.end());
     std::sort(b_learners.begin(), b_learners.end());
     if (a_learners != b_learners) {
@@ -1785,8 +1810,10 @@ bool Raft::ConfStatesEqualIgnoringOrder(const ConfState& a, const ConfState& b) 
     }
     std::vector<uint64_t> a_outgoing;
     std::vector<uint64_t> b_outgoing;
-    for (auto v : a_outgoing_list) a_outgoing.push_back(v);
-    for (auto v : b_outgoing_list) b_outgoing.push_back(v);
+    for (auto v : a_outgoing_list)
+        a_outgoing.push_back(v);
+    for (auto v : b_outgoing_list)
+        b_outgoing.push_back(v);
     std::sort(a_outgoing.begin(), a_outgoing.end());
     std::sort(b_outgoing.begin(), b_outgoing.end());
     if (a_outgoing != b_outgoing) {

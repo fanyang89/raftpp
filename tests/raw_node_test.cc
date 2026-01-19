@@ -1,8 +1,9 @@
 #include "raftpp/core/raw_node.h"
 
+#include <span>
+
 #include <doctest/doctest.h>
 #include <kj/array.h>
-#include <span>
 
 #include "harness/test_util.h"
 #include "raftpp/core/error.h"
@@ -20,7 +21,8 @@ std::string DataToString(::capnp::Data::Reader data) {
 ConfChangeV2 ParseConfChangeV2FromEntry(const Entry& e) {
     auto data = e.reader().getData();
     return ConfChangeV2::parseFromBytes(
-        std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(data.begin()), data.size()));
+        std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(data.begin()), data.size())
+    );
 }
 
 }  // namespace
@@ -52,7 +54,8 @@ TEST_CASE("raw_node: is local message") {
 
 TEST_CASE("raw_node: step local message ignored") {
     const std::vector<MessageType> local_msg_types{
-        MessageType::MSG_HUP, MessageType::MSG_BEAT, MessageType::MSG_UNREACHABLE, MessageType::MSG_SNAP_STATUS, MessageType::MSG_CHECK_QUORUM,
+        MessageType::MSG_HUP,         MessageType::MSG_BEAT,         MessageType::MSG_UNREACHABLE,
+        MessageType::MSG_SNAP_STATUS, MessageType::MSG_CHECK_QUORUM,
     };
 
     for (const auto msg_t : local_msg_types) {
@@ -303,7 +306,8 @@ TEST_CASE("raw_node: async entry fetching to removed node") {
 /// Test that RawNode::step ignores local message.
 TEST_CASE("raw_node: step local message ignored") {
     const std::vector<MessageType> local_msg_types{
-        MessageType::MSG_HUP, MessageType::MSG_BEAT, MessageType::MSG_UNREACHABLE, MessageType::MSG_SNAP_STATUS, MessageType::MSG_CHECK_QUORUM,
+        MessageType::MSG_HUP,         MessageType::MSG_BEAT,         MessageType::MSG_UNREACHABLE,
+        MessageType::MSG_SNAP_STATUS, MessageType::MSG_CHECK_QUORUM,
     };
 
     for (const auto msg_t : local_msg_types) {
@@ -679,8 +683,9 @@ TEST_CASE("raw_node: read index to old leader") {
     // Create test entry with request context
     Entry test_entry;
     auto entry_builder = test_entry.builder();
-    entry_builder.setData(kj::arrayPtr(
-        reinterpret_cast<const kj::byte*>(request_ctx.data()), request_ctx.size()));
+    entry_builder.setData(
+        kj::arrayPtr(reinterpret_cast<const kj::byte*>(request_ctx.data()), request_ctx.size())
+    );
 
     // Send read index request to r2 (follower) using Step directly (not Send)
     // so messages stay in msgs() for inspection

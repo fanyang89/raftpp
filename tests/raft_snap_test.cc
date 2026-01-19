@@ -62,8 +62,7 @@ TEST_CASE("pending snapshot pause replication") {
     pr.BecomeSnapshot(11);
 
     Entry entry = NewEntry(0, 0, "test");
-    Message m = NewMessageWithEntries(
-        1, 1, MessageType::MSG_PROPOSE, std::vector<Entry>{entry});
+    Message m = NewMessageWithEntries(1, 1, MessageType::MSG_PROPOSE, std::vector<Entry>{entry});
     auto result = r.Step(m);
     (void)result;
 

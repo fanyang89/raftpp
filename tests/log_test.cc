@@ -645,8 +645,7 @@ TEST_CASE("raft_log: slice") {
 
 size_t ents_size(const std::vector<Entry>& ents) {
     return std::accumulate(
-        ents.begin(), ents.end(), 0,
-        [](const size_t previous, const Entry& entry) {
+        ents.begin(), ents.end(), 0, [](const size_t previous, const Entry& entry) {
             return previous + entry.serializeAsBytes().size();
         }
     );

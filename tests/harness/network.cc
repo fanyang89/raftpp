@@ -130,8 +130,8 @@ void Network::Send(std::vector<Message> msgs) {
         for (auto& m : msgs) {
             auto reader = m.reader();
             SPDLOG_DEBUG(
-                "Network::Send: type={}, from={}, to={}", static_cast<int>(reader.getMsgType()), reader.getFrom(),
-                reader.getTo()
+                "Network::Send: type={}, from={}, to={}", static_cast<int>(reader.getMsgType()),
+                reader.getFrom(), reader.getTo()
             );
             auto it = peers_.find(reader.getTo());
             if (it == peers_.end()) {

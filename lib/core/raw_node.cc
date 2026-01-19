@@ -70,9 +70,7 @@ void RawNode::ReadIndex(const std::string& ctx) {
     builder.setMsgType(MessageType::MSG_READ_INDEX);
 
     auto entries = builder.initEntries(1);
-    entries[0].setData(kj::arrayPtr(
-        reinterpret_cast<const kj::byte*>(ctx.data()), ctx.size()
-    ));
+    entries[0].setData(kj::arrayPtr(reinterpret_cast<const kj::byte*>(ctx.data()), ctx.size()));
 
     std::ignore = raft_.Step(m);
 }
@@ -186,8 +184,7 @@ bool RawNode::HasReady() const {
         return true;
     }
 
-    if (!messagesEqual<raftpp::capnp::HardState>(
-            raft_.hard_state().reader(), prev_hs_.reader())) {
+    if (!messagesEqual<raftpp::capnp::HardState>(raft_.hard_state().reader(), prev_hs_.reader())) {
         return true;
     }
 
@@ -322,8 +319,7 @@ LightReady RawNode::GetLightReady() {
     LightReady rd;
     const auto max_size = raft_.max_committed_size_per_ready();
 
-    auto committed_entries =
-            raft_.raft_log().NextEntriesSince(commit_since_index_, max_size);
+    auto committed_entries = raft_.raft_log().NextEntriesSince(commit_since_index_, max_size);
     if (committed_entries) {
         rd.committed_entries = std::move(*committed_entries);
     }
@@ -363,12 +359,12 @@ Result<void> RawNode::Propose(const std::string& ctx, const std::string& data) {
 
     auto entries = m_builder.initEntries(1);
     auto entry_builder = entries[0];
-    entry_builder.setData(kj::arrayPtr(
-        reinterpret_cast<const kj::byte*>(data.data()), data.size()
-    ));
-    entry_builder.setContext(kj::arrayPtr(
-        reinterpret_cast<const kj::byte*>(ctx.data()), ctx.size()
-    ));
+    entry_builder.setData(
+        kj::arrayPtr(reinterpret_cast<const kj::byte*>(data.data()), data.size())
+    );
+    entry_builder.setContext(
+        kj::arrayPtr(reinterpret_cast<const kj::byte*>(ctx.data()), ctx.size())
+    );
 
     return raft_.Step(m);
 }
@@ -387,12 +383,12 @@ Result<void> RawNode::ProposeConfChange(const std::string& ctx, const ConfChange
     entry_builder.setEntryType(EntryType::ENTRY_CONF_CHANGE_V2);
 
     const std::string serialized = cc.serializeAsString();
-    entry_builder.setData(kj::arrayPtr(
-        reinterpret_cast<const kj::byte*>(serialized.data()), serialized.size()
-    ));
-    entry_builder.setContext(kj::arrayPtr(
-        reinterpret_cast<const kj::byte*>(ctx.data()), ctx.size()
-    ));
+    entry_builder.setData(
+        kj::arrayPtr(reinterpret_cast<const kj::byte*>(serialized.data()), serialized.size())
+    );
+    entry_builder.setContext(
+        kj::arrayPtr(reinterpret_cast<const kj::byte*>(ctx.data()), ctx.size())
+    );
 
     return raft_.Step(m);
 }
@@ -407,7 +403,8 @@ Result<void> RawNode::Step(Message m) {
         return RaftError(RaftErrorCode::StepLocalMsg);
     }
 
-    if (raft_.progress_tracker().get(reader.getFrom()) != nullptr || !IsResponseMessage(reader.getMsgType())) {
+    if (raft_.progress_tracker().get(reader.getFrom()) != nullptr ||
+        !IsResponseMessage(reader.getMsgType())) {
         return raft_.Step(m);
     }
 
