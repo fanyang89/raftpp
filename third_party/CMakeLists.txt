@@ -28,6 +28,8 @@ CPMAddPackage(
     "CRC32C_BUILD_BENCHMARKS OFF"
     "CRC32C_USE_GLOG OFF"
     "CRC32C_INSTALL OFF"
+  PATCHES
+    ${CMAKE_CURRENT_SOURCE_DIR}/../patches/crc32c-arm64-alignment.patch
 )
 
 # Cap'n Proto for serialization and RPC
