@@ -315,9 +315,15 @@ struct FatalError {
     bool operator==(const FatalError&) const;
 };
 
+struct CapnpError {
+    std::string message;
+    [[nodiscard]] RaftError ToError() const;
+    bool operator==(const CapnpError&) const;
+};
+
 using RaftErrorInner = std::variant<
     StorageErrorCode, StorageErrorOther, RaftErrorCode, InvalidConfigError, ConfChangeError,
-    FatalError, RpcErrorCode, ConfigErrorCode, ConfChangeErrorCode>;
+    FatalError, CapnpError, RpcErrorCode, ConfigErrorCode, ConfChangeErrorCode>;
 
 // RaftError is the universal error type in this lib
 class RaftError {

@@ -5,9 +5,13 @@
 #include <string>
 #include <vector>
 
+#include <capnp/any.h>
 #include <capnp/message.h>
 #include <capnp/serialize.h>
 #include <kj/array.h>
+#include <kj/exception.h>
+
+#include "raftpp/core/error.h"
 
 namespace raftpp {
 
@@ -17,13 +21,17 @@ namespace raftpp {
 template <typename T>
 class OwnedMessage {
   public:
-    OwnedMessage() : message_(std::make_unique<capnp::MallocMessageBuilder>()) {
-        message_->getRoot<T>();
+    OwnedMessage() = default;
+
+    // Construct from a reader (deep copy)
+    explicit OwnedMessage(T::Reader reader) {
+        ensureBuilder();
+        message_->setRoot(reader);
     }
 
     // Moveable and copyable (copy performs a deep clone)
-    OwnedMessage(const OwnedMessage& other)
-        : message_(std::make_unique<capnp::MallocMessageBuilder>()) {
+    OwnedMessage(const OwnedMessage& other) {
+        ensureBuilder();
         message_->setRoot(other.reader());
     }
 
@@ -31,79 +39,133 @@ class OwnedMessage {
         if (this == &other) {
             return *this;
         }
-        auto builder = std::make_unique<capnp::MallocMessageBuilder>();
-        builder->setRoot(other.reader());
-        message_ = std::move(builder);
+        ensureBuilder();
+        message_->setRoot(other.reader());
         return *this;
     }
 
     OwnedMessage(OwnedMessage&&) noexcept = default;
     OwnedMessage& operator=(OwnedMessage&&) noexcept = default;
 
-    // Private constructor for internal use
-  private:
-    explicit OwnedMessage(std::unique_ptr<capnp::MallocMessageBuilder> builder)
-        : message_(std::move(builder)) {}
-
-  public:
     // Get a builder for modifying the message
-    typename T::Builder builder() { return message_->getRoot<T>(); }
+    T::Builder builder() {
+        ensureBuilder();
+        return message_->getRoot<T>();
+    }
 
     // Get a reader for reading the message
-    typename T::Reader reader() const { return message_->getRoot<T>().asReader(); }
+    T::Reader reader() const {
+        ensureBuilder();
+        return message_->getRoot<T>().asReader();
+    }
 
-    // Serialize to a flat byte array
-    kj::Array<capnp::word> serializeAsWords() const { return capnp::messageToFlatArray(*message_); }
+    // Serialize to a flat byte array.
+    kj::Array<capnp::word> serializeAsWords() const {
+        ensureBuilder();
+        return capnp::messageToFlatArray(*message_);
+    }
 
     // Serialize to a byte vector
     std::vector<uint8_t> serializeAsBytes() const {
-        auto words = serializeAsWords();
-        const uint8_t* bytes = reinterpret_cast<const uint8_t*>(words.begin());
-        size_t size = words.size() * sizeof(capnp::word);
-        return std::vector<uint8_t>(bytes, bytes + size);
+        ensureBuilder();
+        const auto r = capnp::messageToFlatArray(*message_);
+        return {r.asBytes().begin(), r.asBytes().end()};
     }
 
     // Serialize to a string (compatible with old Protobuf SerializeAsString)
     std::string serializeAsString() const {
-        auto words = serializeAsWords();
-        const char* bytes = reinterpret_cast<const char*>(words.begin());
-        size_t size = words.size() * sizeof(capnp::word);
-        return std::string(bytes, size);
+        ensureBuilder();
+        const auto r = capnp::messageToFlatArray(*message_);
+        return {r.asBytes().begin(), r.asBytes().end()};
     }
 
     // Create from serialized data
-    static OwnedMessage<T> parseFromWords(kj::ArrayPtr<const capnp::word> words) {
+    static OwnedMessage parseFromWords(kj::ArrayPtr<const capnp::word> words) {
         capnp::FlatArrayMessageReader reader(words);
         auto root = reader.getRoot<T>();
 
-        auto builder = std::make_unique<capnp::MallocMessageBuilder>();
-        builder->setRoot(root);
-        return OwnedMessage<T>(std::move(builder));
+        OwnedMessage message;
+        message.ensureBuilder();
+        message.message_->setRoot(root);
+        return message;
     }
 
-    static OwnedMessage<T> parseFromBytes(std::span<const uint8_t> bytes) {
-        // Convert bytes to words
-        const capnp::word* words = reinterpret_cast<const capnp::word*>(bytes.data());
-        size_t wordCount = (bytes.size() + sizeof(capnp::word) - 1) / sizeof(capnp::word);
-        return parseFromWords(kj::ArrayPtr<const capnp::word>(words, wordCount));
+    static Result<OwnedMessage> parseFromWordsResult(kj::ArrayPtr<const capnp::word> words) {
+        if (words.size() == 0) {
+            return CapnpError{"empty message buffer"}.ToError();
+        }
+        try {
+            capnp::FlatArrayMessageReader reader(words);
+            auto root = reader.getRoot<T>();
+            (void)root.totalSize();
+
+            OwnedMessage message;
+            message.ensureBuilder();
+            message.message_->setRoot(root);
+            return message;
+        } catch (const kj::Exception& ex) {
+            return CapnpError{std::string(ex.getDescription().cStr())}.ToError();
+        }
     }
 
-    static OwnedMessage<T> parseFromString(std::string_view str) {
-        return parseFromBytes(
-            std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(str.data()), str.size())
-        );
+    static OwnedMessage parseFromBytes(std::span<const uint8_t> bytes) {
+        kj::ArrayPtr<const capnp::word> wordsPtr;
+        auto owned = alignBytesToWords(bytes, wordsPtr);
+        (void)owned;  // Keep alive until parseFromWords completes
+        return parseFromWords(wordsPtr);
+    }
+
+    static Result<OwnedMessage> parseFromBytesResult(std::span<const uint8_t> bytes) {
+        if (bytes.empty()) {
+            return CapnpError{"empty message buffer"}.ToError();
+        }
+        kj::ArrayPtr<const capnp::word> wordsPtr;
+        auto owned = alignBytesToWords(bytes, wordsPtr);
+        (void)owned;  // Keep alive until parseFromWordsResult completes
+        return parseFromWordsResult(wordsPtr);
+    }
+
+    static OwnedMessage parseFromString(std::string_view str) {
+        return parseFromBytes(std::span(reinterpret_cast<const uint8_t*>(str.data()), str.size()));
     }
 
     // Deep copy
-    OwnedMessage<T> clone() const {
-        auto reader = this->reader();
-        auto builder = std::make_unique<capnp::MallocMessageBuilder>();
-        builder->setRoot(reader);
-        return OwnedMessage<T>(std::move(builder));
-    }
+    OwnedMessage clone() const { return OwnedMessage(reader()); }
 
   private:
-    std::unique_ptr<capnp::MallocMessageBuilder> message_;
+    void ensureBuilder() const {
+        if (!message_) {
+            message_ = std::make_unique<capnp::MallocMessageBuilder>();
+        }
+    }
+
+    // Convert bytes to word-aligned array. Returns empty array if bytes are
+    // already aligned and can be used directly via the out parameter.
+    static kj::Array<capnp::word> alignBytesToWords(
+        std::span<const uint8_t> bytes, kj::ArrayPtr<const capnp::word>& out
+    ) {
+        constexpr size_t kWordSize = sizeof(capnp::word);
+        const auto addr = reinterpret_cast<uintptr_t>(bytes.data());
+        const bool aligned = addr % alignof(capnp::word) == 0;
+        const bool wholeWords = bytes.size() % kWordSize == 0;
+
+        if (aligned && wholeWords) {
+            const auto* words = reinterpret_cast<const capnp::word*>(bytes.data());
+            out = kj::ArrayPtr(words, bytes.size() / kWordSize);
+            return {};
+        }
+
+        const size_t wordCount = (bytes.size() + kWordSize - 1) / kWordSize;
+        auto owned = kj::heapArray<capnp::word>(wordCount);
+        std::memset(owned.begin(), 0, wordCount * kWordSize);
+        if (!bytes.empty()) {
+            std::memcpy(owned.begin(), bytes.data(), bytes.size());
+        }
+        out = owned.asPtr();
+        return owned;
+    }
+
+    mutable std::unique_ptr<capnp::MallocMessageBuilder> message_;
 };
 
 // Helper function to create an OwnedMessage with initial values
@@ -114,34 +176,18 @@ OwnedMessage<T> makeMessage(Func&& func) {
     return msg;
 }
 
-// Helper function to compare two Cap'n Proto messages for equality
-// Note: This uses canonical comparison which may be slower but handles
-// all cases correctly (including unset fields, different ordering, etc.)
+// Helper function to compare two Cap'n Proto messages for equality.
 template <typename T>
 bool messagesEqual(typename T::Reader a, typename T::Reader b) {
-    // Serialize both and compare bytes
-    // This is not the most efficient but is correct and simple
-    capnp::MallocMessageBuilder builderA, builderB;
-    builderA.setRoot(a);
-    builderB.setRoot(b);
-
-    auto wordsA = capnp::messageToFlatArray(builderA);
-    auto wordsB = capnp::messageToFlatArray(builderB);
-
-    if (wordsA.size() != wordsB.size()) {
-        return false;
-    }
-
-    return std::memcmp(wordsA.begin(), wordsB.begin(), wordsA.size() * sizeof(capnp::word)) == 0;
+    capnp::AnyStruct::Reader left = a;
+    capnp::AnyStruct::Reader right = b;
+    return left == right;
 }
 
 // Helper to convert a reader to an owned message
 template <typename T>
 OwnedMessage<T> copyToOwned(typename T::Reader reader) {
-    capnp::MallocMessageBuilder builder;
-    builder.setRoot(reader);
-    auto words = capnp::messageToFlatArray(builder);
-    return OwnedMessage<T>::parseFromWords(words.asPtr());
+    return OwnedMessage<T>(reader);
 }
 
 }  // namespace raftpp
