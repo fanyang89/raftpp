@@ -47,7 +47,7 @@ jobs:
 
   build-and-test:
     name: Build (${{ matrix.name }})
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     container:
       image: fedora:43
     strategy:
