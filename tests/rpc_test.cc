@@ -1,4 +1,5 @@
 #include <doctest/doctest.h>
+#include <kj/array.h>
 
 #include "raftpp/raftor/rpc/codec.h"
 #include "raftpp/raftor/rpc/peer_manager.h"
@@ -6,15 +7,24 @@
 using namespace raftpp;
 using namespace raftor::rpc;
 
+namespace {
+
+std::string DataToString(::capnp::Data::Reader data) {
+    return std::string(reinterpret_cast<const char*>(data.begin()), data.size());
+}
+
+}  // namespace
+
 TEST_SUITE("rpc") {
     TEST_CASE("Codec encode/decode round-trip") {
         Message msg;
-        msg.set_msg_type(MsgAppend);
-        msg.set_from(1);
-        msg.set_to(2);
-        msg.set_term(5);
-        msg.set_index(100);
-        msg.set_commit(50);
+        auto builder = msg.builder();
+        builder.setMsgType(MessageType::MSG_APPEND);
+        builder.setFrom(1);
+        builder.setTo(2);
+        builder.setTerm(5);
+        builder.setIndex(100);
+        builder.setCommit(50);
 
         auto encoded = Codec::Encode(msg, 1, 2, 42);
 
@@ -26,26 +36,30 @@ TEST_SUITE("rpc") {
 
         auto& decode_result = *result;
         CHECK(decode_result.bytes_consumed == encoded.size());
-        CHECK(decode_result.message.msg_type() == msg.msg_type());
-        CHECK(decode_result.message.from() == msg.from());
-        CHECK(decode_result.message.to() == msg.to());
-        CHECK(decode_result.message.term() == msg.term());
-        CHECK(decode_result.message.index() == msg.index());
-        CHECK(decode_result.message.commit() == msg.commit());
+        auto msg_reader = msg.reader();
+        auto decoded_reader = decode_result.message.reader();
+        CHECK(decoded_reader.getMsgType() == msg_reader.getMsgType());
+        CHECK(decoded_reader.getFrom() == msg_reader.getFrom());
+        CHECK(decoded_reader.getTo() == msg_reader.getTo());
+        CHECK(decoded_reader.getTerm() == msg_reader.getTerm());
+        CHECK(decoded_reader.getIndex() == msg_reader.getIndex());
+        CHECK(decoded_reader.getCommit() == msg_reader.getCommit());
 
         // Check RpcHeader fields
-        CHECK(decode_result.header.version() == Codec::kVersion);
-        CHECK(decode_result.header.from_node() == 1);
-        CHECK(decode_result.header.to_node() == 2);
-        CHECK(decode_result.header.request_id() == 42);
-        CHECK(decode_result.header.msg_type() == MsgAppend);
+        auto header_reader = decode_result.header.reader();
+        CHECK(header_reader.getVersion() == Codec::kVersion);
+        CHECK(header_reader.getFromNode() == 1);
+        CHECK(header_reader.getToNode() == 2);
+        CHECK(header_reader.getRequestId() == 42);
+        CHECK(header_reader.getMsgType() == MessageType::MSG_APPEND);
     }
 
     TEST_CASE("Codec handles incomplete buffer") {
         Message msg;
-        msg.set_msg_type(MsgHeartbeat);
-        msg.set_from(1);
-        msg.set_to(2);
+        auto builder = msg.builder();
+        builder.setMsgType(MessageType::MSG_HEARTBEAT);
+        builder.setFrom(1);
+        builder.setTo(2);
 
         auto encoded = Codec::Encode(msg);
 
@@ -72,9 +86,10 @@ TEST_SUITE("rpc") {
 
     TEST_CASE("Codec rejects oversized message") {
         Message msg;
-        msg.set_msg_type(MsgSnapshot);
-        msg.set_from(1);
-        msg.set_to(2);
+        auto builder = msg.builder();
+        builder.setMsgType(MessageType::MSG_SNAPSHOT);
+        builder.setFrom(1);
+        builder.setTo(2);
 
         auto encoded = Codec::Encode(msg);
 
@@ -86,17 +101,20 @@ TEST_SUITE("rpc") {
 
     TEST_CASE("Codec handles message with entries") {
         Message msg;
-        msg.set_msg_type(MsgAppend);
-        msg.set_from(1);
-        msg.set_to(2);
-        msg.set_term(3);
+        auto builder = msg.builder();
+        builder.setMsgType(MessageType::MSG_APPEND);
+        builder.setFrom(1);
+        builder.setTo(2);
+        builder.setTerm(3);
 
         // Add entries
+        auto entries = builder.initEntries(10);
         for (int i = 0; i < 10; i++) {
-            auto* entry = msg.add_entries();
-            entry->set_term(3);
-            entry->set_index(i + 1);
-            entry->set_data("test data " + std::to_string(i));
+            entries[i].setTerm(3);
+            entries[i].setIndex(i + 1);
+            auto data = std::string("test data ") + std::to_string(i);
+            entries[i].setData(kj::arrayPtr(
+                reinterpret_cast<const kj::byte*>(data.data()), data.size()));
         }
 
         auto encoded = Codec::Encode(msg);
@@ -104,8 +122,9 @@ TEST_SUITE("rpc") {
         REQUIRE(result.has_value());
 
         auto& decode_result = *result;
-        CHECK(decode_result.message.entries_size() == 10);
-        CHECK(decode_result.message.entries(5).data() == "test data 5");
+        auto decoded_reader = decode_result.message.reader();
+        CHECK(decoded_reader.getEntries().size() == 10);
+        CHECK(DataToString(decoded_reader.getEntries()[5].getData()) == "test data 5");
     }
 
     TEST_CASE("Handshake encode/decode round-trip") {
@@ -124,9 +143,10 @@ TEST_SUITE("rpc") {
 
     TEST_CASE("HandshakeCodec encode/decode round-trip") {
         RpcHandshake hs;
-        hs.set_version(1);
-        hs.set_node_id(54321);
-        hs.set_cluster_id(888);
+        auto builder = hs.builder();
+        builder.setVersion(1);
+        builder.setNodeId(54321);
+        builder.setClusterId(888);
 
         auto encoded = HandshakeCodec::Encode(hs);
         CHECK(encoded.size() >= HandshakeCodec::kPrefixSize);
@@ -135,9 +155,10 @@ TEST_SUITE("rpc") {
         REQUIRE(result.has_value());
         auto& [decoded, consumed] = *result;
         CHECK(consumed == encoded.size());
-        CHECK(decoded.version() == 1);
-        CHECK(decoded.node_id() == 54321);
-        CHECK(decoded.cluster_id() == 888);
+        auto decoded_reader = decoded.reader();
+        CHECK(decoded_reader.getVersion() == 1);
+        CHECK(decoded_reader.getNodeId() == 54321);
+        CHECK(decoded_reader.getClusterId() == 888);
     }
 
     TEST_CASE("Handshake rejects invalid magic") {

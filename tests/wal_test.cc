@@ -4,6 +4,7 @@
 #include <random>
 
 #include <doctest/doctest.h>
+#include <kj/array.h>
 
 #include "raftpp/raftor/wal/crc32c.h"
 #include "raftpp/raftor/wal/record.h"
@@ -40,12 +41,14 @@ class TempDir {
 };
 
 // Helper to create an Entry
-Entry MakeEntry(uint64_t index, uint64_t term, const std::string& data = "") {
+Entry MakeWalEntry(uint64_t index, uint64_t term, const std::string& data = "") {
     Entry entry;
-    entry.set_index(index);
-    entry.set_term(term);
-    entry.set_data(data);
-    entry.set_entry_type(EntryType::EntryNormal);
+    auto builder = entry.builder();
+    builder.setIndex(index);
+    builder.setTerm(term);
+    builder.setData(kj::arrayPtr(
+        reinterpret_cast<const kj::byte*>(data.data()), data.size()));
+    builder.setEntryType(EntryType::ENTRY_NORMAL);
     return entry;
 }
 
@@ -226,9 +229,9 @@ TEST_SUITE("wal") {
 
         // Append entries
         std::vector<Entry> entries;
-        entries.push_back(MakeEntry(1, 1, "entry1"));
-        entries.push_back(MakeEntry(2, 1, "entry2"));
-        entries.push_back(MakeEntry(3, 2, "entry3"));
+        entries.push_back(MakeWalEntry(1, 1, "entry1"));
+        entries.push_back(MakeWalEntry(2, 1, "entry2"));
+        entries.push_back(MakeWalEntry(3, 2, "entry3"));
 
         auto append_result = (*wal)->Append(entries);
         CHECK(append_result.has_value());
@@ -240,10 +243,11 @@ TEST_SUITE("wal") {
         auto read_result = (*wal)->ReadEntries(1, 4, std::nullopt);
         REQUIRE(read_result.has_value());
         CHECK(read_result->size() == 3);
-        CHECK((*read_result)[0].index() == 1);
-        CHECK((*read_result)[0].data() == "entry1");
-        CHECK((*read_result)[2].index() == 3);
-        CHECK((*read_result)[2].term() == 2);
+        CHECK((*read_result)[0].reader().getIndex() == 1);
+        auto data = (*read_result)[0].reader().getData();
+        CHECK(std::string(reinterpret_cast<const char*>(data.begin()), data.size()) == "entry1");
+        CHECK((*read_result)[2].reader().getIndex() == 3);
+        CHECK((*read_result)[2].reader().getTerm() == 2);
     }
 
     TEST_CASE("wal: term lookup") {
@@ -257,9 +261,9 @@ TEST_SUITE("wal") {
         REQUIRE(wal.has_value());
 
         std::vector<Entry> entries;
-        entries.push_back(MakeEntry(1, 1));
-        entries.push_back(MakeEntry(2, 1));
-        entries.push_back(MakeEntry(3, 2));
+        entries.push_back(MakeWalEntry(1, 1));
+        entries.push_back(MakeWalEntry(2, 1));
+        entries.push_back(MakeWalEntry(3, 2));
         std::ignore = (*wal)->Append(entries);
 
         auto term = (*wal)->Term(1);
@@ -290,15 +294,16 @@ TEST_SUITE("wal") {
             // First add entries so that commit can be valid
             std::vector<Entry> entries;
             for (uint64_t i = 1; i <= 10; ++i) {
-                entries.push_back(MakeEntry(i, 5, "data"));
+                entries.push_back(MakeWalEntry(i, 5, "data"));
             }
             auto append_result = (*wal)->Append(entries);
             REQUIRE(append_result.has_value());
 
             HardState hs;
-            hs.set_term(5);
-            hs.set_vote(2);
-            hs.set_commit(10);
+            auto hs_builder = hs.builder();
+            hs_builder.setTerm(5);
+            hs_builder.setVote(2);
+            hs_builder.setCommit(10);
 
             auto result = (*wal)->SaveHardState(hs);
             CHECK(result.has_value());
@@ -310,9 +315,10 @@ TEST_SUITE("wal") {
             REQUIRE(wal.has_value());
 
             const auto& hs = (*wal)->GetHardState();
-            CHECK(hs.term() == 5);
-            CHECK(hs.vote() == 2);
-            CHECK(hs.commit() == 10);
+            auto hs_reader = hs.reader();
+            CHECK(hs_reader.getTerm() == 5);
+            CHECK(hs_reader.getVote() == 2);
+            CHECK(hs_reader.getCommit() == 10);
         }
     }
 
@@ -330,7 +336,7 @@ TEST_SUITE("wal") {
 
             std::vector<Entry> entries;
             for (uint64_t i = 1; i <= 100; ++i) {
-                entries.push_back(MakeEntry(i, 1, "data" + std::to_string(i)));
+                entries.push_back(MakeWalEntry(i, 1, "data" + std::to_string(i)));
             }
             std::ignore = (*wal)->Append(entries);
         }
@@ -346,7 +352,7 @@ TEST_SUITE("wal") {
             auto read_result = (*wal)->ReadEntries(50, 60, std::nullopt);
             REQUIRE(read_result.has_value());
             CHECK(read_result->size() == 10);
-            CHECK((*read_result)[0].index() == 50);
+            CHECK((*read_result)[0].reader().getIndex() == 50);
         }
     }
 
@@ -363,7 +369,7 @@ TEST_SUITE("wal") {
         // Append entries
         std::vector<Entry> entries;
         for (uint64_t i = 1; i <= 10; ++i) {
-            entries.push_back(MakeEntry(i, 1));
+            entries.push_back(MakeWalEntry(i, 1));
         }
         std::ignore = (*wal)->Append(entries);
 
@@ -400,8 +406,8 @@ TEST_SUITE("wal") {
 
         // Append entries
         std::vector<Entry> entries;
-        entries.push_back(MakeEntry(1, 1, "entry1"));
-        entries.push_back(MakeEntry(2, 1, "entry2"));
+        entries.push_back(MakeWalEntry(1, 1, "entry1"));
+        entries.push_back(MakeWalEntry(2, 1, "entry2"));
 
         auto append_result = (*storage)->Append(entries);
         CHECK(append_result.has_value());
@@ -438,16 +444,18 @@ TEST_SUITE("wal") {
         REQUIRE(storage.has_value());
 
         HardState hs;
-        hs.set_term(3);
-        hs.set_vote(1);
-        hs.set_commit(5);
+        auto hs_builder = hs.builder();
+        hs_builder.setTerm(3);
+        hs_builder.setVote(1);
+        hs_builder.setCommit(5);
 
         (*storage)->SetHardState(std::move(hs));
 
         auto state = (*storage)->InitialState();
         REQUIRE(state.has_value());
-        CHECK(state->hard_state.term() == 3);
-        CHECK(state->hard_state.vote() == 1);
+        auto hs_reader = state->hard_state.reader();
+        CHECK(hs_reader.getTerm() == 3);
+        CHECK(hs_reader.getVote() == 1);
     }
 
     TEST_CASE("wal: size limit on entries") {
@@ -463,7 +471,7 @@ TEST_SUITE("wal") {
         // Append entries with varying sizes
         std::vector<Entry> entries;
         for (uint64_t i = 1; i <= 10; ++i) {
-            entries.push_back(MakeEntry(i, 1, std::string(100, 'x')));
+            entries.push_back(MakeWalEntry(i, 1, std::string(100, 'x')));
         }
         std::ignore = (*wal)->Append(entries);
 

@@ -51,7 +51,7 @@ Result<void> WAL::Initialize(const WALConfig& config) {
 
     SPDLOG_INFO(
         "WAL opened at {}: first_index={}, last_index={}, term={}, vote={}", config_.dir.string(),
-        first_index_, LastIndexUnlocked(), hard_state_.term(), hard_state_.vote()
+        first_index_, LastIndexUnlocked(), hard_state_.reader().getTerm(), hard_state_.reader().getVote()
     );
 
     return {};
@@ -64,8 +64,8 @@ Result<void> WAL::Recover() {
         return meta.error();
     }
 
-    hard_state_ = meta->hard_state;
-    conf_state_ = meta->conf_state;
+    hard_state_ = std::move(meta->hard_state);
+    conf_state_ = std::move(meta->conf_state);
     first_index_ = meta->first_index;
     snapshot_index_ = meta->snapshot_index;
     snapshot_term_ = meta->snapshot_term;
@@ -90,10 +90,11 @@ Result<void> WAL::Recover() {
 
     // Verify consistency
     uint64_t last_idx = LastIndexUnlocked();
-    if (last_idx < hard_state_.commit()) {
+    auto hs_reader = hard_state_.reader();
+    if (last_idx < hs_reader.getCommit()) {
         return RaftError(
             FatalError{fmt::format(
-                "WAL inconsistent: last_index {} < committed {}", last_idx, hard_state_.commit()
+                "WAL inconsistent: last_index {} < committed {}", last_idx, hs_reader.getCommit()
             )}
         );
     }
@@ -173,15 +174,21 @@ Result<void> WAL::ReplaySegment(Segment* segment) {
         switch (parser.Type()) {
             case RecordType::Entry: {
                 Entry entry;
-                if (!entry.ParseFromArray(parser.Payload().data(), parser.Payload().size())) {
+                try {
+                    auto payload = parser.Payload();
+                    const ::capnp::word* words = reinterpret_cast<const ::capnp::word*>(payload.data());
+                    size_t word_count = payload.size() / sizeof(::capnp::word);
+                    entry = Entry::parseFromWords(kj::ArrayPtr<const ::capnp::word>(words, word_count));
+                } catch (...) {
                     SPDLOG_WARN("failed to parse entry at offset {}", offset);
                     break;
                 }
 
+                auto entry_reader = entry.reader();
                 // Only add entries >= first_index (entries before may have been compacted)
-                if (entry.index() >= first_index_) {
+                if (entry_reader.getIndex() >= first_index_) {
                     index_.Insert(
-                        entry.index(), segment->segment_id(), offset, total_size, entry.term()
+                        entry_reader.getIndex(), segment->segment_id(), offset, total_size, entry_reader.getTerm()
                     );
                 }
                 break;
@@ -202,14 +209,21 @@ Result<void> WAL::ReplaySegment(Segment* segment) {
                         break;
 
                     Entry entry;
-                    if (entry.ParseFromArray(payload.data() + pos, entry_len)) {
-                        if (entry.index() >= first_index_) {
+                    try {
+                        const ::capnp::word* words = reinterpret_cast<const ::capnp::word*>(payload.data() + pos);
+                        size_t word_count = entry_len / sizeof(::capnp::word);
+                        entry = Entry::parseFromWords(kj::ArrayPtr<const ::capnp::word>(words, word_count));
+
+                        auto entry_reader = entry.reader();
+                        if (entry_reader.getIndex() >= first_index_) {
                             // For batch, we store the batch offset but track individual entries
                             index_.Insert(
-                                entry.index(), segment->segment_id(), offset, total_size,
-                                entry.term()
+                                entry_reader.getIndex(), segment->segment_id(), offset, total_size,
+                                entry_reader.getTerm()
                             );
                         }
+                    } catch (...) {
+                        // Skip invalid entry
                     }
                     pos += entry_len;
                 }
@@ -217,11 +231,18 @@ Result<void> WAL::ReplaySegment(Segment* segment) {
             }
             case RecordType::HardState: {
                 HardState hs;
-                if (hs.ParseFromArray(parser.Payload().data(), parser.Payload().size())) {
+                try {
+                    auto payload = parser.Payload();
+                    const ::capnp::word* words = reinterpret_cast<const ::capnp::word*>(payload.data());
+                    size_t word_count = payload.size() / sizeof(::capnp::word);
+                    hs = HardState::parseFromWords(kj::ArrayPtr<const ::capnp::word>(words, word_count));
+
                     // Only update if this is newer
-                    if (hs.term() >= hard_state_.term()) {
-                        hard_state_ = hs;
+                    if (hs.reader().getTerm() >= hard_state_.reader().getTerm()) {
+                        hard_state_ = std::move(hs);
                     }
+                } catch (...) {
+                    // Skip invalid hard state
                 }
                 break;
             }
@@ -242,35 +263,38 @@ Result<void> WAL::Append(std::span<const Entry> entries) {
 
     // Verify entries are continuous
     uint64_t expected_index = LastIndexUnlocked() + 1;
-    if (entries.front().index() != expected_index) {
+    auto first_entry_reader = entries.front().reader();
+    if (first_entry_reader.getIndex() != expected_index) {
         // Handle truncation case - entries may be replacing existing ones
-        if (entries.front().index() < expected_index && entries.front().index() >= first_index_) {
+        if (first_entry_reader.getIndex() < expected_index && first_entry_reader.getIndex() >= first_index_) {
             // Truncate the index
-            index_.TruncateFrom(entries.front().index());
-        } else if (entries.front().index() != expected_index) {
+            index_.TruncateFrom(first_entry_reader.getIndex());
+        } else if (first_entry_reader.getIndex() != expected_index) {
             return RaftError(
                 FatalError{fmt::format(
                     "non-continuous entries: expected {}, got {}", expected_index,
-                    entries.front().index()
+                    first_entry_reader.getIndex()
                 )}
             );
         }
     }
 
     // Ensure we have a current segment
-    auto segment_result = segment_manager_->GetCurrentSegment(entries.front().index());
+    auto segment_result = segment_manager_->GetCurrentSegment(first_entry_reader.getIndex());
     if (!segment_result) {
         return segment_result.error();
     }
 
     // Write entries
     for (const auto& entry : entries) {
-        std::string serialized = entry.SerializeAsString();
+        auto serialized = entry.serializeAsBytes();
 
         RecordBuilder builder;
         builder.SetType(RecordType::Entry);
-        builder.SetPayload(serialized);
+        builder.SetPayload(std::string(reinterpret_cast<const char*>(serialized.data()), serialized.size()));
         auto record = builder.Build();
+
+        auto entry_reader = entry.reader();
 
         // Check if we need to roll segment
         auto* segment = *segment_result;
@@ -280,7 +304,7 @@ Result<void> WAL::Append(std::span<const Entry> entries) {
                 return flush_result;
             }
 
-            segment_result = segment_manager_->RollToNewSegment(entry.index());
+            segment_result = segment_manager_->RollToNewSegment(entry_reader.getIndex());
             if (!segment_result) {
                 return segment_result.error();
             }
@@ -296,8 +320,8 @@ Result<void> WAL::Append(std::span<const Entry> entries) {
 
         // Update index
         index_.Insert(
-            entry.index(), segment->segment_id(), record_offset,
-            static_cast<uint32_t>(record.size()), entry.term()
+            entry_reader.getIndex(), segment->segment_id(), record_offset,
+            static_cast<uint32_t>(record.size()), entry_reader.getTerm()
         );
     }
 
@@ -315,13 +339,13 @@ Result<void> WAL::Append(std::span<const Entry> entries) {
 Result<void> WAL::SaveHardState(const HardState& hs) {
     std::unique_lock lock(mutex_);
 
-    hard_state_ = hs;
+    hard_state_ = hs.clone();
 
     // Write hard state record to WAL
-    std::string serialized = hs.SerializeAsString();
+    auto serialized = hs.serializeAsBytes();
     RecordBuilder builder;
     builder.SetType(RecordType::HardState);
-    builder.SetPayload(serialized);
+    builder.SetPayload(std::string(reinterpret_cast<const char*>(serialized.data()), serialized.size()));
     auto record = builder.Build();
 
     auto segment_result = segment_manager_->GetCurrentSegment(first_index_);
@@ -336,8 +360,8 @@ Result<void> WAL::SaveHardState(const HardState& hs) {
 
     // Also save to metadata file for durability
     WALMetadata meta;
-    meta.hard_state = hard_state_;
-    meta.conf_state = conf_state_;
+    meta.hard_state = hard_state_.clone();
+    meta.conf_state = conf_state_.clone();
     meta.first_index = first_index_;
     meta.snapshot_index = snapshot_index_;
     meta.snapshot_term = snapshot_term_;
@@ -404,11 +428,16 @@ Result<std::vector<Entry>> WAL::ReadEntries(
         }
 
         Entry entry;
-        if (!entry.ParseFromArray(parser.Payload().data(), parser.Payload().size())) {
+        try {
+            auto payload = parser.Payload();
+            const ::capnp::word* words = reinterpret_cast<const ::capnp::word*>(payload.data());
+            size_t word_count = payload.size() / sizeof(::capnp::word);
+            entry = Entry::parseFromWords(kj::ArrayPtr<const ::capnp::word>(words, word_count));
+        } catch (...) {
             return RaftError(StorageErrorCode::EntryParseError);
         }
 
-        uint64_t entry_size = entry.ByteSizeLong();
+        uint64_t entry_size = parser.Payload().size();
         result.push_back(std::move(entry));
         total_size += entry_size;
 
@@ -515,8 +544,8 @@ Result<void> WAL::Compact(uint64_t compact_index) {
 
     // Save metadata first (for crash safety)
     WALMetadata meta;
-    meta.hard_state = hard_state_;
-    meta.conf_state = conf_state_;
+    meta.hard_state = hard_state_.clone();
+    meta.conf_state = conf_state_.clone();
     meta.first_index = first_index_;
     meta.snapshot_index = snapshot_index_;
     meta.snapshot_term = snapshot_term_;
@@ -544,16 +573,46 @@ Result<void> WAL::Compact(uint64_t compact_index) {
 Result<void> WAL::ApplySnapshot(const Snapshot& snapshot) {
     std::unique_lock lock(mutex_);
 
-    const auto& meta = snapshot.metadata();
+    auto snap_reader = snapshot.reader();
+    const auto& meta = snap_reader.getMetadata();
 
-    if (meta.index() <= snapshot_index_) {
+    if (meta.getIndex() <= snapshot_index_) {
         return RaftError(StorageErrorCode::SnapshotOutOfDate);
     }
 
     // Update state
-    snapshot_index_ = meta.index();
-    snapshot_term_ = meta.term();
-    conf_state_ = meta.conf_state();
+    snapshot_index_ = meta.getIndex();
+    snapshot_term_ = meta.getTerm();
+
+    // Copy ConfState from snapshot metadata
+    auto conf_src = meta.getConfState();
+    auto conf_builder = conf_state_.builder();
+
+    auto voters_src = conf_src.getVoters();
+    auto voters_dst = conf_builder.initVoters(voters_src.size());
+    for (size_t i = 0; i < voters_src.size(); ++i) {
+        voters_dst.set(i, voters_src[i]);
+    }
+
+    auto learners_src = conf_src.getLearners();
+    auto learners_dst = conf_builder.initLearners(learners_src.size());
+    for (size_t i = 0; i < learners_src.size(); ++i) {
+        learners_dst.set(i, learners_src[i]);
+    }
+
+    auto voters_out_src = conf_src.getVotersOutgoing();
+    auto voters_out_dst = conf_builder.initVotersOutgoing(voters_out_src.size());
+    for (size_t i = 0; i < voters_out_src.size(); ++i) {
+        voters_out_dst.set(i, voters_out_src[i]);
+    }
+
+    auto learners_next_src = conf_src.getLearnersNext();
+    auto learners_next_dst = conf_builder.initLearnersNext(learners_next_src.size());
+    for (size_t i = 0; i < learners_next_src.size(); ++i) {
+        learners_next_dst.set(i, learners_next_src[i]);
+    }
+
+    conf_builder.setAutoLeave(conf_src.getAutoLeave());
 
     // Clear entries and reset first_index
     index_.Clear();
@@ -562,8 +621,8 @@ Result<void> WAL::ApplySnapshot(const Snapshot& snapshot) {
 
     // Save metadata
     WALMetadata wal_meta;
-    wal_meta.hard_state = hard_state_;
-    wal_meta.conf_state = conf_state_;
+    wal_meta.hard_state = hard_state_.clone();
+    wal_meta.conf_state = conf_state_.clone();
     wal_meta.first_index = first_index_;
     wal_meta.snapshot_index = snapshot_index_;
     wal_meta.snapshot_term = snapshot_term_;

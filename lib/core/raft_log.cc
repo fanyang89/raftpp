@@ -65,15 +65,16 @@ uint64_t RaftLog::FirstIndex() const {
 
 uint64_t RaftLog::FindConflict(const std::vector<Entry>& entries) const {
     for (const auto& e : entries) {
-        if (!MatchTerm(e.index(), e.term())) {
-            if (e.index() <= LastIndex()) {
+        auto e_reader = e.reader();
+        if (!MatchTerm(e_reader.getIndex(), e_reader.getTerm())) {
+            if (e_reader.getIndex() <= LastIndex()) {
                 SPDLOG_INFO(
                     "found conflict at index({}), existing_term={}, "
                     "conflicting_term={}",
-                    e.index(), UnwrapOr(Term(e.index()), uint64_t{0}), e.term()
+                    e_reader.getIndex(), UnwrapOr(Term(e_reader.getIndex()), uint64_t{0}), e_reader.getTerm()
                 );
             }
-            return e.index();
+            return e_reader.getIndex();
         }
     }
 
@@ -90,8 +91,9 @@ bool RaftLog::MatchTerm(const uint64_t idx, const uint64_t term) const {
 bool RaftLog::MaybePersist(const uint64_t index, const uint64_t term) {
     uint64_t first_update_index;
 
-    if (const auto snapshot = unstable_.snapshot()) {
-        first_update_index = snapshot->get().metadata().index();
+    if (const auto& snapshot = unstable_.snapshot()) {
+        auto meta = snapshot->get().reader().getMetadata();
+        first_update_index = meta.getIndex();
     } else {
         first_update_index = unstable_.offset();
     }
@@ -152,7 +154,12 @@ Result<RaftLog::MaybeAppendResult> RaftLog::MaybeAppend(
         );
     } else {
         const size_t start = conflict_idx - (idx + 1);
-        std::ignore = Append({entries.begin() + start, entries.end()});
+        std::vector<Entry> to_append;
+        to_append.reserve(entries.size() - start);
+        for (size_t i = start; i < entries.size(); ++i) {
+            to_append.push_back(entries[i].clone());
+        }
+        std::ignore = Append(to_append);
 
         // persisted should be decreased because entries are changed
         persisted_ = std::min(persisted_, conflict_idx - 1);
@@ -168,7 +175,8 @@ uint64_t RaftLog::Append(const std::vector<Entry>& entries) {
         return LastIndex();
     }
 
-    uint64_t after = entries.front().index() - 1;
+    auto first_reader = entries.front().reader();
+    uint64_t after = first_reader.getIndex() - 1;
     if (after < committed_) {
         // This should not happen in normal circumstances, but we adjust for robustness
         SPDLOG_WARN(
@@ -239,8 +247,9 @@ Result<std::vector<Entry>, RaftError> RaftLog::Slice(
 
     if (low < unstable_.offset()) {
         const auto unstable_high = std::min(high, unstable_.offset());
-        if (const auto r = store_->Entries(low, unstable_high, max_size, context)) {
-            entries = std::move(*r);
+        auto r = store_->Entries(low, unstable_high, max_size, context);
+        if (r) {
+            entries = std::move(r).value();
             if (entries.size() < unstable_high - low) {
                 return entries;
             }
@@ -262,10 +271,10 @@ Result<std::vector<Entry>, RaftError> RaftLog::Slice(
     if (high > unstable_.offset()) {
         const auto offset = unstable_.offset();
         auto unstable = unstable_.Slice(std::max(low, offset), high);
-        entries.insert(
-            entries.end(), std::make_move_iterator(unstable.begin()),
-            std::make_move_iterator(unstable.end())
-        );
+        // Clone entries from the span since Entry is move-only
+        for (const auto& e : unstable) {
+            entries.push_back(e.clone());
+        }
     }
 
     LimitSize(entries, max_size);
@@ -284,9 +293,9 @@ Result<std::vector<Entry>> RaftLog::GetEntries(
 
 std::vector<Entry> RaftLog::AllEntries() {
     const auto first_index = FirstIndex();
-    const auto r = GetEntries(first_index, std::nullopt, GetEntriesContext::Empty(false));
+    auto r = GetEntries(first_index, std::nullopt, GetEntriesContext::Empty(false));
     if (r) {
-        return *r;
+        return std::move(r).value();
     }
     if (r.error().Is(StorageErrorCode::Compacted)) {
         return AllEntries();
@@ -339,9 +348,10 @@ std::pair<uint64_t, std::optional<uint64_t>> RaftLog::FindConflictByTerm(
 }
 
 Result<Snapshot> RaftLog::GetSnapshot(const uint64_t request_index, const uint64_t to) {
-    if (const auto r = unstable_.snapshot()) {
-        if (r->get().metadata().index() >= request_index) {
-            return *r;
+    if (const auto& r = unstable_.snapshot()) {
+        auto meta = r->get().reader().getMetadata();
+        if (meta.getIndex() >= request_index) {
+            return r->get().clone();
         }
     }
     return store_->GetSnapshot(request_index, to);
@@ -405,7 +415,8 @@ bool RaftLog::IsUpToDate(const uint64_t last_index, const uint64_t term) const {
 
 Result<void> RaftLog::Restore(const Snapshot& snapshot) {
     SPDLOG_INFO("restore snapshot, {}", IndexTerm(snapshot));
-    const uint64_t index = snapshot.metadata().index();
+    auto meta = snapshot.reader().getMetadata();
+    const uint64_t index = meta.getIndex();
     if (index < committed_) {
         return RaftError(FatalError{fmt::format("index {} < committed_ {}", index, committed_)});
     }
@@ -440,10 +451,11 @@ std::optional<std::vector<Entry>> RaftLog::NextEntriesSince(
     if (high > offset) {
         GetEntriesContext ctx;
         ctx.what = GetEntriesFor::GenReady;
-        if (const auto r = Slice(offset, high, max_size, ctx); !r) {
+        auto r = Slice(offset, high, max_size, ctx);
+        if (!r) {
             PANIC("{}", r.error());
         } else {
-            return *r;
+            return std::move(r).value();
         }
     }
     return {};

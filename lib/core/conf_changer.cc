@@ -1,6 +1,6 @@
 #include "raftpp/core/conf_changer.h"
 
-#include "raftpp/core/raftpp.pb.h"
+#include "raftpp/core/types.h"
 
 namespace raftpp {
 
@@ -156,18 +156,19 @@ Result<void> ConfChanger::Apply(
     TrackerConfiguration& cfg, IncrChangeMap& prs, const std::span<const ConfChangeSingle> ccs
 ) {
     for (const auto& cc : ccs) {
-        if (cc.node_id() == 0) {
+        auto cc_reader = cc.reader();
+        if (cc_reader.getNodeId() == 0) {
             continue;
         }
-        switch (cc.change_type()) {
-            case AddNode:
-                MakeVoter(cfg, prs, cc.node_id());
+        switch (cc_reader.getChangeType()) {
+            case ConfChangeType::ADD_NODE:
+                MakeVoter(cfg, prs, cc_reader.getNodeId());
                 break;
-            case RemoveNode:
-                Remove(cfg, prs, cc.node_id());
+            case ConfChangeType::REMOVE_NODE:
+                Remove(cfg, prs, cc_reader.getNodeId());
                 break;
-            case AddLearnerNode:
-                MakeLearner(cfg, prs, cc.node_id());
+            case ConfChangeType::ADD_LEARNER_NODE:
+                MakeLearner(cfg, prs, cc_reader.getNodeId());
                 break;
             default:
                 PANIC("invalid change type");
@@ -184,7 +185,7 @@ Result<std::pair<TrackerConfiguration, MapChange>> ConfChanger::Simple(
     const ConfChangeSingle& ccs
 ) const {
     std::vector<ConfChangeSingle> v;
-    v.emplace_back(ccs);
+    v.emplace_back(ccs.clone());
     return Simple(std::span{v.begin(), v.end()});
 }
 

@@ -1,18 +1,19 @@
 #include "test_util.h"
 
 #include <absl/strings/str_join.h>
-#include <google/protobuf/util/message_differencer.h>
 #include <spdlog/fmt/fmt.h>
 
 #include "raftpp/core/raft_core.h"
-#include "raftpp/core/raftpp.pb.h"
+#include "raftpp/core/types.h"
 
 namespace raftpp {
 
 Snapshot NewSnapshot(const uint64_t index, const uint64_t term) {
     Snapshot snap;
-    snap.mutable_metadata()->set_index(index);
-    snap.mutable_metadata()->set_term(term);
+    auto builder = snap.builder();
+    auto meta_builder = builder.initMetadata();
+    meta_builder.setIndex(index);
+    meta_builder.setTerm(term);
     return snap;
 }
 
@@ -20,9 +21,12 @@ doctest::String toString(const std::vector<Entry>& entries) {
     std::vector<std::string> entries_strings;
     entries_strings.reserve(entries.size());
     for (const auto& e : entries) {
+        auto reader = e.reader();
+        auto data = reader.getData();
         entries_strings.emplace_back(
             fmt::format(
-                "Entry {{ index={} term={} size={} }}", e.index(), e.term(), e.data().size()
+                "Entry {{ index={} term={} size={} }}", reader.getIndex(), reader.getTerm(),
+                data.size()
             )
         );
     }

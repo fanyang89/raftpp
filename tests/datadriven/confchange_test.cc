@@ -36,24 +36,25 @@ static std::vector<ConfChangeSingle> ParseConfChange(const std::string& input) {
         }
 
         ConfChangeSingle cc;
+        auto builder = cc.builder();
         char op = token[0];
         std::string id_str = token.substr(1);
 
         switch (op) {
             case 'v':
-                cc.set_change_type(ConfChangeType::AddNode);
+                builder.setChangeType(ConfChangeType::ADD_NODE);
                 break;
             case 'l':
-                cc.set_change_type(ConfChangeType::AddLearnerNode);
+                builder.setChangeType(ConfChangeType::ADD_LEARNER_NODE);
                 break;
             case 'r':
-                cc.set_change_type(ConfChangeType::RemoveNode);
+                builder.setChangeType(ConfChangeType::REMOVE_NODE);
                 break;
             default:
                 throw std::runtime_error("unknown token " + token);
         }
 
-        cc.set_node_id(std::stoull(id_str));
+        builder.setNodeId(std::stoull(id_str));
         result.push_back(cc);
     }
 

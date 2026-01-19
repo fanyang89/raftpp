@@ -12,7 +12,6 @@ raftpp is a C++ implementation of the RAFT consensus algorithm. It requires C++2
 task cmake    # Configure CMake with dev preset
 task build    # Build test targets
 task test     # Build and run all tests
-task pb       # Regenerate protobuf files from proto/raftpp.proto
 task fmt      # Format code with clang-format
 ```
 
@@ -72,7 +71,7 @@ cmake --preset=dev -DRAFTPP_SANITIZE=address
 
 8. **RPC Transport** (`include/raftpp/raftor/rpc/`) - Network layer with pluggable transports:
    - `Transport` - Abstract interface for message passing
-   - `RpclibTransport` - Implementation using rpclib (msgpack-RPC)
+   - `CapnpTransport` - Implementation using Cap'n Proto RPC
 
 ### Key Patterns
 
@@ -95,7 +94,7 @@ if (const auto result = operation(); !result) {
 - `include/raftpp/rpc/` - Transport layer headers
 - `include/raftpp/raftor/` - High-level orchestration headers
 - `lib/` - Implementation files (.cc)
-- `proto/` - Protobuf definitions and generated code
+- `proto/` - Cap'n Proto schema definitions
 - `tests/` - Unit tests using doctest
 - `tests/datadriven/` - Data-driven tests with text-based DSL (testdata/\*.txt)
 - `tests/harness/` - Test support infrastructure (network simulation, utilities)

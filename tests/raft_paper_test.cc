@@ -18,13 +18,15 @@ constexpr const char* SOME_DATA = "somedata";
 
 // Accept an append message and create a response.
 Message AcceptAndReply(const Message& m) {
-    CHECK_EQ(m.msg_type(), MsgAppend);
+    auto reader = m.reader();
+    CHECK_EQ(reader.getMsgType(), MessageType::MSG_APPEND);
     Message reply;
-    reply.set_msg_type(MsgAppendResponse);
-    reply.set_from(m.to());
-    reply.set_to(m.from());
-    reply.set_term(m.term());
-    reply.set_index(m.index() + m.entries_size());
+    auto builder = reply.builder();
+    builder.setMsgType(MessageType::MSG_APPEND_RESPONSE);
+    builder.setFrom(reader.getTo());
+    builder.setTo(reader.getFrom());
+    builder.setTerm(reader.getTerm());
+    builder.setIndex(reader.getIndex() + reader.getEntries().size());
     return reply;
 }
 
@@ -36,9 +38,10 @@ void CommitNoopEntry(Interface& r, MemoryStorage& s) {
     // Simulate the response of MsgAppend
     auto msgs = r.ReadMessages();
     for (const auto& m : msgs) {
-        CHECK_EQ(m.msg_type(), MsgAppend);
-        CHECK_EQ(m.entries_size(), 1);
-        CHECK(m.entries(0).data().empty());
+        auto reader = m.reader();
+        CHECK_EQ(reader.getMsgType(), MessageType::MSG_APPEND);
+        CHECK_EQ(reader.getEntries().size(), 1);
+        CHECK(reader.getEntries()[0].getData().size() == 0);
         auto reply = AcceptAndReply(m);
         r.Step(reply);
     }
@@ -75,8 +78,9 @@ void TestUpdateTermFromMessage(StateRole state) {
     }
 
     Message m;
-    m.set_msg_type(MsgAppend);
-    m.set_term(2);
+    auto builder = m.builder();
+    builder.setMsgType(MessageType::MSG_APPEND);
+    builder.setTerm(2);
     r.Step(m);
 
     CHECK_EQ(r->term(), 2);
@@ -112,14 +116,15 @@ void TestNonleaderStartElection(StateRole state) {
 
     auto msgs = r.ReadMessages();
     std::sort(msgs.begin(), msgs.end(), [](const Message& a, const Message& b) {
-        return a.to() < b.to();
+        return a.reader().getTo() < b.reader().getTo();
     });
 
     CHECK_EQ(msgs.size(), 2);
     for (size_t i = 0; i < msgs.size(); ++i) {
-        CHECK_EQ(msgs[i].msg_type(), MsgRequestVote);
-        CHECK_EQ(msgs[i].to(), i + 2);
-        CHECK_EQ(msgs[i].term(), 2);
+        auto reader = msgs[i].reader();
+        CHECK_EQ(reader.getMsgType(), MessageType::MSG_REQUEST_VOTE);
+        CHECK_EQ(reader.getTo(), i + 2);
+        CHECK_EQ(reader.getTerm(), 2);
     }
 }
 
@@ -254,13 +259,14 @@ TEST_CASE("raft paper: leader bcast beat") {
 
     auto msgs = r.ReadMessages();
     std::sort(msgs.begin(), msgs.end(), [](const Message& a, const Message& b) {
-        return a.to() < b.to();
+        return a.reader().getTo() < b.reader().getTo();
     });
 
     CHECK_EQ(msgs.size(), 2);
     for (const auto& m : msgs) {
-        CHECK_EQ(m.msg_type(), MsgHeartbeat);
-        CHECK_EQ(m.term(), 1);
+        auto reader = m.reader();
+        CHECK_EQ(reader.getMsgType(), MessageType::MSG_HEARTBEAT);
+        CHECK_EQ(reader.getTerm(), 1);
     }
 }
 
@@ -309,19 +315,17 @@ TEST_CASE("raft paper: leader election in one round rpc") {
         auto storage = std::make_shared<MemoryStorage>();
         auto r = NewTestRaft(1, peers, 10, 1, storage);
 
-        Message hup;
-        hup.set_msg_type(MsgHup);
-        hup.set_from(1);
-        hup.set_to(1);
+        Message hup = NewMessage(1, 1, MessageType::MSG_HUP);
         r.Step(hup);
 
         for (const auto& [id, vote] : votes) {
             Message m;
-            m.set_msg_type(MsgRequestVoteResponse);
-            m.set_from(id);
-            m.set_to(1);
-            m.set_term(r->term());
-            m.set_reject(!vote);
+            auto builder = m.builder();
+            builder.setMsgType(MessageType::MSG_REQUEST_VOTE_RESPONSE);
+            builder.setFrom(id);
+            builder.setTo(1);
+            builder.setTerm(r->term());
+            builder.setReject(!vote);
             r.Step(m);
         }
 
@@ -347,19 +351,21 @@ TEST_CASE("raft paper: follower vote") {
 
         auto storage = std::make_shared<MemoryStorage>();
         auto r = NewTestRaft(1, {1, 2, 3}, 10, 1, storage);
-        r->LoadState(MakeHardState(1, 0, vote));
+        r->LoadState(MakeHardState(1, vote, 0));
 
         Message m;
-        m.set_msg_type(MsgRequestVote);
-        m.set_from(nvote);
-        m.set_to(1);
-        m.set_term(1);
+        auto builder = m.builder();
+        builder.setMsgType(MessageType::MSG_REQUEST_VOTE);
+        builder.setFrom(nvote);
+        builder.setTo(1);
+        builder.setTerm(1);
         r.Step(m);
 
         auto msgs = r.ReadMessages();
         CHECK_EQ(msgs.size(), 1);
-        CHECK_EQ(msgs[0].msg_type(), MsgRequestVoteResponse);
-        CHECK_EQ(msgs[0].reject(), wreject);
+        auto reader = msgs[0].reader();
+        CHECK_EQ(reader.getMsgType(), MessageType::MSG_REQUEST_VOTE_RESPONSE);
+        CHECK_EQ(reader.getReject(), wreject);
     }
 }
 
@@ -367,18 +373,16 @@ TEST_CASE("raft paper: candidate fallback") {
     auto storage1 = std::make_shared<MemoryStorage>();
     auto r1 = NewTestRaft(1, {1, 2, 3}, 10, 1, storage1);
 
-    Message hup;
-    hup.set_msg_type(MsgHup);
-    hup.set_from(1);
-    hup.set_to(1);
+    Message hup = NewMessage(1, 1, MessageType::MSG_HUP);
     r1.Step(hup);
     CHECK_EQ(r1->state(), StateRole::Candidate);
 
     Message m1;
-    m1.set_msg_type(MsgAppend);
-    m1.set_from(2);
-    m1.set_to(1);
-    m1.set_term(2);
+    auto m1_builder = m1.builder();
+    m1_builder.setMsgType(MessageType::MSG_APPEND);
+    m1_builder.setFrom(2);
+    m1_builder.setTo(1);
+    m1_builder.setTerm(2);
     r1.Step(m1);
     CHECK_EQ(r1->state(), StateRole::Follower);
     CHECK_EQ(r1->term(), 2);
@@ -389,10 +393,11 @@ TEST_CASE("raft paper: candidate fallback") {
     CHECK_EQ(r2->state(), StateRole::Candidate);
 
     Message m2;
-    m2.set_msg_type(MsgAppend);
-    m2.set_from(2);
-    m2.set_to(1);
-    m2.set_term(3);
+    auto m2_builder = m2.builder();
+    m2_builder.setMsgType(MessageType::MSG_APPEND);
+    m2_builder.setFrom(2);
+    m2_builder.setTo(1);
+    m2_builder.setTerm(3);
     r2.Step(m2);
     CHECK_EQ(r2->state(), StateRole::Follower);
     CHECK_EQ(r2->term(), 3);
@@ -425,12 +430,9 @@ TEST_CASE("raft paper: leader start replication") {
 
     uint64_t li = r->raft_log().LastIndex();
 
-    Message propose;
-    propose.set_msg_type(MsgPropose);
-    propose.set_from(1);
-    propose.set_to(1);
-    auto* e = propose.add_entries();
-    e->set_data(SOME_DATA);
+    Entry entry = NewEntry(0, 0, SOME_DATA);
+    Message propose =
+        NewMessageWithEntries(1, 1, MessageType::MSG_PROPOSE, std::vector<Entry>{entry});
     r.Step(propose);
 
     CHECK_EQ(r->raft_log().LastIndex(), li + 1);
@@ -438,16 +440,18 @@ TEST_CASE("raft paper: leader start replication") {
 
     auto msgs = r.ReadMessages();
     std::sort(msgs.begin(), msgs.end(), [](const Message& a, const Message& b) {
-        return a.to() < b.to();
+        return a.reader().getTo() < b.reader().getTo();
     });
 
     CHECK_EQ(msgs.size(), 2);
     for (const auto& m : msgs) {
-        CHECK_EQ(m.msg_type(), MsgAppend);
-        CHECK_EQ(m.index(), li);
-        CHECK_EQ(m.log_term(), 1);
-        CHECK_EQ(m.entries_size(), 1);
-        CHECK_EQ(m.entries(0).data(), SOME_DATA);
+        auto reader = m.reader();
+        CHECK_EQ(reader.getMsgType(), MessageType::MSG_APPEND);
+        CHECK_EQ(reader.getIndex(), li);
+        CHECK_EQ(reader.getLogTerm(), 1);
+        CHECK_EQ(reader.getEntries().size(), 1);
+        auto data = reader.getEntries()[0].getData();
+        CHECK_EQ(std::string(reinterpret_cast<const char*>(data.begin()), data.size()), SOME_DATA);
     }
 }
 
@@ -460,12 +464,9 @@ TEST_CASE("raft paper: leader commit entry") {
 
     uint64_t li = r->raft_log().LastIndex();
 
-    Message propose;
-    propose.set_msg_type(MsgPropose);
-    propose.set_from(1);
-    propose.set_to(1);
-    auto* e = propose.add_entries();
-    e->set_data(SOME_DATA);
+    Entry entry = NewEntry(0, 0, SOME_DATA);
+    Message propose =
+        NewMessageWithEntries(1, 1, MessageType::MSG_PROPOSE, std::vector<Entry>{entry});
     r.Step(propose);
     r.Persist();
 
@@ -512,17 +513,15 @@ TEST_CASE("raft paper: leader acknowledge commit") {
 
         uint64_t li = r->raft_log().LastIndex();
 
-        Message propose;
-        propose.set_msg_type(MsgPropose);
-        propose.set_from(1);
-        propose.set_to(1);
-        auto* e = propose.add_entries();
-        e->set_data(SOME_DATA);
+        Entry entry = NewEntry(0, 0, SOME_DATA);
+        Message propose =
+            NewMessageWithEntries(1, 1, MessageType::MSG_PROPOSE, std::vector<Entry>{entry});
         r.Step(propose);
         r.Persist();
 
         for (const auto& m : r.ReadMessages()) {
-            if (acceptors.count(m.to()) && acceptors.at(m.to())) {
+            auto reader = m.reader();
+            if (acceptors.count(reader.getTo()) && acceptors.at(reader.getTo())) {
                 auto reply = AcceptAndReply(m);
                 r.Step(reply);
             }
@@ -553,14 +552,16 @@ TEST_CASE("raft paper: vote request") {
         auto r = NewTestRaft(1, {1, 2, 3}, 10, 1, storage);
 
         Message m;
-        m.set_msg_type(MsgAppend);
-        m.set_from(2);
-        m.set_to(1);
-        m.set_term(wterm - 1);
-        m.set_log_term(0);
-        m.set_index(0);
-        for (const auto& e : ents) {
-            *m.add_entries() = e;
+        auto builder = m.builder();
+        builder.setMsgType(MessageType::MSG_APPEND);
+        builder.setFrom(2);
+        builder.setTo(1);
+        builder.setTerm(wterm - 1);
+        builder.setLogTerm(0);
+        builder.setIndex(0);
+        auto entries_builder = builder.initEntries(ents.size());
+        for (size_t i = 0; i < ents.size(); ++i) {
+            entries_builder.setWithCaveats(i, ents[i].reader());
         }
         r.Step(m);
         r.ReadMessages();
@@ -572,16 +573,18 @@ TEST_CASE("raft paper: vote request") {
 
         auto msgs = r.ReadMessages();
         std::sort(msgs.begin(), msgs.end(), [](const Message& a, const Message& b) {
-            return a.to() < b.to();
+            return a.reader().getTo() < b.reader().getTo();
         });
 
         CHECK_EQ(msgs.size(), 2);
         for (size_t i = 0; i < msgs.size(); ++i) {
-            CHECK_EQ(msgs[i].msg_type(), MsgRequestVote);
-            CHECK_EQ(msgs[i].to(), i + 2);
-            CHECK_EQ(msgs[i].term(), wterm);
-            CHECK_EQ(msgs[i].index(), ents.back().index());
-            CHECK_EQ(msgs[i].log_term(), ents.back().term());
+            auto reader = msgs[i].reader();
+            CHECK_EQ(reader.getMsgType(), MessageType::MSG_REQUEST_VOTE);
+            CHECK_EQ(reader.getTo(), i + 2);
+            CHECK_EQ(reader.getTerm(), wterm);
+            auto last_reader = ents.back().reader();
+            CHECK_EQ(reader.getIndex(), last_reader.getIndex());
+            CHECK_EQ(reader.getLogTerm(), last_reader.getTerm());
         }
     }
 }
@@ -616,26 +619,30 @@ TEST_CASE("raft paper: voter") {
         // Set conf_state directly instead of using ApplySnapshot
         // (ApplySnapshot would fail because first_index > snap.index)
         ConfState conf_state;
-        conf_state.add_voters(1);
-        conf_state.add_voters(2);
+        auto conf_builder = conf_state.builder();
+        auto voters = conf_builder.initVoters(2);
+        voters.set(0, 1);
+        voters.set(1, 2);
         storage->SetConfState(conf_state);
         std::ignore = storage->Append(ents);
 
         auto r = NewTestRaftWithConfig(NewTestConfig(1, 10, 1), storage);
 
         Message m;
-        m.set_msg_type(MsgRequestVote);
-        m.set_from(2);
-        m.set_to(1);
-        m.set_term(3);
-        m.set_log_term(log_term);
-        m.set_index(index);
+        auto builder = m.builder();
+        builder.setMsgType(MessageType::MSG_REQUEST_VOTE);
+        builder.setFrom(2);
+        builder.setTo(1);
+        builder.setTerm(3);
+        builder.setLogTerm(log_term);
+        builder.setIndex(index);
         r.Step(m);
 
         auto msgs = r.ReadMessages();
         CHECK_EQ(msgs.size(), 1);
-        CHECK_EQ(msgs[0].msg_type(), MsgRequestVoteResponse);
-        CHECK_EQ(msgs[0].reject(), wreject);
+        auto reader = msgs[0].reader();
+        CHECK_EQ(reader.getMsgType(), MessageType::MSG_REQUEST_VOTE_RESPONSE);
+        CHECK_EQ(reader.getReject(), wreject);
     }
 }
 
@@ -662,8 +669,10 @@ TEST_CASE("raft paper: leader only commits log from current term") {
         // Set conf_state directly instead of using ApplySnapshot
         // (ApplySnapshot would fail because first_index > snap.index)
         ConfState conf_state;
-        conf_state.add_voters(1);
-        conf_state.add_voters(2);
+        auto conf_builder = conf_state.builder();
+        auto voters = conf_builder.initVoters(2);
+        voters.set(0, 1);
+        voters.set(1, 2);
         storage->SetConfState(conf_state);
         std::ignore = storage->Append(ents);
 
@@ -676,21 +685,19 @@ TEST_CASE("raft paper: leader only commits log from current term") {
         r.ReadMessages();
 
         // Propose an entry to current term
-        Message propose;
-        propose.set_msg_type(MsgPropose);
-        propose.set_from(1);
-        propose.set_to(1);
-        auto* e = propose.add_entries();
-        e->set_data(SOME_DATA);
+        Entry entry = NewEntry(0, 0, SOME_DATA);
+        Message propose =
+            NewMessageWithEntries(1, 1, MessageType::MSG_PROPOSE, std::vector<Entry>{entry});
         r.Step(propose);
         r.Persist();
 
         Message resp;
-        resp.set_msg_type(MsgAppendResponse);
-        resp.set_from(2);
-        resp.set_to(1);
-        resp.set_term(r->term());
-        resp.set_index(index);
+        auto resp_builder = resp.builder();
+        resp_builder.setMsgType(MessageType::MSG_APPEND_RESPONSE);
+        resp_builder.setFrom(2);
+        resp_builder.setTo(1);
+        resp_builder.setTerm(r->term());
+        resp_builder.setIndex(index);
         r.Step(resp);
 
         CHECK_EQ(r->raft_log().committed(), wcommit);

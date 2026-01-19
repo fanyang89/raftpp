@@ -10,7 +10,7 @@
 #include "raftpp/core/memory_storage.h"
 #include "raftpp/core/raft.h"
 #include "raftpp/core/raft_config.h"
-#include "raftpp/core/raftpp.pb.h"
+#include "raftpp/core/types.h"
 
 namespace raftpp {
 

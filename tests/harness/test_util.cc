@@ -1,8 +1,11 @@
 #include "harness/test_util.h"
 
 #include <doctest/doctest.h>
-#include <google/protobuf/util/message_differencer.h>
 #include <spdlog/fmt/fmt.h>
+
+#include <set>
+
+#include "raftpp/core/capnp_message.h"
 
 namespace raftpp {
 
@@ -27,24 +30,52 @@ Interface NewTestRaft(
 
     // Initialize storage with peers if needed
     auto initial_state = storage->InitialState();
-    if (initial_state && !initial_state->conf_state.voters().empty()) {
-        // Already initialized
-        if (peers.empty()) {
-            throw std::runtime_error("NewTestRaft with empty peers on initialized store");
+    if (initial_state) {
+        auto conf_reader = initial_state->conf_state.reader();
+        if (conf_reader.getVoters().size() > 0) {
+            // Already initialized
+            if (peers.empty()) {
+                throw std::runtime_error("NewTestRaft with empty peers on initialized store");
+            }
+        } else if (!peers.empty()) {
+            // Initialize with conf state
+            ConfState conf_state;
+            auto conf_builder = conf_state.builder();
+            auto voters = conf_builder.initVoters(peers.size());
+            for (size_t i = 0; i < peers.size(); ++i) {
+                voters.set(i, peers[i]);
+            }
+
+            HardState hard_state;
+            auto hs_builder = hard_state.builder();
+            hs_builder.setCommit(0);
+            hs_builder.setTerm(0);
+            hs_builder.setVote(0);
+
+            RaftState raft_state;
+            raft_state.hard_state = std::move(hard_state);
+            raft_state.conf_state = std::move(conf_state);
+            storage->SetRaftState(std::move(raft_state));
         }
     } else if (!peers.empty()) {
-        // Initialize with conf state directly using SetRaftState
-        // This ensures conf_state is properly set in storage
+        // Initialize with conf state
         ConfState conf_state;
-        for (uint64_t peer_id : peers) {
-            conf_state.add_voters(peer_id);
+        auto conf_builder = conf_state.builder();
+        auto voters = conf_builder.initVoters(peers.size());
+        for (size_t i = 0; i < peers.size(); ++i) {
+            voters.set(i, peers[i]);
         }
-        // Ensure hard state has commit=0 to match raft-rs behavior
+
         HardState hard_state;
-        hard_state.set_commit(0);
-        hard_state.set_term(0);
-        hard_state.set_vote(0);
-        storage->SetRaftState({hard_state, conf_state});
+        auto hs_builder = hard_state.builder();
+        hs_builder.setCommit(0);
+        hs_builder.setTerm(0);
+        hs_builder.setVote(0);
+
+        RaftState raft_state;
+        raft_state.hard_state = std::move(hard_state);
+        raft_state.conf_state = std::move(conf_state);
+        storage->SetRaftState(std::move(raft_state));
     }
 
     return NewTestRaftWithConfig(config, storage);
@@ -58,21 +89,51 @@ Interface NewTestRaftWithPrevote(
     config.pre_vote = pre_vote;
 
     auto initial_state = storage->InitialState();
-    if (initial_state && !initial_state->conf_state.voters().empty()) {
-        if (peers.empty()) {
-            throw std::runtime_error("NewTestRaft with empty peers on initialized store");
+    if (initial_state) {
+        auto conf_reader = initial_state->conf_state.reader();
+        if (conf_reader.getVoters().size() > 0) {
+            if (peers.empty()) {
+                throw std::runtime_error("NewTestRaft with empty peers on initialized store");
+            }
+        } else if (!peers.empty()) {
+            // Initialize with conf state
+            ConfState conf_state;
+            auto conf_builder = conf_state.builder();
+            auto voters = conf_builder.initVoters(peers.size());
+            for (size_t i = 0; i < peers.size(); ++i) {
+                voters.set(i, peers[i]);
+            }
+
+            HardState hard_state;
+            auto hs_builder = hard_state.builder();
+            hs_builder.setCommit(0);
+            hs_builder.setTerm(0);
+            hs_builder.setVote(0);
+
+            RaftState raft_state;
+            raft_state.hard_state = std::move(hard_state);
+            raft_state.conf_state = std::move(conf_state);
+            storage->SetRaftState(std::move(raft_state));
         }
     } else if (!peers.empty()) {
-        // Initialize with conf state directly using SetRaftState
+        // Initialize with conf state
         ConfState conf_state;
-        for (uint64_t peer_id : peers) {
-            conf_state.add_voters(peer_id);
+        auto conf_builder = conf_state.builder();
+        auto voters = conf_builder.initVoters(peers.size());
+        for (size_t i = 0; i < peers.size(); ++i) {
+            voters.set(i, peers[i]);
         }
+
         HardState hard_state;
-        hard_state.set_commit(0);
-        hard_state.set_term(0);
-        hard_state.set_vote(0);
-        storage->SetRaftState({hard_state, conf_state});
+        auto hs_builder = hard_state.builder();
+        hs_builder.setCommit(0);
+        hs_builder.setTerm(0);
+        hs_builder.setVote(0);
+
+        RaftState raft_state;
+        raft_state.hard_state = std::move(hard_state);
+        raft_state.conf_state = std::move(conf_state);
+        storage->SetRaftState(std::move(raft_state));
     }
 
     return NewTestRaftWithConfig(config, storage);
@@ -85,21 +146,51 @@ Interface NewTestRaftWithLogs(
     Config config = NewTestConfig(id, election, heartbeat);
 
     auto initial_state = storage->InitialState();
-    if (initial_state && !initial_state->conf_state.voters().empty()) {
-        if (peers.empty()) {
-            throw std::runtime_error("NewTestRaft with empty peers on initialized store");
+    if (initial_state) {
+        auto conf_reader = initial_state->conf_state.reader();
+        if (conf_reader.getVoters().size() > 0) {
+            if (peers.empty()) {
+                throw std::runtime_error("NewTestRaft with empty peers on initialized store");
+            }
+        } else if (!peers.empty()) {
+            // Initialize with conf state
+            ConfState conf_state;
+            auto conf_builder = conf_state.builder();
+            auto voters = conf_builder.initVoters(peers.size());
+            for (size_t i = 0; i < peers.size(); ++i) {
+                voters.set(i, peers[i]);
+            }
+
+            HardState hard_state;
+            auto hs_builder = hard_state.builder();
+            hs_builder.setCommit(0);
+            hs_builder.setTerm(0);
+            hs_builder.setVote(0);
+
+            RaftState raft_state;
+            raft_state.hard_state = std::move(hard_state);
+            raft_state.conf_state = std::move(conf_state);
+            storage->SetRaftState(std::move(raft_state));
         }
     } else if (!peers.empty()) {
-        // Use SetRaftState instead of ApplySnapshot
+        // Initialize with conf state
         ConfState conf_state;
-        for (uint64_t peer_id : peers) {
-            conf_state.add_voters(peer_id);
+        auto conf_builder = conf_state.builder();
+        auto voters = conf_builder.initVoters(peers.size());
+        for (size_t i = 0; i < peers.size(); ++i) {
+            voters.set(i, peers[i]);
         }
+
         HardState hard_state;
-        hard_state.set_commit(0);
-        hard_state.set_term(0);
-        hard_state.set_vote(0);
-        storage->SetRaftState({hard_state, conf_state});
+        auto hs_builder = hard_state.builder();
+        hs_builder.setCommit(0);
+        hs_builder.setTerm(0);
+        hs_builder.setVote(0);
+
+        RaftState raft_state;
+        raft_state.hard_state = std::move(hard_state);
+        raft_state.conf_state = std::move(conf_state);
+        storage->SetRaftState(std::move(raft_state));
     }
 
     storage->Append(logs).value();
@@ -120,27 +211,64 @@ Interface NewTestRaftWithConfig(const Config& config, std::shared_ptr<MemoryStor
     // If there's a snapshot, we need to apply it to owned_storage first
     if (snapshot_index > 0) {
         Snapshot snap;
-        snap.mutable_metadata()->set_index(snapshot_index);
+        auto snap_builder = snap.builder();
+        auto meta_builder = snap_builder.initMetadata();
+        meta_builder.setIndex(snapshot_index);
+
         // Get term for snapshot index from storage
         auto term = storage->Term(snapshot_index);
         if (term) {
-            snap.mutable_metadata()->set_term(term.value());
+            meta_builder.setTerm(term.value());
         }
+
         // Copy conf state
         if (initial_state) {
-            snap.mutable_metadata()->mutable_conf_state()->CopyFrom(initial_state->conf_state);
+            auto conf_src = initial_state->conf_state.reader();
+            auto conf_dst = meta_builder.initConfState();
+
+            auto voters_src = conf_src.getVoters();
+            auto voters_dst = conf_dst.initVoters(voters_src.size());
+            for (size_t i = 0; i < voters_src.size(); ++i) {
+                voters_dst.set(i, voters_src[i]);
+            }
+
+            auto learners_src = conf_src.getLearners();
+            auto learners_dst = conf_dst.initLearners(learners_src.size());
+            for (size_t i = 0; i < learners_src.size(); ++i) {
+                learners_dst.set(i, learners_src[i]);
+            }
+
+            auto voters_out_src = conf_src.getVotersOutgoing();
+            auto voters_out_dst = conf_dst.initVotersOutgoing(voters_out_src.size());
+            for (size_t i = 0; i < voters_out_src.size(); ++i) {
+                voters_out_dst.set(i, voters_out_src[i]);
+            }
+
+            auto learners_next_src = conf_src.getLearnersNext();
+            auto learners_next_dst = conf_dst.initLearnersNext(learners_next_src.size());
+            for (size_t i = 0; i < learners_next_src.size(); ++i) {
+                learners_next_dst.set(i, learners_next_src[i]);
+            }
+
+            conf_dst.setAutoLeave(conf_src.getAutoLeave());
         }
         owned_storage->ApplySnapshot(snap).value();
     }
 
     // Set raft state - ensure commit is at least snapshot_index
     if (initial_state) {
-        HardState hard_state = initial_state->hard_state;
+        HardState hard_state = initial_state->hard_state.clone();
         // Commit should never be less than snapshot index
-        if (hard_state.commit() < snapshot_index) {
-            hard_state.set_commit(snapshot_index);
+        auto hs_reader = hard_state.reader();
+        if (hs_reader.getCommit() < snapshot_index) {
+            auto hs_builder = hard_state.builder();
+            hs_builder.setCommit(snapshot_index);
         }
-        owned_storage->SetRaftState({hard_state, initial_state->conf_state});
+
+        RaftState raft_state;
+        raft_state.hard_state = std::move(hard_state);
+        raft_state.conf_state = initial_state->conf_state.clone();
+        owned_storage->SetRaftState(std::move(raft_state));
     }
 
     // Copy entries from shared storage
@@ -153,27 +281,29 @@ Interface NewTestRaftWithConfig(const Config& config, std::shared_ptr<MemoryStor
     return Interface(std::move(raft), storage);
 }
 
-HardState MakeHardState(const uint64_t term, const uint64_t commit, const uint64_t vote) {
-    HardState hs;
-    hs.set_term(term);
-    hs.set_commit(commit);
-    hs.set_vote(vote);
-    return hs;
-}
-
 SoftState MakeSoftState(const uint64_t leader_id, const StateRole state) {
     return SoftState{leader_id, state};
+}
+
+RaftState MakeRaftState(const HardState& hs, const ConfState& cs) {
+    RaftState rs;
+    rs.hard_state = hs.clone();
+    rs.conf_state = cs.clone();
+    return rs;
 }
 
 Message NewMessageWithEntries(
     const uint64_t from, const uint64_t to, const MessageType type, std::vector<Entry> entries
 ) {
     Message m;
-    m.set_msg_type(type);
-    m.set_to(to);
-    m.set_from(from);
-    for (auto& e : entries) {
-        *m.add_entries() = std::move(e);
+    auto builder = m.builder();
+    builder.setMsgType(type);
+    builder.setTo(to);
+    builder.setFrom(from);
+
+    auto entries_builder = builder.initEntries(entries.size());
+    for (size_t i = 0; i < entries.size(); ++i) {
+        entries_builder.setWithCaveats(i, entries[i].reader());
     }
     return m;
 }
@@ -189,10 +319,11 @@ Message NewMessage(const uint64_t from, const uint64_t to, const MessageType typ
 
 Entry NewEntry(const uint64_t index, const uint64_t term, const std::optional<std::string>& data) {
     Entry e;
-    e.set_index(index);
-    e.set_term(term);
+    auto builder = e.builder();
+    builder.setIndex(index);
+    builder.setTerm(term);
     if (data.has_value()) {
-        e.set_data(*data);
+        builder.setData(::capnp::Data::Reader(reinterpret_cast<const ::capnp::byte*>(data->data()), data->size()));
     }
     return e;
 }
@@ -205,50 +336,60 @@ Snapshot NewSnapshot(
     const uint64_t index, const uint64_t term, const std::vector<uint64_t>& voters
 ) {
     Snapshot snap;
-    snap.mutable_metadata()->set_index(index);
-    snap.mutable_metadata()->set_term(term);
-    snap.mutable_metadata()->mutable_conf_state()->mutable_voters()->Add(
-        voters.begin(), voters.end()
-    );
+    auto builder = snap.builder();
+    auto meta_builder = builder.initMetadata();
+    meta_builder.setIndex(index);
+    meta_builder.setTerm(term);
+
+    auto conf_builder = meta_builder.initConfState();
+    auto voters_builder = conf_builder.initVoters(voters.size());
+    for (size_t i = 0; i < voters.size(); ++i) {
+        voters_builder.set(i, voters[i]);
+    }
     return snap;
 }
 
 ConfChange MakeConfChange(const ConfChangeType type, const uint64_t node_id) {
     ConfChange cc;
-    cc.set_change_type(type);
-    cc.set_node_id(node_id);
+    auto builder = cc.builder();
+    builder.setChangeType(type);
+    builder.setNodeId(node_id);
     return cc;
 }
 
 ConfChangeV2 MakeRemoveNodeCC(const uint64_t node_id) {
     ConfChangeV2 cc;
-    auto* change = cc.add_changes();
-    change->set_change_type(ConfChangeType::RemoveNode);
-    change->set_node_id(node_id);
+    auto builder = cc.builder();
+    auto changes = builder.initChanges(1);
+    changes[0].setChangeType(ConfChangeType::REMOVE_NODE);
+    changes[0].setNodeId(node_id);
     return cc;
 }
 
 ConfChangeV2 MakeAddNodeCC(const uint64_t node_id) {
     ConfChangeV2 cc;
-    auto* change = cc.add_changes();
-    change->set_change_type(ConfChangeType::AddNode);
-    change->set_node_id(node_id);
+    auto builder = cc.builder();
+    auto changes = builder.initChanges(1);
+    changes[0].setChangeType(ConfChangeType::ADD_NODE);
+    changes[0].setNodeId(node_id);
     return cc;
 }
 
 ConfChangeV2 MakeAddLearnerCC(const uint64_t node_id) {
     ConfChangeV2 cc;
-    auto* change = cc.add_changes();
-    change->set_change_type(ConfChangeType::AddLearnerNode);
-    change->set_node_id(node_id);
+    auto builder = cc.builder();
+    auto changes = builder.initChanges(1);
+    changes[0].setChangeType(ConfChangeType::ADD_LEARNER_NODE);
+    changes[0].setNodeId(node_id);
     return cc;
 }
 
 ConfChangeV2 MakeConfChangeV2Single(const ConfChangeType type, const uint64_t node_id) {
     ConfChangeV2 cc;
-    auto* change = cc.add_changes();
-    change->set_change_type(type);
-    change->set_node_id(node_id);
+    auto builder = cc.builder();
+    auto changes = builder.initChanges(1);
+    changes[0].setChangeType(type);
+    changes[0].setNodeId(node_id);
     return cc;
 }
 
@@ -256,12 +397,18 @@ ConfState MakeConfState(
     const std::vector<uint64_t>& voters, const std::vector<uint64_t>& learners
 ) {
     ConfState cs;
-    for (uint64_t voter : voters) {
-        cs.add_voters(voter);
+    auto builder = cs.builder();
+
+    auto voters_builder = builder.initVoters(voters.size());
+    for (size_t i = 0; i < voters.size(); ++i) {
+        voters_builder.set(i, voters[i]);
     }
-    for (uint64_t learner : learners) {
-        cs.add_learners(learner);
+
+    auto learners_builder = builder.initLearners(learners.size());
+    for (size_t i = 0; i < learners.size(); ++i) {
+        learners_builder.set(i, learners[i]);
     }
+
     return cs;
 }
 
@@ -271,7 +418,8 @@ std::string LogToString(const RaftLog& raft_log) {
 
     auto entries = const_cast<RaftLog&>(raft_log).AllEntries();
     for (size_t i = 0; i < entries.size(); ++i) {
-        s += fmt::format("#{}: index={} term={}\n", i, entries[i].index(), entries[i].term());
+        auto reader = entries[i].reader();
+        s += fmt::format("#{}: index={} term={}\n", i, reader.getIndex(), reader.getTerm());
     }
     return s;
 }
@@ -288,10 +436,15 @@ Interface EntsWithConfig(
 
     // Initialize with conf state
     Snapshot snap;
-    snap.mutable_metadata()->set_index(0);
-    snap.mutable_metadata()->set_term(0);
-    for (uint64_t peer_id : peers) {
-        snap.mutable_metadata()->mutable_conf_state()->add_voters(peer_id);
+    auto snap_builder = snap.builder();
+    auto meta_builder = snap_builder.initMetadata();
+    meta_builder.setIndex(0);
+    meta_builder.setTerm(0);
+
+    auto conf_builder = meta_builder.initConfState();
+    auto voters_builder = conf_builder.initVoters(peers.size());
+    for (size_t i = 0; i < peers.size(); ++i) {
+        voters_builder.set(i, peers[i]);
     }
     storage->ApplySnapshot(snap).value();
 
@@ -299,8 +452,9 @@ Interface EntsWithConfig(
     std::vector<Entry> entries;
     for (size_t i = 0; i < terms.size(); ++i) {
         Entry e;
-        e.set_index(i + 1);
-        e.set_term(terms[i]);
+        auto e_builder = e.builder();
+        e_builder.setIndex(i + 1);
+        e_builder.setTerm(terms[i]);
         entries.push_back(std::move(e));
     }
     storage->Append(entries).value();
@@ -320,18 +474,29 @@ Interface VotedWithConfig(
 
     // Initialize with conf state
     Snapshot snap;
-    snap.mutable_metadata()->set_index(0);
-    snap.mutable_metadata()->set_term(0);
-    for (uint64_t peer_id : peers) {
-        snap.mutable_metadata()->mutable_conf_state()->add_voters(peer_id);
+    auto snap_builder = snap.builder();
+    auto meta_builder = snap_builder.initMetadata();
+    meta_builder.setIndex(0);
+    meta_builder.setTerm(0);
+
+    auto conf_builder = meta_builder.initConfState();
+    auto voters_builder = conf_builder.initVoters(peers.size());
+    for (size_t i = 0; i < peers.size(); ++i) {
+        voters_builder.set(i, peers[i]);
     }
     storage->ApplySnapshot(snap).value();
 
     // Set hard state with vote and term
     HardState hs;
-    hs.set_vote(vote);
-    hs.set_term(term);
-    storage->SetRaftState({hs, {}});
+    auto hs_builder = hs.builder();
+    hs_builder.setVote(vote);
+    hs_builder.setTerm(term);
+    hs_builder.setCommit(0);
+
+    RaftState rs;
+    rs.hard_state = std::move(hs);
+    rs.conf_state = ConfState();
+    storage->SetRaftState(std::move(rs));
 
     return NewTestRaftWithPrevote(id, {}, 5, 1, storage, pre_vote);
 }
@@ -342,11 +507,17 @@ std::vector<Entry> NextEntries(Raft& r, MemoryStorage& s) {
     // Persist unstable entries
     const auto& unstable_entries = raft_log.unstable().entries();
     if (!unstable_entries.empty()) {
-        // Make a copy BEFORE calling StableEntries, which clears them
-        std::vector<Entry> entries_to_persist(unstable_entries.begin(), unstable_entries.end());
+        // Clone entries BEFORE calling StableEntries, which clears them
+        std::vector<Entry> entries_to_persist;
+        entries_to_persist.reserve(unstable_entries.size());
+        for (const auto& entry : unstable_entries) {
+            entries_to_persist.push_back(entry.clone());
+        }
+
         const auto& last_entry = entries_to_persist.back();
-        const uint64_t last_idx = last_entry.index();
-        const uint64_t last_term = last_entry.term();
+        auto last_reader = last_entry.reader();
+        const uint64_t last_idx = last_reader.getIndex();
+        const uint64_t last_term = last_reader.getTerm();
 
         // First append to storage, then mark as stable
         s.Append(entries_to_persist).value();
@@ -354,7 +525,12 @@ std::vector<Entry> NextEntries(Raft& r, MemoryStorage& s) {
         // Also update the internal storage
         auto* internal_storage = dynamic_cast<MemoryStorage*>(raft_log.storage());
         if (internal_storage) {
-            internal_storage->Append(entries_to_persist).value();
+            std::vector<Entry> internal_copy;
+            internal_copy.reserve(entries_to_persist.size());
+            for (const auto& entry : entries_to_persist) {
+                internal_copy.push_back(entry.clone());
+            }
+            internal_storage->Append(internal_copy).value();
         }
 
         // Now mark as stable
@@ -365,7 +541,10 @@ std::vector<Entry> NextEntries(Raft& r, MemoryStorage& s) {
     // Get next entries
     auto ents = raft_log.NextEntries(std::nullopt);
     r.CommitApply(raft_log.committed());
-    return ents.value_or(std::vector<Entry>{});
+    if (ents.has_value()) {
+        return std::move(*ents);
+    }
+    return std::vector<Entry>{};
 }
 
 void CommitNoopEntry(Network& network, MemoryStorage& storage, Raft& raft) {
@@ -375,32 +554,39 @@ void CommitNoopEntry(Network& network, MemoryStorage& storage, Raft& raft) {
     // First append a no-op entry to make LastIndex > 0
     // This ensures BroadcastAppend will send entries
     Entry noop_entry;
-    noop_entry.set_term(raft.term());
-    noop_entry.set_index(raft.raft_log().LastIndex() + 1);
+    auto noop_builder = noop_entry.builder();
+    noop_builder.setTerm(raft.term());
+    noop_builder.setIndex(raft.raft_log().LastIndex() + 1);
     std::ignore = raft.AppendEntry(noop_entry);
 
     // Now broadcast append messages (which will include the no-op entry)
     raft.BroadcastAppend();
 
-    auto msgs = raft.messages();
+    auto& msgs = raft.messages();
+    std::vector<Message> msgs_copy;
+    for (auto& msg : msgs) {
+        msgs_copy.push_back(msg.clone());
+    }
     raft.messages().clear();
 
-    for (auto& msg : msgs) {
-        if (msg.msg_type() == MsgAppend) {
+    for (auto& msg : msgs_copy) {
+        auto msg_reader = msg.reader();
+        if (msg_reader.getMsgType() == MessageType::MSG_APPEND) {
             // Create response
             Message resp;
-            resp.set_msg_type(MsgAppendResponse);
-            resp.set_from(msg.to());
-            resp.set_to(msg.from());
-            resp.set_term(raft.term());
-            resp.set_index(msg.index() + msg.entries_size());
+            auto resp_builder = resp.builder();
+            resp_builder.setMsgType(MessageType::MSG_APPEND_RESPONSE);
+            resp_builder.setFrom(msg_reader.getTo());
+            resp_builder.setTo(msg_reader.getFrom());
+            resp_builder.setTerm(raft.term());
+            resp_builder.setIndex(msg_reader.getIndex() + msg_reader.getEntries().size());
 
             std::ignore = raft.Step(resp);
         }
     }
 
     // Persist and commit
-    NextEntries(raft, storage);
+    raftpp::NextEntries(raft, storage);
     raft.messages().clear();
 }
 
@@ -425,7 +611,7 @@ RawNode NewRawNode(
     config.load_state_on_startup = true;
 
     auto initial_state = storage->InitialState();
-    bool is_initialized = initial_state && !initial_state->conf_state.voters().empty();
+    bool is_initialized = initial_state && initial_state->conf_state.reader().getVoters().size() > 0;
 
     // If storage is already initialized, just use it as-is (empty peers means use existing config)
     // If storage is NOT initialized and peers is provided, initialize with snapshot
@@ -440,7 +626,7 @@ RawNode NewRawNodeWithConfig(
     const std::vector<uint64_t>& peers, const Config& config, std::shared_ptr<MemoryStorage> storage
 ) {
     auto initial_state = storage->InitialState();
-    bool is_initialized = initial_state && !initial_state->conf_state.voters().empty();
+    bool is_initialized = initial_state && initial_state->conf_state.reader().getVoters().size() > 0;
 
     // If storage is already initialized, just use it as-is (empty peers means use existing config)
     // If storage is NOT initialized and peers is provided, initialize with snapshot
@@ -458,16 +644,15 @@ bool operator==(const std::optional<HardState>& e1, const std::optional<HardStat
     if (!e1.has_value() && !e2.has_value()) {
         return true;
     }
-    // Use MessageDifferencer directly to avoid recursive call
-    return google::protobuf::util::MessageDifferencer::Equals(*e1, *e2);
+    return messagesEqual<capnp::HardState>(e1->reader(), e2->reader());
 }
 
 bool operator==(const Snapshot& e1, const Snapshot& e2) {
-    return google::protobuf::util::MessageDifferencer::Equals(e1, e2);
+    return messagesEqual<capnp::Snapshot>(e1.reader(), e2.reader());
 }
 
 bool operator==(const Entry& e1, const Entry& e2) {
-    return google::protobuf::util::MessageDifferencer::Equals(e1, e2);
+    return messagesEqual<capnp::Entry>(e1.reader(), e2.reader());
 }
 
 bool operator==(const std::vector<Entry>& e1, const std::vector<Entry>& e2) {
@@ -494,7 +679,7 @@ bool operator==(Result<Snapshot> e1, Result<Snapshot> e2) {
 }
 
 bool operator==(const HardState& e1, const HardState& e2) {
-    return google::protobuf::util::MessageDifferencer::Equals(e1, e2);
+    return messagesEqual<capnp::HardState>(e1.reader(), e2.reader());
 }
 
 bool operator==(const ReadState& e1, const ReadState& e2) {
@@ -514,14 +699,45 @@ bool operator==(const std::vector<ReadState>& e1, const std::vector<ReadState>& 
 }
 
 bool operator==(const ConfState& e1, const ConfState& e2) {
-    // Use MessageDifferencer with TreatAsSet for repeated fields
-    // because the order of voters/learners may differ
-    google::protobuf::util::MessageDifferencer diff;
-    diff.TreatAsSet(ConfState::descriptor()->FindFieldByName("voters"));
-    diff.TreatAsSet(ConfState::descriptor()->FindFieldByName("learners"));
-    diff.TreatAsSet(ConfState::descriptor()->FindFieldByName("voters_outgoing"));
-    diff.TreatAsSet(ConfState::descriptor()->FindFieldByName("learners_next"));
-    return diff.Compare(e1, e2);
+    // Compare as sets because the order of voters/learners may differ
+    auto r1 = e1.reader();
+    auto r2 = e2.reader();
+
+    // Helper to convert Cap'n Proto list to set
+    auto toSet = [](auto list) {
+        std::set<uint64_t> result;
+        for (auto item : list) {
+            result.insert(item);
+        }
+        return result;
+    };
+
+    // Compare voters
+    if (toSet(r1.getVoters()) != toSet(r2.getVoters())) {
+        return false;
+    }
+
+    // Compare learners
+    if (toSet(r1.getLearners()) != toSet(r2.getLearners())) {
+        return false;
+    }
+
+    // Compare voters_outgoing
+    if (toSet(r1.getVotersOutgoing()) != toSet(r2.getVotersOutgoing())) {
+        return false;
+    }
+
+    // Compare learners_next
+    if (toSet(r1.getLearnersNext()) != toSet(r2.getLearnersNext())) {
+        return false;
+    }
+
+    // Compare auto_leave
+    if (r1.getAutoLeave() != r2.getAutoLeave()) {
+        return false;
+    }
+
+    return true;
 }
 
 void MustCmpReady(
@@ -536,8 +752,12 @@ void MustCmpReady(
     CHECK_EQ(rd.light.committed_entries, committed_entries);
     CHECK_EQ(rd.read_states.empty(), true);
 
-    Snapshot default_snap;
-    CHECK_EQ(rd.snapshot, snapshot.value_or(default_snap));
+    if (snapshot.has_value()) {
+        CHECK_EQ(rd.snapshot, *snapshot);
+    } else {
+        Snapshot default_snap;
+        CHECK_EQ(rd.snapshot, default_snap);
+    }
 
     CHECK_EQ(rd.Messages().empty(), msg_is_empty);
     CHECK_EQ(rd.light.messages.empty(), persisted_msg_is_empty);
@@ -550,19 +770,29 @@ ConfState MakeConfStateV2(
     const bool auto_leave
 ) {
     ConfState cs;
-    for (uint64_t voter : voters) {
-        cs.add_voters(voter);
+    auto builder = cs.builder();
+
+    auto voters_builder = builder.initVoters(voters.size());
+    for (size_t i = 0; i < voters.size(); ++i) {
+        voters_builder.set(i, voters[i]);
     }
-    for (uint64_t learner : learners) {
-        cs.add_learners(learner);
+
+    auto learners_builder = builder.initLearners(learners.size());
+    for (size_t i = 0; i < learners.size(); ++i) {
+        learners_builder.set(i, learners[i]);
     }
-    for (uint64_t voter : voters_outgoing) {
-        cs.add_voters_outgoing(voter);
+
+    auto voters_out_builder = builder.initVotersOutgoing(voters_outgoing.size());
+    for (size_t i = 0; i < voters_outgoing.size(); ++i) {
+        voters_out_builder.set(i, voters_outgoing[i]);
     }
-    for (uint64_t learner : learners_next) {
-        cs.add_learners_next(learner);
+
+    auto learners_next_builder = builder.initLearnersNext(learners_next.size());
+    for (size_t i = 0; i < learners_next.size(); ++i) {
+        learners_next_builder.set(i, learners_next[i]);
     }
-    cs.set_auto_leave(auto_leave);
+
+    builder.setAutoLeave(auto_leave);
     return cs;
 }
 

@@ -3,13 +3,28 @@
 #include <expected>
 
 #include "error.h"
-#include "raftpp/core/raftpp.pb.h"
+#include "types.h"
 
 namespace raftpp {
 
 struct RaftState {
     HardState hard_state;
     ConfState conf_state;
+
+    // Moveable but not copyable to avoid large copies
+    RaftState() = default;
+    RaftState(const RaftState&) = delete;
+    RaftState& operator=(const RaftState&) = delete;
+    RaftState(RaftState&&) noexcept = default;
+    RaftState& operator=(RaftState&&) noexcept = default;
+
+    // Deep clone
+    [[nodiscard]] RaftState clone() const {
+        RaftState rs;
+        rs.hard_state = hard_state.clone();
+        rs.conf_state = conf_state.clone();
+        return rs;
+    }
 };
 
 enum class GetEntriesFor {

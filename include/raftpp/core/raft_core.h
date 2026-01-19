@@ -6,7 +6,7 @@
 #include "progress.h"
 #include "raft_config.h"
 #include "raft_log.h"
-#include "raftpp/core/raftpp.pb.h"
+#include "types.h"
 #include "storage.h"
 
 namespace raftpp {

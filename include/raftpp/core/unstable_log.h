@@ -3,7 +3,7 @@
 #include <optional>
 #include <vector>
 
-#include "raftpp/core/raftpp.pb.h"
+#include "types.h"
 
 namespace raftpp {
 
@@ -11,8 +11,8 @@ class Unstable {
   public:
     explicit Unstable(uint64_t offset);
     Unstable(
-        const std::vector<Entry>& entries, size_t entries_size, uint64_t offset,
-        const std::optional<Snapshot>& snapshot
+        std::vector<Entry>&& entries, size_t entries_size, uint64_t offset,
+        std::optional<Snapshot>&& snapshot
     );
 
     [[nodiscard]] std::optional<uint64_t> MaybeFirstIndex() const;

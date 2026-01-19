@@ -137,9 +137,9 @@ Result<void> MetadataStore::AtomicWrite(const std::vector<uint8_t>& data) {
 }
 
 std::vector<uint8_t> MetadataStore::Serialize(const WALMetadata& meta) const {
-    // Serialize protobuf messages
-    std::string hard_state_bytes = meta.hard_state.SerializeAsString();
-    std::string conf_state_bytes = meta.conf_state.SerializeAsString();
+    // Serialize Cap'n Proto messages
+    auto hard_state_bytes = meta.hard_state.serializeAsBytes();
+    auto conf_state_bytes = meta.conf_state.serializeAsBytes();
 
     // Calculate total size:
     // MetadataHeader (16) + MetadataContent (24) + hard_state_len (4) + hard_state + conf_state_len (4) + conf_state
@@ -224,7 +224,12 @@ Result<WALMetadata> MetadataStore::Deserialize(const std::vector<uint8_t>& data)
     uint32_t hs_len;
     std::memcpy(&hs_len, ptr, sizeof(hs_len));
     ptr += sizeof(hs_len);
-    if (!meta.hard_state.ParseFromArray(ptr, hs_len)) {
+
+    try {
+        const ::capnp::word* words = reinterpret_cast<const ::capnp::word*>(ptr);
+        size_t word_count = hs_len / sizeof(::capnp::word);
+        meta.hard_state = HardState::parseFromWords(kj::ArrayPtr<const ::capnp::word>(words, word_count));
+    } catch (...) {
         return RaftError(StorageErrorCode::HardStateParseError);
     }
     ptr += hs_len;
@@ -233,13 +238,19 @@ Result<WALMetadata> MetadataStore::Deserialize(const std::vector<uint8_t>& data)
     uint32_t cs_len;
     std::memcpy(&cs_len, ptr, sizeof(cs_len));
     ptr += sizeof(cs_len);
-    if (!meta.conf_state.ParseFromArray(ptr, cs_len)) {
+
+    try {
+        const ::capnp::word* words = reinterpret_cast<const ::capnp::word*>(ptr);
+        size_t word_count = cs_len / sizeof(::capnp::word);
+        meta.conf_state = ConfState::parseFromWords(kj::ArrayPtr<const ::capnp::word>(words, word_count));
+    } catch (...) {
         return RaftError(StorageErrorCode::ConfStateParseError);
     }
 
+    auto hs_reader = meta.hard_state.reader();
     SPDLOG_DEBUG(
         "loaded metadata: first_index={}, snapshot_index={}, term={}, vote={}", meta.first_index,
-        meta.snapshot_index, meta.hard_state.term(), meta.hard_state.vote()
+        meta.snapshot_index, hs_reader.getTerm(), hs_reader.getVote()
     );
 
     return meta;

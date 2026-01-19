@@ -15,17 +15,6 @@ CPMAddPackage(
   URI "https://github.com/abseil/abseil-cpp.git"
   GIT_TAG "20250512.1")
 
-if(MSVC)
-  set(protobuf_MSVC_STATIC_RUNTIME OFF CACHE BOOL "Link Protobuf dynamically" FORCE)
-endif()
-
-CPMAddPackage(
-  URI "https://github.com/protocolbuffers/protobuf.git@32.1"
-  OPTIONS
-    "protobuf_INSTALL OFF"
-    "protobuf_ABSL_PROVIDER module"
-    "protobuf_BUILD_TESTS OFF")
-
 if(RAFTPP_BUILD_TESTING)
   CPMAddPackage(URI "https://github.com/fanyang89/doctest.git" GIT_TAG master)
 endif()
@@ -41,7 +30,10 @@ CPMAddPackage(
     "CRC32C_INSTALL OFF"
 )
 
+# Cap'n Proto for serialization and RPC
 CPMAddPackage(
-  URI "https://github.com/fanyang89/rpclib.git"
-  GIT_TAG "master"
+  URI "https://github.com/capnproto/capnproto.git@1.3.0"
+  OPTIONS
+    "BUILD_TESTING OFF"
+    "WITH_OPENSSL OFF"
 )

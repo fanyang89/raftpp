@@ -4,7 +4,7 @@
 #include <vector>
 
 #include "raft.h"
-#include "raftpp/core/raftpp.pb.h"
+#include "types.h"
 #include "status.h"
 
 namespace raftpp {
@@ -31,6 +31,13 @@ struct LightReady {
     std::optional<uint64_t> commit_index;
     std::vector<Entry> committed_entries;
     std::vector<Message> messages;
+
+    // Moveable but not copyable to avoid large copies
+    LightReady() = default;
+    LightReady(const LightReady&) = delete;
+    LightReady& operator=(const LightReady&) = delete;
+    LightReady(LightReady&&) noexcept = default;
+    LightReady& operator=(LightReady&&) noexcept = default;
 };
 
 struct Ready {
@@ -43,6 +50,13 @@ struct Ready {
     bool is_persisted_msg = false;
     LightReady light;
     bool must_sync = false;
+
+    // Moveable but not copyable to avoid large copies
+    Ready() = default;
+    Ready(const Ready&) = delete;
+    Ready& operator=(const Ready&) = delete;
+    Ready(Ready&&) noexcept = default;
+    Ready& operator=(Ready&&) noexcept = default;
 
     const std::vector<Message>& Messages() const;
 };

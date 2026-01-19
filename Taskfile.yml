@@ -6,19 +6,6 @@ dotenv:
   - .env
 
 tasks:
-  proto:
-    desc: Generate C++ protobuf files from raftpp.proto
-    aliases:
-      - pb
-    deps:
-      - build-protoc
-    cmds:
-      - platforms: [linux, darwin]
-        cmd: >
-          ./build/_deps/protobuf-build/protoc
-          -I proto
-          --cpp_out=proto/generated/raftpp/core
-          raftpp.proto
 
   fmt:
     desc: Format all C++ source files with clang-format
@@ -40,12 +27,6 @@ tasks:
       - cmake
     cmds:
       - cmake --build build --target raftpp-tests data-driven-tests
-
-  build-protoc:
-    deps:
-      - cmake
-    cmds:
-      - cmake --build build --target protoc
 
   test:
     desc: Build and run all tests

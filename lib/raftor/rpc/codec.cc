@@ -3,23 +3,32 @@
 #include <charconv>
 #include <cstring>
 
+#include <capnp/message.h>
+#include <capnp/serialize.h>
+
 namespace raftpp::raftor::rpc {
 
 std::vector<uint8_t> Codec::Encode(
     const Message& msg, uint64_t from_node, uint64_t to_node, uint64_t request_id
 ) {
     // Build RpcHeader
-    RpcHeader header;
-    header.set_version(kVersion);
-    header.set_from_node(from_node);
-    header.set_to_node(to_node);
-    header.set_request_id(request_id);
-    header.set_compression(COMPRESSION_NONE);
-    header.set_payload_size(static_cast<uint32_t>(msg.ByteSizeLong()));
-    header.set_msg_type(msg.msg_type());
+    RpcHeader header;  // This is OwnedMessage<capnp::RpcHeader> via type alias
+    auto header_builder = header.builder();
+    header_builder.setVersion(kVersion);
+    header_builder.setFromNode(from_node);
+    header_builder.setToNode(to_node);
+    header_builder.setRequestId(request_id);
+    header_builder.setCompression(capnp::CompressionType::COMPRESSION_NONE);
 
-    size_t header_size = header.ByteSizeLong();
-    size_t payload_size = msg.ByteSizeLong();
+    // Serialize message to get payload size
+    auto msg_bytes = msg.serializeAsBytes();
+    header_builder.setPayloadSize(static_cast<uint32_t>(msg_bytes.size()));
+    header_builder.setMsgType(msg.reader().getMsgType());
+
+    // Serialize header
+    auto header_bytes = header.serializeAsBytes();
+    size_t header_size = header_bytes.size();
+    size_t payload_size = msg_bytes.size();
     size_t total_size = kPrefixSize + header_size + payload_size;
 
     std::vector<uint8_t> buffer(total_size);
@@ -33,10 +42,10 @@ std::vector<uint8_t> Codec::Encode(
     std::memcpy(buffer.data() + 4, &header_len, sizeof(header_len));
 
     // Write RpcHeader
-    header.SerializeToArray(buffer.data() + kPrefixSize, static_cast<int>(header_size));
+    std::memcpy(buffer.data() + kPrefixSize, header_bytes.data(), header_size);
 
     // Write payload
-    msg.SerializeToArray(buffer.data() + kPrefixSize + header_size, static_cast<int>(payload_size));
+    std::memcpy(buffer.data() + kPrefixSize + header_size, msg_bytes.data(), payload_size);
 
     return buffer;
 }
@@ -64,17 +73,23 @@ Result<size_t> Codec::FrameSize(std::span<const uint8_t> buffer, size_t max_size
     }
 
     // Parse header to get payload size
-    RpcHeader header;
-    if (!header.ParseFromArray(buffer.data() + kPrefixSize, static_cast<int>(header_len))) {
+    try {
+        // Convert bytes to words for Cap'n Proto
+        const ::capnp::word* words = reinterpret_cast<const ::capnp::word*>(buffer.data() + kPrefixSize);
+        size_t word_count = header_len / sizeof(::capnp::word);
+
+        ::capnp::FlatArrayMessageReader reader(kj::ArrayPtr<const ::capnp::word>(words, word_count));
+        auto header_reader = reader.getRoot<capnp::RpcHeader>();
+
+        size_t total_size = kPrefixSize + header_len + header_reader.getPayloadSize();
+        if (total_size > max_size) {
+            return RaftError(RpcErrorCode::MessageTooLarge);
+        }
+
+        return total_size;
+    } catch (...) {
         return RaftError(RpcErrorCode::HeaderParseFailed);
     }
-
-    size_t total_size = kPrefixSize + header_len + header.payload_size();
-    if (total_size > max_size) {
-        return RaftError(RpcErrorCode::MessageTooLarge);
-    }
-
-    return total_size;
 }
 
 Result<Codec::DecodeResult> Codec::Decode(std::span<const uint8_t> buffer, size_t max_size) {
@@ -99,12 +114,17 @@ Result<Codec::DecodeResult> Codec::Decode(std::span<const uint8_t> buffer, size_
     }
 
     // Parse RpcHeader
-    RpcHeader header;
-    if (!header.ParseFromArray(buffer.data() + kPrefixSize, static_cast<int>(header_len))) {
+    OwnedMessage<capnp::RpcHeader> header;
+    try {
+        const ::capnp::word* words = reinterpret_cast<const ::capnp::word*>(buffer.data() + kPrefixSize);
+        size_t word_count = header_len / sizeof(::capnp::word);
+        header = OwnedMessage<capnp::RpcHeader>::parseFromWords(kj::ArrayPtr<const ::capnp::word>(words, word_count));
+    } catch (...) {
         return RaftError(RpcErrorCode::HeaderParseFailed);
     }
 
-    size_t total_size = header_end + header.payload_size();
+    auto header_reader = header.reader();
+    size_t total_size = header_end + header_reader.getPayloadSize();
     if (total_size > max_size) {
         return RaftError(RpcErrorCode::MessageTooLarge);
     }
@@ -115,7 +135,11 @@ Result<Codec::DecodeResult> Codec::Decode(std::span<const uint8_t> buffer, size_
 
     // Parse Message payload
     Message msg;
-    if (!msg.ParseFromArray(buffer.data() + header_end, static_cast<int>(header.payload_size()))) {
+    try {
+        const ::capnp::word* words = reinterpret_cast<const ::capnp::word*>(buffer.data() + header_end);
+        size_t word_count = header_reader.getPayloadSize() / sizeof(::capnp::word);
+        msg = Message::parseFromWords(kj::ArrayPtr<const ::capnp::word>(words, word_count));
+    } catch (...) {
         return RaftError(RpcErrorCode::PayloadParseFailed);
     }
 
@@ -124,19 +148,19 @@ Result<Codec::DecodeResult> Codec::Decode(std::span<const uint8_t> buffer, size_
 
 // HandshakeCodec implementation
 std::vector<uint8_t> HandshakeCodec::Encode(const RpcHandshake& hs) {
-    size_t payload_size = hs.ByteSizeLong();
-    std::vector<uint8_t> buffer(kPrefixSize + payload_size);
+    auto payload_bytes = hs.serializeAsBytes();
+    std::vector<uint8_t> buffer(kPrefixSize + payload_bytes.size());
 
     // Write magic
     uint32_t magic = kMagic;
     std::memcpy(buffer.data(), &magic, sizeof(magic));
 
     // Write length
-    uint32_t length = static_cast<uint32_t>(payload_size);
+    uint32_t length = static_cast<uint32_t>(payload_bytes.size());
     std::memcpy(buffer.data() + 4, &length, sizeof(length));
 
     // Write payload
-    hs.SerializeToArray(buffer.data() + kPrefixSize, static_cast<int>(payload_size));
+    std::memcpy(buffer.data() + kPrefixSize, payload_bytes.data(), payload_bytes.size());
 
     return buffer;
 }
@@ -164,7 +188,11 @@ Result<std::pair<RpcHandshake, size_t>> HandshakeCodec::Decode(std::span<const u
 
     // Parse RpcHandshake
     RpcHandshake hs;
-    if (!hs.ParseFromArray(buffer.data() + kPrefixSize, static_cast<int>(length))) {
+    try {
+        const ::capnp::word* words = reinterpret_cast<const ::capnp::word*>(buffer.data() + kPrefixSize);
+        size_t word_count = length / sizeof(::capnp::word);
+        hs = RpcHandshake::parseFromWords(kj::ArrayPtr<const ::capnp::word>(words, word_count));
+    } catch (...) {
         return RaftError(RpcErrorCode::HandshakeParseFailed);
     }
 
@@ -174,9 +202,10 @@ Result<std::pair<RpcHandshake, size_t>> HandshakeCodec::Decode(std::span<const u
 // Legacy Handshake implementation (delegates to HandshakeCodec)
 std::vector<uint8_t> Handshake::Encode() const {
     RpcHandshake hs;
-    hs.set_version(kVersion);
-    hs.set_node_id(node_id);
-    hs.set_cluster_id(cluster_id);
+    auto hs_builder = hs.builder();
+    hs_builder.setVersion(kVersion);
+    hs_builder.setNodeId(node_id);
+    hs_builder.setClusterId(cluster_id);
     return HandshakeCodec::Encode(hs);
 }
 
@@ -191,9 +220,10 @@ Result<Handshake> Handshake::Decode(std::span<const uint8_t> buffer) {
         return RaftError(RpcErrorCode::HandshakeBufferTooSmall);
     }
 
+    auto hs_reader = hs.reader();
     Handshake legacy;
-    legacy.node_id = hs.node_id();
-    legacy.cluster_id = hs.cluster_id();
+    legacy.node_id = hs_reader.getNodeId();
+    legacy.cluster_id = hs_reader.getClusterId();
     return legacy;
 }
 

@@ -49,8 +49,10 @@ Network Network::CreateWithConfig(
             // Initialize with conf state directly (not via ApplySnapshot
             // because first_index() > snap.index() would cause SnapshotOutOfDate)
             ConfState conf_state;
-            for (uint64_t peer_id : peer_ids) {
-                conf_state.add_voters(peer_id);
+            auto conf_builder = conf_state.builder();
+            auto voters = conf_builder.initVoters(peer_ids.size());
+            for (size_t j = 0; j < peer_ids.size(); ++j) {
+                voters.set(j, peer_ids[j]);
             }
             storage->SetConfState(conf_state);
 
@@ -86,17 +88,18 @@ std::vector<Message> Network::Filter(std::vector<Message> msgs) {
     std::uniform_real_distribution<double> dist(0.0, 1.0);
 
     for (auto& m : msgs) {
+        auto reader = m.reader();
         // Check if message type is ignored
-        auto it = ignore_map_.find(m.msg_type());
+        auto it = ignore_map_.find(reader.getMsgType());
         if (it != ignore_map_.end() && it->second) {
             continue;
         }
 
         // MsgHup should never go over network
-        assert(m.msg_type() != MsgHup && "unexpected MsgHup");
+        assert(reader.getMsgType() != MessageType::MSG_HUP && "unexpected MsgHup");
 
         // Check drop rate
-        Connection conn{m.from(), m.to()};
+        Connection conn{reader.getFrom(), reader.getTo()};
         auto drop_it = drop_map_.find(conn);
         double perc = (drop_it != drop_map_.end()) ? drop_it->second : 0.0;
 
@@ -125,11 +128,12 @@ void Network::Send(std::vector<Message> msgs) {
         std::vector<Message> new_msgs;
 
         for (auto& m : msgs) {
+            auto reader = m.reader();
             SPDLOG_DEBUG(
-                "Network::Send: type={}, from={}, to={}", MessageType_Name(m.msg_type()), m.from(),
-                m.to()
+                "Network::Send: type={}, from={}, to={}", static_cast<int>(reader.getMsgType()), reader.getFrom(),
+                reader.getTo()
             );
-            auto it = peers_.find(m.to());
+            auto it = peers_.find(reader.getTo());
             if (it == peers_.end()) {
                 continue;
             }
@@ -159,7 +163,7 @@ void Network::FilterAndSend(std::vector<Message> msgs) {
 Result<void> Network::Dispatch(std::vector<Message> msgs) {
     auto filtered = Filter(std::move(msgs));
     for (auto& m : filtered) {
-        auto it = peers_.find(m.to());
+        auto it = peers_.find(m.reader().getTo());
         if (it == peers_.end()) {
             continue;
         }

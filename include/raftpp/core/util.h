@@ -1,10 +1,9 @@
 #pragma once
 
-#include <google/protobuf/message.h>
-#include <google/protobuf/util/message_differencer.h>
+#include <optional>
 #include <spdlog/fmt/fmt.h>
 
-#include "raftpp/core/raftpp.pb.h"
+#include "types.h"
 
 namespace raftpp {
 
@@ -18,15 +17,16 @@ struct IndexTerm {
 
 size_t EntryApproximateSize(const Entry& ent);
 
+// Cap'n Proto messages use serialization to determine size
 template <typename T>
-concept HasByteSizeLong = requires(const T& t) {
-    { t.ByteSizeLong() } -> std::convertible_to<std::size_t>;
+concept HasSerializedSize = requires(const T& t) {
+    { t.serializeAsBytes() } -> std::convertible_to<std::vector<uint8_t>>;
 };
 
-template <HasByteSizeLong M>
+template <HasSerializedSize M>
 void LimitSize(std::vector<M>& entries, std::optional<uint64_t> max);
 
-template <HasByteSizeLong M>
+template <HasSerializedSize M>
 void LimitSize(std::vector<M>& entries, const std::optional<uint64_t> max) {
     if (entries.size() <= 1) {
         return;
@@ -39,7 +39,7 @@ void LimitSize(std::vector<M>& entries, const std::optional<uint64_t> max) {
     size_t keep_count = 0;
 
     for (const auto& entry : entries) {
-        const size_t entry_size = entry.ByteSizeLong();
+        const size_t entry_size = entry.serializeAsBytes().size();
 
         if (keep_count == 0) {
             current_total_size += entry_size;
@@ -61,9 +61,6 @@ void LimitSize(std::vector<M>& entries, const std::optional<uint64_t> max) {
 }
 
 bool IsContinuousEntries(const Message& message, const std::vector<Entry>& entries);
-
-bool operator==(const google::protobuf::Message& lhs, const google::protobuf::Message& rhs);
-bool operator!=(const google::protobuf::Message& lhs, const google::protobuf::Message& rhs);
 
 }  // namespace raftpp
 
