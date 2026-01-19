@@ -16,9 +16,14 @@ env:
 jobs:
   format-check:
     name: Format Check
-    runs-on: [self-hosted, X64]
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:43
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install clang-format
+        run: dnf install -y clang-tools-extra
 
       - name: Check formatting
         run: |
@@ -28,46 +33,56 @@ jobs:
 
   lint:
     name: Lint (cppcheck)
-    runs-on: [self-hosted, X64]
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:43
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install cppcheck
+        run: dnf install -y cppcheck
 
       - name: Run cppcheck
         run: cppcheck --error-exitcode=1 --enable=warning,performance include lib
 
   build-and-test:
-    name: Build (${{ matrix.preset }}, ${{ matrix.arch }})
-    runs-on: [self-hosted, "${{ matrix.arch }}"]
+    name: Build (${{ matrix.name }})
+    runs-on: self-hosted
+    container:
+      image: fedora:43
     strategy:
       fail-fast: false
       matrix:
-        arch: [X64, ARM64]
-        preset: [dev, clang]
         include:
           - preset: dev
+            name: "Debug + Sanitizers"
             build_dir: build
           - preset: clang
+            name: "Release"
             build_dir: build-clang
 
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install system dependencies
+        run: dnf install -y ninja-build ccache clang cmake git patch
+
       - name: Cache CPM dependencies
         uses: actions/cache@v4
         with:
           path: .cache/cpm
-          key: cpm-${{ matrix.arch }}-${{ hashFiles('third_party/CMakeLists.txt', 'cmake/CPM.cmake') }}
+          key: cpm-fedora-${{ hashFiles('third_party/CMakeLists.txt', 'cmake/CPM.cmake') }}
           restore-keys: |
-            cpm-${{ matrix.arch }}-
+            cpm-fedora-
 
       - name: Cache ccache
         uses: actions/cache@v4
         with:
           path: ~/.ccache
-          key: ccache-${{ matrix.arch }}-${{ matrix.preset }}-${{ github.sha }}
+          key: ccache-fedora-${{ matrix.preset }}-${{ github.sha }}
           restore-keys: |
-            ccache-${{ matrix.arch }}-${{ matrix.preset }}-
-            ccache-${{ matrix.arch }}-
+            ccache-fedora-${{ matrix.preset }}-
+            ccache-fedora-
 
       - name: Configure ccache
         run: |
@@ -92,17 +107,22 @@ jobs:
 
   static-analysis:
     name: Static Analysis (scan-build)
-    runs-on: [self-hosted, X64]
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:43
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: dnf install -y ninja-build clang clang-analyzer cmake git patch
 
       - name: Cache CPM dependencies
         uses: actions/cache@v4
         with:
           path: .cache/cpm
-          key: cpm-X64-${{ hashFiles('third_party/CMakeLists.txt', 'cmake/CPM.cmake') }}
+          key: cpm-fedora-${{ hashFiles('third_party/CMakeLists.txt', 'cmake/CPM.cmake') }}
           restore-keys: |
-            cpm-X64-
+            cpm-fedora-
 
       - name: Configure CMake
         run: cmake --preset=clang
