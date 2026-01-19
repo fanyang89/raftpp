@@ -2,8 +2,8 @@
 
 #include "progress_tracker.h"
 #include "raftpp/core/error.h"
-#include "types.h"
 #include "tracker_conf.h"
+#include "types.h"
 
 namespace raftpp {
 

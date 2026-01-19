@@ -33,7 +33,8 @@ class MockStateMachine : public StateMachine {
         auto reader = entry.reader();
         auto data = reader.getData();
         applied_entries_.push_back(
-            std::string(reinterpret_cast<const char*>(data.begin()), data.size()));
+            std::string(reinterpret_cast<const char*>(data.begin()), data.size())
+        );
         apply_count_++;
         if (should_fail_apply_) {
             return std::unexpected(RaftError(RaftErrorCode::ProposalDropped));

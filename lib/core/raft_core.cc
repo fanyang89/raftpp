@@ -149,7 +149,9 @@ void RaftCore::Send(Message& m, std::vector<Message>& messages) const {
         case MessageType::MSG_REQUEST_VOTE:
         case MessageType::MSG_REQUEST_VOTE_RESPONSE:
             if (m_reader.getTerm() == 0) {
-                PANIC("term should be set when sending {:d}", static_cast<int>(m_reader.getMsgType()));
+                PANIC(
+                    "term should be set when sending {:d}", static_cast<int>(m_reader.getMsgType())
+                );
             }
             break;
         default:

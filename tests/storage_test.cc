@@ -29,12 +29,12 @@ struct fmt::formatter<std::vector<Entry>> : formatter<std::string_view> {
         for (const auto& v : values) {
             auto reader = v.reader();
             auto data = reader.getData();
-            s.emplace_back(fmt::format(
-                "{{index={} term={} data_size={}}}",
-                reader.getIndex(),
-                reader.getTerm(),
-                data.size()
-            ));
+            s.emplace_back(
+                fmt::format(
+                    "{{index={} term={} data_size={}}}", reader.getIndex(), reader.getTerm(),
+                    data.size()
+                )
+            );
         }
         return fmt::format_to(ctx.out(), "[\n{}\n]", absl::StrJoin(s, ",\n"));
     }

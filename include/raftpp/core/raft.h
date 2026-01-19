@@ -3,8 +3,8 @@
 #include "progress_tracker.h"
 #include "raft_config.h"
 #include "raft_core.h"
-#include "types.h"
 #include "read_only.h"
+#include "types.h"
 
 namespace raftpp {
 

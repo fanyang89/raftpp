@@ -1,13 +1,13 @@
 #pragma once
 
-#include <capnp/message.h>
-#include <capnp/serialize.h>
-#include <kj/array.h>
-
 #include <memory>
 #include <span>
 #include <string>
 #include <vector>
+
+#include <capnp/message.h>
+#include <capnp/serialize.h>
+#include <kj/array.h>
 
 namespace raftpp {
 
@@ -22,9 +22,11 @@ class OwnedMessage {
     }
 
     // Moveable and copyable (copy performs a deep clone)
-    OwnedMessage(const OwnedMessage& other) : message_(std::make_unique<capnp::MallocMessageBuilder>()) {
+    OwnedMessage(const OwnedMessage& other)
+        : message_(std::make_unique<capnp::MallocMessageBuilder>()) {
         message_->setRoot(other.reader());
     }
+
     OwnedMessage& operator=(const OwnedMessage& other) {
         if (this == &other) {
             return *this;
@@ -34,6 +36,7 @@ class OwnedMessage {
         message_ = std::move(builder);
         return *this;
     }
+
     OwnedMessage(OwnedMessage&&) noexcept = default;
     OwnedMessage& operator=(OwnedMessage&&) noexcept = default;
 
@@ -43,21 +46,14 @@ class OwnedMessage {
         : message_(std::move(builder)) {}
 
   public:
-
     // Get a builder for modifying the message
-    typename T::Builder builder() {
-        return message_->getRoot<T>();
-    }
+    typename T::Builder builder() { return message_->getRoot<T>(); }
 
     // Get a reader for reading the message
-    typename T::Reader reader() const {
-        return message_->getRoot<T>().asReader();
-    }
+    typename T::Reader reader() const { return message_->getRoot<T>().asReader(); }
 
     // Serialize to a flat byte array
-    kj::Array<capnp::word> serializeAsWords() const {
-        return capnp::messageToFlatArray(*message_);
-    }
+    kj::Array<capnp::word> serializeAsWords() const { return capnp::messageToFlatArray(*message_); }
 
     // Serialize to a byte vector
     std::vector<uint8_t> serializeAsBytes() const {
@@ -93,8 +89,9 @@ class OwnedMessage {
     }
 
     static OwnedMessage<T> parseFromString(std::string_view str) {
-        return parseFromBytes(std::span<const uint8_t>(
-            reinterpret_cast<const uint8_t*>(str.data()), str.size()));
+        return parseFromBytes(
+            std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(str.data()), str.size())
+        );
     }
 
     // Deep copy
@@ -135,8 +132,7 @@ bool messagesEqual(typename T::Reader a, typename T::Reader b) {
         return false;
     }
 
-    return std::memcmp(wordsA.begin(), wordsB.begin(), wordsA.size() * sizeof(capnp::word))
-           == 0;
+    return std::memcmp(wordsA.begin(), wordsB.begin(), wordsA.size() * sizeof(capnp::word)) == 0;
 }
 
 // Helper to convert a reader to an owned message

@@ -138,7 +138,8 @@ Result<void> ReadyProcessor::ApplyCommittedEntries(const std::vector<Entry>& ent
             // Log but continue - state machine errors shouldn't stop Raft
             auto entry_reader = entry.reader();
             spdlog::warn(
-                "Failed to apply entry at index {}: {}", entry_reader.getIndex(), result.error().ToString()
+                "Failed to apply entry at index {}: {}", entry_reader.getIndex(),
+                result.error().ToString()
             );
         }
         applied_index_ = entry.reader().getIndex();
@@ -162,7 +163,9 @@ Result<void> ReadyProcessor::ApplyEntry(const Entry& entry) {
             try {
                 const ::capnp::word* words = reinterpret_cast<const ::capnp::word*>(data.begin());
                 size_t word_count = data.size() / sizeof(::capnp::word);
-                cc_v1 = ConfChange::parseFromWords(kj::ArrayPtr<const ::capnp::word>(words, word_count));
+                cc_v1 = ConfChange::parseFromWords(
+                    kj::ArrayPtr<const ::capnp::word>(words, word_count)
+                );
             } catch (...) {
                 return std::unexpected(RaftError(RaftErrorCode::ProposalDropped));
             }
@@ -179,7 +182,9 @@ Result<void> ReadyProcessor::ApplyEntry(const Entry& entry) {
             try {
                 const ::capnp::word* words = reinterpret_cast<const ::capnp::word*>(data.begin());
                 size_t word_count = data.size() / sizeof(::capnp::word);
-                cc = ConfChangeV2::parseFromWords(kj::ArrayPtr<const ::capnp::word>(words, word_count));
+                cc = ConfChangeV2::parseFromWords(
+                    kj::ArrayPtr<const ::capnp::word>(words, word_count)
+                );
             } catch (...) {
                 return std::unexpected(RaftError(RaftErrorCode::ProposalDropped));
             }
@@ -253,7 +258,8 @@ void ReadyProcessor::ProcessLightReady(const LightReady& light_rd) {
         if (auto result = ApplyEntry(entry); !result) {
             auto entry_reader = entry.reader();
             spdlog::warn(
-                "Failed to apply entry at index {}: {}", entry_reader.getIndex(), result.error().ToString()
+                "Failed to apply entry at index {}: {}", entry_reader.getIndex(),
+                result.error().ToString()
             );
         }
         applied_index_ = entry.reader().getIndex();

@@ -6,8 +6,8 @@
 #include <mutex>
 #include <thread>
 
-#include <spdlog/spdlog.h>
 #include <kj/array.h>
+#include <spdlog/spdlog.h>
 
 #include "raftpp/raftor/rpc/capnp_transport.h"
 #include "raftpp/raftor/wal/wal_storage.h"
@@ -373,8 +373,9 @@ Result<void> RaftorImpl::AddNode(uint64_t id, const std::string& addr) {
     auto changes = builder.initChanges(1);
     changes[0].setChangeType(ConfChangeType::ADD_NODE);
     changes[0].setNodeId(id);
-    builder.setContext(kj::arrayPtr(
-        reinterpret_cast<const kj::byte*>(addr.data()), addr.size()));  // Store address in context
+    builder.setContext(
+        kj::arrayPtr(reinterpret_cast<const kj::byte*>(addr.data()), addr.size())
+    );  // Store address in context
 
     std::string ctx = GenerateProposalContext();
     if (auto result = raw_node_->ProposeConfChange(ctx, cc); !result) {
@@ -447,9 +448,12 @@ Result<void> RaftorImpl::TakeSnapshot() {
     // Create Cap'n Proto snapshot
     Snapshot snapshot;
     auto snap_builder = snapshot.builder();
-    snap_builder.setData(kj::arrayPtr(
-        reinterpret_cast<const kj::byte*>(snapshot_result->data.data()),
-        snapshot_result->data.size()));
+    snap_builder.setData(
+        kj::arrayPtr(
+            reinterpret_cast<const kj::byte*>(snapshot_result->data.data()),
+            snapshot_result->data.size()
+        )
+    );
     snap_builder.setMetadata(snapshot_result->metadata.reader());
 
     // Apply to storage (this will compact the log)

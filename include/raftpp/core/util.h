@@ -1,6 +1,7 @@
 #pragma once
 
 #include <optional>
+
 #include <spdlog/fmt/fmt.h>
 
 #include "types.h"

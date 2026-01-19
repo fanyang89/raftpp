@@ -113,8 +113,9 @@ TEST_SUITE("rpc") {
             entries[i].setTerm(3);
             entries[i].setIndex(i + 1);
             auto data = std::string("test data ") + std::to_string(i);
-            entries[i].setData(kj::arrayPtr(
-                reinterpret_cast<const kj::byte*>(data.data()), data.size()));
+            entries[i].setData(
+                kj::arrayPtr(reinterpret_cast<const kj::byte*>(data.data()), data.size())
+            );
         }
 
         auto encoded = Codec::Encode(msg);

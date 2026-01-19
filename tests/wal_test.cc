@@ -46,8 +46,7 @@ Entry MakeWalEntry(uint64_t index, uint64_t term, const std::string& data = "") 
     auto builder = entry.builder();
     builder.setIndex(index);
     builder.setTerm(term);
-    builder.setData(kj::arrayPtr(
-        reinterpret_cast<const kj::byte*>(data.data()), data.size()));
+    builder.setData(kj::arrayPtr(reinterpret_cast<const kj::byte*>(data.data()), data.size()));
     builder.setEntryType(EntryType::ENTRY_NORMAL);
     return entry;
 }

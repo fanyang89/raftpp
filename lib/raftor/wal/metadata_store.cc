@@ -228,7 +228,8 @@ Result<WALMetadata> MetadataStore::Deserialize(const std::vector<uint8_t>& data)
     try {
         const ::capnp::word* words = reinterpret_cast<const ::capnp::word*>(ptr);
         size_t word_count = hs_len / sizeof(::capnp::word);
-        meta.hard_state = HardState::parseFromWords(kj::ArrayPtr<const ::capnp::word>(words, word_count));
+        meta.hard_state =
+            HardState::parseFromWords(kj::ArrayPtr<const ::capnp::word>(words, word_count));
     } catch (...) {
         return RaftError(StorageErrorCode::HardStateParseError);
     }
@@ -242,7 +243,8 @@ Result<WALMetadata> MetadataStore::Deserialize(const std::vector<uint8_t>& data)
     try {
         const ::capnp::word* words = reinterpret_cast<const ::capnp::word*>(ptr);
         size_t word_count = cs_len / sizeof(::capnp::word);
-        meta.conf_state = ConfState::parseFromWords(kj::ArrayPtr<const ::capnp::word>(words, word_count));
+        meta.conf_state =
+            ConfState::parseFromWords(kj::ArrayPtr<const ::capnp::word>(words, word_count));
     } catch (...) {
         return RaftError(StorageErrorCode::ConfStateParseError);
     }

@@ -15,7 +15,10 @@ Unstable::Unstable(
     std::vector<Entry>&& entries, const size_t entries_size, const uint64_t offset,
     std::optional<Snapshot>&& snapshot
 )
-    : snapshot_(std::move(snapshot)), entries_(std::move(entries)), entries_size_(entries_size), offset_(offset) {}
+    : snapshot_(std::move(snapshot)),
+      entries_(std::move(entries)),
+      entries_size_(entries_size),
+      offset_(offset) {}
 
 std::optional<uint64_t> Unstable::MaybeFirstIndex() const {
     if (snapshot_) {
@@ -122,10 +125,7 @@ void Unstable::StableSnapshot(const uint64_t index) {
     if (snapshot_.has_value()) {
         auto meta = snapshot_->reader().getMetadata();
         if (meta.getIndex() != index) {
-            PANIC(
-                "unstable.snap has different index {}, expect {}", meta.getIndex(),
-                index
-            );
+            PANIC("unstable.snap has different index {}, expect {}", meta.getIndex(), index);
         }
         snapshot_ = {};
     } else {

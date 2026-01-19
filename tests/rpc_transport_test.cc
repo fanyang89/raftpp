@@ -5,8 +5,8 @@
 #include <vector>
 
 #include <doctest/doctest.h>
-#include <spdlog/fmt/fmt.h>
 #include <kj/array.h>
+#include <spdlog/fmt/fmt.h>
 
 #include "raftpp/raftor/rpc/capnp_transport.h"
 
@@ -523,8 +523,11 @@ TEST_SUITE("rpc::capnp") {
         for (int i = 0; i < 100; i++) {
             entries[i].setTerm(1);
             entries[i].setIndex(i + 1);
-            entries[i].setData(kj::arrayPtr(
-                reinterpret_cast<const kj::byte*>(large_data.data()), large_data.size()));
+            entries[i].setData(
+                kj::arrayPtr(
+                    reinterpret_cast<const kj::byte*>(large_data.data()), large_data.size()
+                )
+            );
         }
 
         t1.Send(std::span(&msg, 1));
@@ -578,8 +581,9 @@ TEST_SUITE("rpc::capnp") {
             entries[i].setTerm(5);
             entries[i].setIndex(101 + i);
             auto data = std::string("entry_") + std::to_string(i);
-            entries[i].setData(kj::arrayPtr(
-                reinterpret_cast<const kj::byte*>(data.data()), data.size()));
+            entries[i].setData(
+                kj::arrayPtr(reinterpret_cast<const kj::byte*>(data.data()), data.size())
+            );
         }
 
         t1.Send(std::span(&msg, 1));

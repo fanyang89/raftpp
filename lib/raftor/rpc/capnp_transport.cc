@@ -34,8 +34,7 @@ class RaftTransportImpl final : public raftpp::capnp::RaftTransport::Server {
 
     kj::Promise<void> sendSnapshot(SendSnapshotContext context) override {
         auto snapshot = context.getParams().getSnapshot();
-        SPDLOG_WARN("Received snapshot via RPC (index={})",
-                    snapshot.getMetadata().getIndex());
+        SPDLOG_WARN("Received snapshot via RPC (index={})", snapshot.getMetadata().getIndex());
         return kj::READY_NOW;
     }
 
@@ -181,9 +180,8 @@ void CapnpTransport::RpcLoop(std::promise<Result<void>> start_promise) {
 
     try {
         auto server = std::make_unique<::capnp::EzRpcServer>(
-            kj::heap<RaftTransportImpl>(*this),
-            config_.listen_addr,
-            0);
+            kj::heap<RaftTransportImpl>(*this), config_.listen_addr, 0
+        );
 
         auto& wait_scope = server->getWaitScope();
         auto& timer = server->getIoProvider().getTimer();
@@ -230,7 +228,9 @@ void CapnpTransport::RpcLoop(std::promise<Result<void>> start_promise) {
                     }
                     req.send().wait(wait_scope);
                 } catch (const kj::Exception& e) {
-                    SPDLOG_WARN("RPC send to {} failed: {}", batch.peer_id, e.getDescription().cStr());
+                    SPDLOG_WARN(
+                        "RPC send to {} failed: {}", batch.peer_id, e.getDescription().cStr()
+                    );
                     clients.erase(batch.peer_id);
                     if (on_error_) {
                         on_error_(batch.peer_id, e.getDescription().cStr());
@@ -242,7 +242,7 @@ void CapnpTransport::RpcLoop(std::promise<Result<void>> start_promise) {
         }
     } catch (const kj::Exception& e) {
         set_start(std::unexpected(RaftError(RpcErrorCode::BindFailed)));
-            SPDLOG_ERROR("Cap'n Proto RPC loop failed: {}", e.getDescription().cStr());
+        SPDLOG_ERROR("Cap'n Proto RPC loop failed: {}", e.getDescription().cStr());
         if (on_error_) {
             on_error_(0, e.getDescription().cStr());
         }
