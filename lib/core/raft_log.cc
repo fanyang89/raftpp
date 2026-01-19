@@ -217,7 +217,7 @@ Result<void> RaftLog::MustCheckOutOfBounds(uint64_t low, uint64_t high) const {
     }
 
     const auto length = LastIndex() + 1 - first_index;
-    if (low < first_index || high > first_index + length) {
+    if (high > first_index + length) {
         const auto slice_low = low;
         const auto slice_high = high;
         const auto bound_first_index = first_index;
