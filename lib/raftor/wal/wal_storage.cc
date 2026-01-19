@@ -23,8 +23,8 @@ Result<RaftState> WALStorage::InitialState() {
     std::lock_guard lock(mutex_);
 
     RaftState state;
-    state.hard_state = wal_->GetHardState();
-    state.conf_state = wal_->GetConfState();
+    state.hard_state = wal_->GetHardState().clone();
+    state.conf_state = wal_->GetConfState().clone();
 
     return state;
 }
@@ -41,8 +41,10 @@ Result<uint64_t> WALStorage::Term(uint64_t idx) {
     std::lock_guard lock(mutex_);
 
     // Check snapshot first
-    if (idx == snapshot_.metadata().index() && snapshot_.metadata().index() > 0) {
-        return snapshot_.metadata().term();
+    auto snap_reader = snapshot_.reader();
+    auto snap_meta = snap_reader.getMetadata();
+    if (idx == snap_meta.getIndex() && snap_meta.getIndex() > 0) {
+        return snap_meta.getTerm();
     }
 
     return wal_->Term(idx);
@@ -63,11 +65,12 @@ Result<uint64_t> WALStorage::LastIndex() {
 Result<Snapshot> WALStorage::GetSnapshot(uint64_t /*request_index*/, uint64_t /*to*/) {
     std::lock_guard lock(mutex_);
 
-    if (snapshot_.metadata().index() == 0) {
+    auto snap_meta = snapshot_.reader().getMetadata();
+    if (snap_meta.getIndex() == 0) {
         return RaftError(StorageErrorCode::SnapshotTemporarilyUnavailable);
     }
 
-    return snapshot_;
+    return snapshot_.clone();
 }
 
 void WALStorage::SetHardState(HardState&& hs) {
@@ -95,7 +98,7 @@ Result<void> WALStorage::ApplySnapshot(const Snapshot& snapshot) {
     std::lock_guard lock(mutex_);
 
     // Store snapshot in memory
-    snapshot_ = snapshot;
+    snapshot_ = snapshot.clone();
 
     // Apply to WAL
     return wal_->ApplySnapshot(snapshot);
@@ -105,7 +108,7 @@ void WALStorage::SetConfState(const ConfState& conf_state) {
     std::lock_guard lock(mutex_);
 
     // Update the conf state in the hard state
-    HardState hs = wal_->GetHardState();
+    HardState hs = wal_->GetHardState().clone();
     auto result = wal_->SaveHardState(hs);
     if (!result) {
         SPDLOG_ERROR("failed to save conf state: {}", result.error().ToString());
@@ -134,7 +137,7 @@ std::vector<Entry> WALStorage::AllEntries() {
         return {};
     }
 
-    return *result;
+    return std::move(*result);
 }
 
 }  // namespace raftpp::raftor::wal

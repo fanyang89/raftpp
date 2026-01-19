@@ -5,36 +5,34 @@ namespace raftpp {
 IndexTerm::IndexTerm(const uint64_t index, const uint64_t term) : index(index), term(term) {}
 
 IndexTerm::IndexTerm(const Snapshot& snapshot) {
-    const auto& m = snapshot.metadata();
-    index = m.index();
-    term = m.term();
+    auto reader = snapshot.reader();
+    auto metadata = reader.getMetadata();
+    index = metadata.getIndex();
+    term = metadata.getTerm();
 }
 
 size_t EntryApproximateSize(const Entry& ent) {
+    auto reader = ent.reader();
+    auto data = reader.getData();
+    auto context = reader.getContext();
     // TODO(fanyang) check the 12
-    return ent.data().size() + ent.context().size() + 12;
+    return data.size() + context.size() + 12;
 }
 
 bool IsContinuousEntries(const Message& message, const std::vector<Entry>& entries) {
-    if (!message.entries().empty() && !entries.empty()) {
-        const uint64_t expected_next_idx =
-            message.entries().at(message.entries().size() - 1).index() + 1;
-        return expected_next_idx == entries.at(0).index();
+    auto msg_reader = message.reader();
+    auto msg_entries = msg_reader.getEntries();
+
+    if (msg_entries.size() > 0 && !entries.empty()) {
+        const uint64_t expected_next_idx = msg_entries[msg_entries.size() - 1].getIndex() + 1;
+        return expected_next_idx == entries.at(0).reader().getIndex();
     }
     return true;
 }
 
-bool operator==(const google::protobuf::Message& lhs, const google::protobuf::Message& rhs) {
-    return google::protobuf::util::MessageDifferencer::Equals(lhs, rhs);
-}
-
-bool operator!=(const google::protobuf::Message& lhs, const google::protobuf::Message& rhs) {
-    return !(lhs == rhs);
-}
-
 }  // namespace raftpp
 
-fmt::context::iterator fmt::formatter<raftpp::IndexTerm>::format(
+fmt::format_context::iterator fmt::formatter<raftpp::IndexTerm>::format(
     const raftpp::IndexTerm& value, const format_context& ctx
 ) {
     const auto [i, t] = value;

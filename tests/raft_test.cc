@@ -40,10 +40,7 @@ TEST_CASE("raft: progress committed index") {
     auto network = CreateTestNetwork(3);
 
     // Set node 1 as Leader
-    Message hup;
-    hup.set_msg_type(MsgHup);
-    hup.set_from(1);
-    hup.set_to(1);
+    Message hup = NewMessage(1, 1, MessageType::MSG_HUP);
     network.Send({hup});
 
     CHECK_EQ(network.GetPeer(1)->state(), StateRole::Leader);
@@ -58,14 +55,10 @@ TEST_CASE("raft: progress committed index") {
     CHECK_EQ(prs1.progress_map().at(3).committed_index(), 1);
 
     // Test append entries between 1 and 2
-    Entry test_entry;
-    test_entry.set_data("testdata");
+    Entry test_entry = NewEntry(0, 0, "testdata");
 
-    Message propose;
-    propose.set_msg_type(MsgPropose);
-    propose.set_from(1);
-    propose.set_to(1);
-    *propose.add_entries() = test_entry;
+    Message propose =
+        NewMessageWithEntries(1, 1, MessageType::MSG_PROPOSE, std::vector<Entry>{test_entry});
 
     network.Cut(1, 3);
     network.Send({propose, propose});
@@ -80,10 +73,7 @@ TEST_CASE("raft: progress committed index") {
     CHECK_EQ(prs1.progress_map().at(3).committed_index(), 1);
 
     // Test heartbeat
-    Message heartbeat;
-    heartbeat.set_msg_type(MsgBeat);
-    heartbeat.set_from(1);
-    heartbeat.set_to(1);
+    Message heartbeat = NewMessage(1, 1, MessageType::MSG_BEAT);
     network.Send({heartbeat});
 
     AssertRaftLog("#1: ", network.GetPeer(1)->raft_log(), 3, 0, 3);
@@ -111,10 +101,7 @@ TEST_CASE("raft: leader election") {
     for (const auto& [size, expected_state, expected_term] : tests) {
         auto network = CreateTestNetwork(size);
 
-        Message hup;
-        hup.set_msg_type(MsgHup);
-        hup.set_from(1);
-        hup.set_to(1);
+        Message hup = NewMessage(1, 1, MessageType::MSG_HUP);
         network.Send({hup});
 
         CHECK_EQ(network.GetPeer(1)->state(), expected_state);
@@ -125,18 +112,12 @@ TEST_CASE("raft: leader election") {
 TEST_CASE("raft: log replication") {
     auto network = CreateTestNetwork(3);
 
-    Message hup;
-    hup.set_msg_type(MsgHup);
-    hup.set_from(1);
-    hup.set_to(1);
+    Message hup = NewMessage(1, 1, MessageType::MSG_HUP);
     network.Send({hup});
 
-    Message propose;
-    propose.set_msg_type(MsgPropose);
-    propose.set_from(1);
-    propose.set_to(1);
-    auto* e = propose.add_entries();
-    e->set_data("somedata");
+    Entry entry = NewEntry(0, 0, "somedata");
+    Message propose =
+        NewMessageWithEntries(1, 1, MessageType::MSG_PROPOSE, std::vector<Entry>{entry});
     network.Send({propose});
 
     // All nodes should have the same log
@@ -149,18 +130,12 @@ TEST_CASE("raft: log replication") {
 TEST_CASE("raft: single node commit") {
     auto network = CreateTestNetwork(1);
 
-    Message hup;
-    hup.set_msg_type(MsgHup);
-    hup.set_from(1);
-    hup.set_to(1);
+    Message hup = NewMessage(1, 1, MessageType::MSG_HUP);
     network.Send({hup});
 
-    Message propose;
-    propose.set_msg_type(MsgPropose);
-    propose.set_from(1);
-    propose.set_to(1);
-    auto* e = propose.add_entries();
-    e->set_data("somedata");
+    Entry entry = NewEntry(0, 0, "somedata");
+    Message propose =
+        NewMessageWithEntries(1, 1, MessageType::MSG_PROPOSE, std::vector<Entry>{entry});
     network.Send({propose});
 
     auto* peer = network.GetPeer(1);
@@ -170,10 +145,7 @@ TEST_CASE("raft: single node commit") {
 TEST_CASE("raft: commit without majority") {
     auto network = CreateTestNetwork(5);
 
-    Message hup;
-    hup.set_msg_type(MsgHup);
-    hup.set_from(1);
-    hup.set_to(1);
+    Message hup = NewMessage(1, 1, MessageType::MSG_HUP);
     network.Send({hup});
 
     // Isolate 3 nodes
@@ -181,12 +153,9 @@ TEST_CASE("raft: commit without majority") {
     network.Cut(1, 4);
     network.Cut(1, 5);
 
-    Message propose;
-    propose.set_msg_type(MsgPropose);
-    propose.set_from(1);
-    propose.set_to(1);
-    auto* e = propose.add_entries();
-    e->set_data("somedata");
+    Entry entry = NewEntry(0, 0, "somedata");
+    Message propose =
+        NewMessageWithEntries(1, 1, MessageType::MSG_PROPOSE, std::vector<Entry>{entry});
     network.Send({propose});
 
     // Commit should not have advanced (only 2 nodes can communicate)
@@ -197,10 +166,7 @@ TEST_CASE("raft: commit without majority") {
 TEST_CASE("raft: commit with full partition recovery") {
     auto network = CreateTestNetwork(5);
 
-    Message hup;
-    hup.set_msg_type(MsgHup);
-    hup.set_from(1);
-    hup.set_to(1);
+    Message hup = NewMessage(1, 1, MessageType::MSG_HUP);
     network.Send({hup});
 
     // Create partition
@@ -208,22 +174,16 @@ TEST_CASE("raft: commit with full partition recovery") {
     network.Cut(1, 4);
     network.Cut(1, 5);
 
-    Message propose;
-    propose.set_msg_type(MsgPropose);
-    propose.set_from(1);
-    propose.set_to(1);
-    auto* e = propose.add_entries();
-    e->set_data("somedata");
+    Entry entry = NewEntry(0, 0, "somedata");
+    Message propose =
+        NewMessageWithEntries(1, 1, MessageType::MSG_PROPOSE, std::vector<Entry>{entry});
     network.Send({propose});
 
     // Recover
     network.Recover();
 
     // Send heartbeat to sync
-    Message beat;
-    beat.set_msg_type(MsgBeat);
-    beat.set_from(1);
-    beat.set_to(1);
+    Message beat = NewMessage(1, 1, MessageType::MSG_BEAT);
     network.Send({beat});
 
     // Now all nodes should be synced
@@ -240,17 +200,11 @@ TEST_CASE("raft: dueling candidates") {
     network.Isolate(3);
 
     // Node 1 becomes leader
-    Message hup1;
-    hup1.set_msg_type(MsgHup);
-    hup1.set_from(1);
-    hup1.set_to(1);
+    Message hup1 = NewMessage(1, 1, MessageType::MSG_HUP);
     network.Send({hup1});
 
     // Node 3 tries to become candidate (will fail due to isolation)
-    Message hup3;
-    hup3.set_msg_type(MsgHup);
-    hup3.set_from(3);
-    hup3.set_to(3);
+    Message hup3 = NewMessage(3, 3, MessageType::MSG_HUP);
     network.Send({hup3});
 
     CHECK_EQ(network.GetPeer(1)->state(), StateRole::Leader);
@@ -259,10 +213,7 @@ TEST_CASE("raft: dueling candidates") {
     // Recover and sync
     network.Recover();
 
-    Message beat;
-    beat.set_msg_type(MsgBeat);
-    beat.set_from(1);
-    beat.set_to(1);
+    Message beat = NewMessage(1, 1, MessageType::MSG_BEAT);
     network.Send({beat});
 
     // After recovery, node 3 should become follower
@@ -277,10 +228,7 @@ TEST_CASE("raft: candidate concede") {
     network.Isolate(1);
 
     // Node 1 tries to become candidate
-    Message hup1;
-    hup1.set_msg_type(MsgHup);
-    hup1.set_from(1);
-    hup1.set_to(1);
+    Message hup1 = NewMessage(1, 1, MessageType::MSG_HUP);
     network.Send({hup1});
 
     CHECK_EQ(network.GetPeer(1)->state(), StateRole::Candidate);
@@ -288,10 +236,7 @@ TEST_CASE("raft: candidate concede") {
     // Recover and let node 3 become leader
     network.Recover();
 
-    Message hup3;
-    hup3.set_msg_type(MsgHup);
-    hup3.set_from(3);
-    hup3.set_to(3);
+    Message hup3 = NewMessage(3, 3, MessageType::MSG_HUP);
     network.Send({hup3});
 
     // Node 3 should be leader (it can reach majority)
@@ -304,10 +249,7 @@ TEST_CASE("raft: candidate concede") {
 TEST_CASE("raft: add node") {
     auto network = CreateTestNetwork(3);
 
-    Message hup;
-    hup.set_msg_type(MsgHup);
-    hup.set_from(1);
-    hup.set_to(1);
+    Message hup = NewMessage(1, 1, MessageType::MSG_HUP);
     network.Send({hup});
 
     CHECK_EQ(network.GetPeer(1)->state(), StateRole::Leader);
@@ -325,10 +267,7 @@ TEST_CASE("raft: add node") {
 TEST_CASE("raft: remove node") {
     auto network = CreateTestNetwork(3);
 
-    Message hup;
-    hup.set_msg_type(MsgHup);
-    hup.set_from(1);
-    hup.set_to(1);
+    Message hup = NewMessage(1, 1, MessageType::MSG_HUP);
     network.Send({hup});
 
     CHECK_EQ(network.GetPeer(1)->state(), StateRole::Leader);
@@ -391,8 +330,8 @@ TEST_CASE("raft: group commit") {
 
         // Set hard state and conf state
         HardState hs;
-        hs.set_term(1);
-        storage->SetRaftState({hs, MakeConfState({1})});
+        hs.builder().setTerm(1);
+        storage->SetRaftState(MakeRaftState(hs, MakeConfState({1})));
 
         // Create raft instance
         Config cfg = NewTestConfig(1, 5, 1);
@@ -491,9 +430,10 @@ TEST_CASE("raft: group commit consistent") {
         std::ignore = storage->Append(logs);
 
         HardState hs;
-        hs.set_term(2);
-        hs.set_commit(tc.committed);
-        storage->SetRaftState({hs, MakeConfState({1})});
+        auto hs_builder = hs.builder();
+        hs_builder.setTerm(2);
+        hs_builder.setCommit(tc.committed);
+        storage->SetRaftState(MakeRaftState(hs, MakeConfState({1})));
 
         Config cfg = NewTestConfig(1, 5, 1);
         cfg.applied = tc.applied;

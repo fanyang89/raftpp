@@ -2,11 +2,40 @@
 // Flow control tests.
 
 #include <doctest/doctest.h>
+#include <kj/array.h>
 
 #include "harness/network.h"
 #include "harness/test_util.h"
 
 using namespace raftpp;
+
+namespace {
+
+Message MakeProposeMessage() {
+    Entry entry = NewEntry(0, 0, "test");
+    return NewMessageWithEntries(1, 1, MessageType::MSG_PROPOSE, std::vector<Entry>{entry});
+}
+
+Message MakeAppendResponse(uint64_t index) {
+    Message m;
+    auto builder = m.builder();
+    builder.setMsgType(MessageType::MSG_APPEND_RESPONSE);
+    builder.setFrom(2);
+    builder.setTo(1);
+    builder.setIndex(index);
+    return m;
+}
+
+Message MakeHeartbeatResponse() {
+    Message m;
+    auto builder = m.builder();
+    builder.setMsgType(MessageType::MSG_HEARTBEAT_RESPONSE);
+    builder.setFrom(2);
+    builder.setTo(1);
+    return m;
+}
+
+}  // namespace
 
 TEST_SUITE_BEGIN("raft_flow_control");
 
@@ -25,12 +54,7 @@ TEST_CASE("msg app flow control full") {
 
     // fill in the inflights window
     for (size_t i = 0; i < r->max_inflight_messages(); ++i) {
-        Message m;
-        m.set_msg_type(MsgPropose);
-        m.set_from(1);
-        m.set_to(1);
-        auto* e = m.add_entries();
-        e->set_data("test");
+        Message m = MakeProposeMessage();
         auto result = r.Step(m);
         (void)result;
 
@@ -43,12 +67,7 @@ TEST_CASE("msg app flow control full") {
 
     // ensure 2
     for (size_t i = 0; i < 10; ++i) {
-        Message m;
-        m.set_msg_type(MsgPropose);
-        m.set_from(1);
-        m.set_to(1);
-        auto* e = m.add_entries();
-        e->set_data("test");
+        Message m = MakeProposeMessage();
         auto result = r.Step(m);
         (void)result;
 
@@ -73,12 +92,7 @@ TEST_CASE("msg app flow control move forward") {
 
     // fill in the inflights window
     for (size_t i = 0; i < r->max_inflight_messages(); ++i) {
-        Message m;
-        m.set_msg_type(MsgPropose);
-        m.set_from(1);
-        m.set_to(1);
-        auto* e = m.add_entries();
-        e->set_data("test");
+        Message m = MakeProposeMessage();
         auto result = r.Step(m);
         (void)result;
         r.ReadMessages();
@@ -88,22 +102,13 @@ TEST_CASE("msg app flow control move forward") {
     // so we start with 2.
     for (size_t tt = 2; tt < r->max_inflight_messages(); ++tt) {
         // move forward the window
-        Message m;
-        m.set_msg_type(MsgAppendResponse);
-        m.set_from(2);
-        m.set_to(1);
-        m.set_index(tt);
+        Message m = MakeAppendResponse(tt);
         auto result = r.Step(m);
         (void)result;
         r.ReadMessages();
 
         // fill in the inflights window again
-        Message m2;
-        m2.set_msg_type(MsgPropose);
-        m2.set_from(1);
-        m2.set_to(1);
-        auto* e = m2.add_entries();
-        e->set_data("test");
+        Message m2 = MakeProposeMessage();
         result = r.Step(m2);
         (void)result;
         auto ms = r.ReadMessages();
@@ -114,11 +119,7 @@ TEST_CASE("msg app flow control move forward") {
 
         // ensure 2
         for (size_t i = 0; i < tt; ++i) {
-            Message m3;
-            m3.set_msg_type(MsgAppendResponse);
-            m3.set_from(2);
-            m3.set_to(1);
-            m3.set_index(i);
+            Message m3 = MakeAppendResponse(i);
             result = r.Step(m3);
             (void)result;
 
@@ -141,12 +142,7 @@ TEST_CASE("msg app flow control recv heartbeat") {
 
     // fill in the inflights window
     for (size_t i = 0; i < r->max_inflight_messages(); ++i) {
-        Message m;
-        m.set_msg_type(MsgPropose);
-        m.set_from(1);
-        m.set_to(1);
-        auto* e = m.add_entries();
-        e->set_data("test");
+        Message m = MakeProposeMessage();
         auto result = r.Step(m);
         (void)result;
         r.ReadMessages();
@@ -155,12 +151,9 @@ TEST_CASE("msg app flow control recv heartbeat") {
     for (size_t tt = 1; tt < 5; ++tt) {
         CHECK(pr.inflights().Full());
 
-        // recv tt MsgHeartbeatResp and expect one free slot
+        // recv tt MessageType::MSG_HEARTBEAT_RESPONSE and expect one free slot
         for (size_t i = 0; i < tt; ++i) {
-            Message m;
-            m.set_msg_type(MsgHeartbeatResponse);
-            m.set_from(2);
-            m.set_to(1);
+            Message m = MakeHeartbeatResponse();
             auto result = r.Step(m);
             (void)result;
             r.ReadMessages();
@@ -168,12 +161,7 @@ TEST_CASE("msg app flow control recv heartbeat") {
         }
 
         // one slot
-        Message m;
-        m.set_msg_type(MsgPropose);
-        m.set_from(1);
-        m.set_to(1);
-        auto* e = m.add_entries();
-        e->set_data("test");
+        Message m = MakeProposeMessage();
         auto result = r.Step(m);
         (void)result;
         auto ms = r.ReadMessages();
@@ -181,12 +169,7 @@ TEST_CASE("msg app flow control recv heartbeat") {
 
         // and just one slot
         for (size_t i = 0; i < 10; ++i) {
-            Message m2;
-            m2.set_msg_type(MsgPropose);
-            m2.set_from(1);
-            m2.set_to(1);
-            auto* e2 = m2.add_entries();
-            e2->set_data("test");
+            Message m2 = MakeProposeMessage();
             result = r.Step(m2);
             (void)result;
             auto ms1 = r.ReadMessages();
@@ -194,10 +177,7 @@ TEST_CASE("msg app flow control recv heartbeat") {
         }
 
         // clear all pending messages
-        Message m3;
-        m3.set_msg_type(MsgHeartbeatResponse);
-        m3.set_from(2);
-        m3.set_to(1);
+        Message m3 = MakeHeartbeatResponse();
         result = r.Step(m3);
         (void)result;
         r.ReadMessages();
@@ -221,12 +201,7 @@ TEST_CASE("msg app flow control with freeing resources") {
         pr.BecomeReplicate();
     }
 
-    Message m;
-    m.set_msg_type(MsgPropose);
-    m.set_from(1);
-    m.set_to(1);
-    auto* e = m.add_entries();
-    e->set_data("test");
+    Message m = MakeProposeMessage();
     auto result = r.Step(m);
     (void)result;
 
@@ -243,11 +218,7 @@ TEST_CASE("msg app flow control with freeing resources") {
     3: cap=256/start=0/count=1/buffer=[2]
     */
 
-    Message resp;
-    resp.set_msg_type(MsgAppendResponse);
-    resp.set_from(2);
-    resp.set_to(1);
-    resp.set_index(r->raft_log().LastIndex());
+    Message resp = MakeAppendResponse(r->raft_log().LastIndex());
     result = r.Step(resp);
     (void)result;
 
@@ -259,12 +230,7 @@ TEST_CASE("msg app flow control with freeing resources") {
     3: cap=256/start=0/count=1/buffer=[2]
     */
 
-    Message m2;
-    m2.set_msg_type(MsgPropose);
-    m2.set_from(1);
-    m2.set_to(1);
-    auto* e2 = m2.add_entries();
-    e2->set_data("test");
+    Message m2 = MakeProposeMessage();
     result = r.Step(m2);
     (void)result;
 
@@ -277,11 +243,7 @@ TEST_CASE("msg app flow control with freeing resources") {
     3: cap=256/start=0/count=2/buffer=[2,3]
     */
 
-    Message resp2;
-    resp2.set_msg_type(MsgAppendResponse);
-    resp2.set_from(2);
-    resp2.set_to(1);
-    resp2.set_index(r->raft_log().LastIndex());
+    Message resp2 = MakeAppendResponse(r->raft_log().LastIndex());
     result = r.Step(resp2);
     (void)result;
 
@@ -320,10 +282,7 @@ TEST_CASE("disable progress") {
 
     // Disable the progress 2. Internal `free`s shouldn't fail.
     r->adjust_max_inflight_msgs(2, 0);
-    Message m;
-    m.set_msg_type(MsgHeartbeatResponse);
-    m.set_from(2);
-    m.set_to(1);
+    Message m = MakeHeartbeatResponse();
     auto result = r.Step(m);
     (void)result;
 
@@ -337,15 +296,12 @@ TEST_CASE("disable progress") {
     // After the progress gets enabled and a heartbeat response is received,
     // its leader can continue to append entries to it.
     r->adjust_max_inflight_msgs(2, 10);
-    Message m2;
-    m2.set_msg_type(MsgHeartbeatResponse);
-    m2.set_from(2);
-    m2.set_to(1);
+    Message m2 = MakeHeartbeatResponse();
     result = r.Step(m2);
     (void)result;
     msgs = r.ReadMessages();
     CHECK_EQ(msgs.size(), 1);
-    CHECK_EQ(msgs[0].msg_type(), MsgAppend);
+    CHECK_EQ(msgs[0].reader().getMsgType(), MessageType::MSG_APPEND);
 }
 
 TEST_SUITE_END();

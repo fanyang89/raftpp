@@ -66,7 +66,7 @@ class ReadyProcessor {
     /// Check for leadership changes and notify state machine
     void CheckLeadershipChange(const Ready& rd);
 
-    /// Convert protobuf Snapshot to SnapshotData
+    /// Convert Cap'n Proto Snapshot to SnapshotData
     [[nodiscard]] static SnapshotData ToSnapshotData(const Snapshot& snapshot);
 
     RawNode& raw_node_;

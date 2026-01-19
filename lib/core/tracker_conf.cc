@@ -20,24 +20,39 @@ void TrackerConfiguration::Clear() {
 
 ConfState TrackerConfiguration::ToConfState() {
     ConfState cs;
+    auto builder = cs.builder();
 
-    for (const auto v : voters.incoming()) {
-        cs.mutable_voters()->Add(v);
+    // Convert voters incoming to a vector first
+    auto incoming = voters.incoming();
+    auto voters_builder = builder.initVoters(incoming.size());
+    size_t i = 0;
+    for (const auto v : incoming) {
+        voters_builder.set(i++, v);
     }
 
-    for (const auto v : voters.outgoing()) {
-        cs.mutable_voters_outgoing()->Add(v);
+    // Convert voters outgoing
+    auto outgoing = voters.outgoing();
+    auto voters_out_builder = builder.initVotersOutgoing(outgoing.size());
+    i = 0;
+    for (const auto v : outgoing) {
+        voters_out_builder.set(i++, v);
     }
 
+    // Convert learners
+    auto learners_builder = builder.initLearners(learners.size());
+    i = 0;
     for (const auto v : learners) {
-        cs.mutable_learners()->Add(v);
+        learners_builder.set(i++, v);
     }
 
+    // Convert learners_next
+    auto learners_next_builder = builder.initLearnersNext(learners_next.size());
+    i = 0;
     for (const auto v : learners_next) {
-        cs.mutable_learners_next()->Add(v);
+        learners_next_builder.set(i++, v);
     }
 
-    cs.set_auto_leave(auto_leave);
+    builder.setAutoLeave(auto_leave);
     return cs;
 }
 

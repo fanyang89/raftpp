@@ -14,7 +14,7 @@
 #include "raftpp/core/raft_config.h"
 #include "raftpp/core/raft_core.h"
 #include "raftpp/core/raft_log.h"
-#include "raftpp/core/raftpp.pb.h"
+#include "raftpp/core/types.h"
 #include "raftpp/core/raw_node.h"
 
 namespace raftpp {
@@ -45,8 +45,8 @@ Interface NewTestRaftWithLogs(
 /// Create a new test raft with config.
 Interface NewTestRaftWithConfig(const Config& config, std::shared_ptr<MemoryStorage> storage);
 
-/// Create a HardState.
-HardState MakeHardState(uint64_t term, uint64_t commit, uint64_t vote);
+/// Create a RaftState from HardState and ConfState.
+RaftState MakeRaftState(const HardState& hs, const ConfState& cs);
 
 /// Create a SoftState.
 SoftState MakeSoftState(uint64_t leader_id, StateRole state);

@@ -47,25 +47,53 @@ bool RaftCore::TryBatching(
 ) const {
     bool is_batched = false;
     for (auto& msg : messages) {
-        if (msg.msg_type() == MsgAppend && msg.to() == to) {
+        auto msg_reader = msg.reader();
+        if (msg_reader.getMsgType() == MessageType::MSG_APPEND && msg_reader.getTo() == to) {
             if (!entries.empty()) {
                 if (!IsContinuousEntries(msg, entries)) {
                     return is_batched;
                 }
 
-                for (const auto& entry : msg.entries()) {
-                    msg.mutable_entries()->Add()->CopyFrom(entry);
+                // Need to rebuild the entries list with Cap'n Proto
+                auto existing_entries = msg_reader.getEntries();
+                std::vector<Entry> all_entries;
+                all_entries.reserve(existing_entries.size() + entries.size());
+
+                // Copy existing entries
+                for (const auto& e : existing_entries) {
+                    Entry entry;
+                    auto entry_builder = entry.builder();
+                    entry_builder.setEntryType(e.getEntryType());
+                    entry_builder.setTerm(e.getTerm());
+                    entry_builder.setIndex(e.getIndex());
+                    entry_builder.setData(e.getData());
+                    entry_builder.setContext(e.getContext());
+                    all_entries.push_back(std::move(entry));
                 }
 
+                // Add new entries
                 for (const auto& entry : entries) {
-                    msg.mutable_entries()->Add()->CopyFrom(entry);
+                    all_entries.push_back(entry.clone());
                 }
 
-                const auto size = msg.entries().size();
-                const uint64_t last_idx = msg.entries().at(size - 1).index();
+                // Rebuild message with new entries
+                auto msg_builder = msg.builder();
+                auto entries_builder = msg_builder.initEntries(all_entries.size());
+                for (size_t i = 0; i < all_entries.size(); ++i) {
+                    auto src_reader = all_entries[i].reader();
+                    auto dst = entries_builder[i];
+                    dst.setEntryType(src_reader.getEntryType());
+                    dst.setTerm(src_reader.getTerm());
+                    dst.setIndex(src_reader.getIndex());
+                    dst.setData(src_reader.getData());
+                    dst.setContext(src_reader.getContext());
+                }
+
+                const auto size = all_entries.size();
+                const uint64_t last_idx = all_entries[size - 1].reader().getIndex();
                 pr.UpdateState(last_idx);
             }
-            msg.set_commit(raft_log_.committed());
+            msg.builder().setCommit(raft_log_.committed());
             is_batched = true;
             break;
         }
@@ -76,15 +104,25 @@ bool RaftCore::TryBatching(
 void RaftCore::PrepareSendEntries(
     Message& message, Progress& pr, const uint64_t term, const std::vector<Entry>& entries
 ) const {
-    message.set_msg_type(MsgAppend);
-    message.set_index(pr.next_idx() - 1);
-    message.set_log_term(term);
-    for (const auto& ent : entries) {
-        message.mutable_entries()->Add()->CopyFrom(ent);
+    auto msg_builder = message.builder();
+    msg_builder.setMsgType(MessageType::MSG_APPEND);
+    msg_builder.setIndex(pr.next_idx() - 1);
+    msg_builder.setLogTerm(term);
+
+    auto entries_builder = msg_builder.initEntries(entries.size());
+    for (size_t i = 0; i < entries.size(); ++i) {
+        auto src_reader = entries[i].reader();
+        auto dst = entries_builder[i];
+        dst.setEntryType(src_reader.getEntryType());
+        dst.setTerm(src_reader.getTerm());
+        dst.setIndex(src_reader.getIndex());
+        dst.setData(src_reader.getData());
+        dst.setContext(src_reader.getContext());
     }
-    message.set_commit(raft_log_.committed());
-    if (!message.entries().empty()) {
-        const uint64_t last_index = message.entries().at(message.entries_size() - 1).index();
+
+    msg_builder.setCommit(raft_log_.committed());
+    if (!entries.empty()) {
+        const uint64_t last_index = entries[entries.size() - 1].reader().getIndex();
         pr.UpdateState(last_index);
     }
 }
@@ -98,41 +136,46 @@ void RaftCore::SendAppendAggressively(uint64_t to, Progress& pr, std::vector<Mes
 }
 
 void RaftCore::Send(Message& m, std::vector<Message>& messages) const {
-    if (m.from() == INVALID_ID) {
-        m.set_from(id_);
+    auto m_reader = m.reader();
+    auto m_builder = m.builder();
+
+    if (m_reader.getFrom() == INVALID_ID) {
+        m_builder.setFrom(id_);
     }
 
-    switch (m.msg_type()) {
-        case MsgRequestPreVote:
-        case MsgRequestPreVoteResponse:
-        case MsgRequestVote:
-        case MsgRequestVoteResponse:
-            if (m.term() == 0) {
-                PANIC("term should be set when sending {}", MessageType_Name(m.msg_type()));
+    switch (m_reader.getMsgType()) {
+        case MessageType::MSG_REQUEST_PRE_VOTE:
+        case MessageType::MSG_REQUEST_PRE_VOTE_RESPONSE:
+        case MessageType::MSG_REQUEST_VOTE:
+        case MessageType::MSG_REQUEST_VOTE_RESPONSE:
+            if (m_reader.getTerm() == 0) {
+                PANIC("term should be set when sending {:d}", static_cast<int>(m_reader.getMsgType()));
             }
             break;
         default:
-            if (m.term() != 0) {
+            if (m_reader.getTerm() != 0) {
                 PANIC(
-                    "term should not be set when sending {} (was {})",
-                    MessageType_Name(m.msg_type()), m.term()
+                    "term should not be set when sending {:d} (was {})",
+                    static_cast<int>(m_reader.getMsgType()), m_reader.getTerm()
                 );
             }
             // do not attach term to MsgPropose, MsgReadIndex
             // proposals are a way to forward to the leader and
             // should be treated as local message.
             // MsgReadIndex is also forwarded to leader.
-            if (m.msg_type() != MsgPropose && m.msg_type() != MsgReadIndex) {
-                m.set_term(term_);
+            if (m_reader.getMsgType() != MessageType::MSG_PROPOSE &&
+                m_reader.getMsgType() != MessageType::MSG_READ_INDEX) {
+                m_builder.setTerm(term_);
             }
             break;
     }
 
-    if (m.msg_type() == MsgRequestVote || m.msg_type() == MsgRequestPreVote) {
-        m.set_priority(priority_);
+    if (m_reader.getMsgType() == MessageType::MSG_REQUEST_VOTE ||
+        m_reader.getMsgType() == MessageType::MSG_REQUEST_PRE_VOTE) {
+        m_builder.setPriority(priority_);
     }
 
-    messages.emplace_back(m);
+    messages.emplace_back(std::move(m));
 }
 
 bool RaftCore::PrepareSendSnapshot(Message& m, Progress& pr, uint64_t to) {
@@ -140,23 +183,65 @@ bool RaftCore::PrepareSendSnapshot(Message& m, Progress& pr, uint64_t to) {
         return false;
     }
 
-    m.set_msg_type(MsgSnapshot);
+    m.builder().setMsgType(MessageType::MSG_SNAPSHOT);
 
-    if (const auto snapshot_r = raft_log_.GetSnapshot(pr.pending_request_snapshot(), to);
-        !snapshot_r) {
+    auto snapshot_r = raft_log_.GetSnapshot(pr.pending_request_snapshot(), to);
+    if (!snapshot_r) {
         if (snapshot_r.error() == StorageErrorCode::SnapshotTemporarilyUnavailable) {
             return false;
         }
         PANIC("unexpected error: {}", snapshot_r.error());
     } else {
-        const auto snapshot = *snapshot_r;
-        if (snapshot.metadata().index() == 0) {
+        auto snapshot = std::move(snapshot_r).value();
+        auto snap_meta = snapshot.reader().getMetadata();
+        if (snap_meta.getIndex() == 0) {
             PANIC("need non-empty snapshot");
         }
 
-        const uint64_t s_index = snapshot.metadata().index();
-        const uint64_t s_term = snapshot.metadata().term();
-        m.mutable_snapshot()->CopyFrom(snapshot);
+        const uint64_t s_index = snap_meta.getIndex();
+        const uint64_t s_term = snap_meta.getTerm();
+
+        // Set the snapshot in the message
+        auto m_builder = m.builder();
+        auto snap_builder = m_builder.initSnapshot();
+        auto src_reader = snapshot.reader();
+        snap_builder.setData(src_reader.getData());
+
+        // Copy metadata
+        auto meta_builder = snap_builder.initMetadata();
+        meta_builder.setIndex(s_index);
+        meta_builder.setTerm(s_term);
+
+        // Copy conf state
+        auto src_conf = snap_meta.getConfState();
+        auto conf_builder = meta_builder.initConfState();
+
+        auto voters = src_conf.getVoters();
+        auto voters_builder = conf_builder.initVoters(voters.size());
+        for (size_t i = 0; i < voters.size(); ++i) {
+            voters_builder.set(i, voters[i]);
+        }
+
+        auto learners = src_conf.getLearners();
+        auto learners_builder = conf_builder.initLearners(learners.size());
+        for (size_t i = 0; i < learners.size(); ++i) {
+            learners_builder.set(i, learners[i]);
+        }
+
+        auto voters_out = src_conf.getVotersOutgoing();
+        auto voters_out_builder = conf_builder.initVotersOutgoing(voters_out.size());
+        for (size_t i = 0; i < voters_out.size(); ++i) {
+            voters_out_builder.set(i, voters_out[i]);
+        }
+
+        auto learners_next = src_conf.getLearnersNext();
+        auto learners_next_builder = conf_builder.initLearnersNext(learners_next.size());
+        for (size_t i = 0; i < learners_next.size(); ++i) {
+            learners_next_builder.set(i, learners_next[i]);
+        }
+
+        conf_builder.setAutoLeave(src_conf.getAutoLeave());
+
         pr.BecomeSnapshot(s_index);
         return true;
     }
@@ -170,7 +255,7 @@ bool RaftCore::MaybeSendAppend(
     }
 
     Message m;
-    m.set_to(to);
+    m.builder().setTo(to);
 
     if (pr.pending_request_snapshot() != INVALID_INDEX) {
         if (!PrepareSendSnapshot(m, pr, to)) {

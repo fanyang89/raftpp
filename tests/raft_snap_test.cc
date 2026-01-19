@@ -34,12 +34,13 @@ TEST_CASE("sending snapshot set pending snapshot") {
     pr.next_idx() = r->raft_log().LastIndex();
 
     Message m;
-    m.set_msg_type(MsgAppendResponse);
-    m.set_from(2);
-    m.set_to(1);
+    auto builder = m.builder();
+    builder.setMsgType(MessageType::MSG_APPEND_RESPONSE);
+    builder.setFrom(2);
+    builder.setTo(1);
     auto& voter_2 = r->progress_tracker().progress_map().at(2);
-    m.set_index(voter_2.next_idx() - 1);
-    m.set_reject(true);
+    builder.setIndex(voter_2.next_idx() - 1);
+    builder.setReject(true);
 
     auto result = r.Step(m);
     (void)result;
@@ -60,12 +61,9 @@ TEST_CASE("pending snapshot pause replication") {
     auto& pr = r->progress_tracker().progress_map().at(2);
     pr.BecomeSnapshot(11);
 
-    Message m;
-    m.set_msg_type(MsgPropose);
-    m.set_from(1);
-    m.set_to(1);
-    auto* e = m.add_entries();
-    e->set_data("test");
+    Entry entry = NewEntry(0, 0, "test");
+    Message m = NewMessageWithEntries(
+        1, 1, MessageType::MSG_PROPOSE, std::vector<Entry>{entry});
     auto result = r.Step(m);
     (void)result;
 
@@ -88,10 +86,11 @@ TEST_CASE("snapshot failure") {
     pr.BecomeSnapshot(11);
 
     Message m;
-    m.set_msg_type(MsgSnapStatus);
-    m.set_from(2);
-    m.set_to(1);
-    m.set_reject(true);
+    auto builder = m.builder();
+    builder.setMsgType(MessageType::MSG_SNAP_STATUS);
+    builder.setFrom(2);
+    builder.setTo(1);
+    builder.setReject(true);
     auto result = r.Step(m);
     (void)result;
 
@@ -116,10 +115,11 @@ TEST_CASE("snapshot succeed") {
     pr.BecomeSnapshot(11);
 
     Message m;
-    m.set_msg_type(MsgSnapStatus);
-    m.set_from(2);
-    m.set_to(1);
-    m.set_reject(false);
+    auto builder = m.builder();
+    builder.setMsgType(MessageType::MSG_SNAP_STATUS);
+    builder.setFrom(2);
+    builder.setTo(1);
+    builder.setReject(false);
     auto result = r.Step(m);
     (void)result;
 
@@ -144,10 +144,11 @@ TEST_CASE("snapshot abort") {
     pr.BecomeSnapshot(11);
 
     Message m;
-    m.set_msg_type(MsgAppendResponse);
-    m.set_from(2);
-    m.set_to(1);
-    m.set_index(11);
+    auto builder = m.builder();
+    builder.setMsgType(MessageType::MSG_APPEND_RESPONSE);
+    builder.setFrom(2);
+    builder.setTo(1);
+    builder.setIndex(11);
     // A successful MsgAppendResponse that has a higher/equal index than the
     // pending snapshot should abort the pending snapshot.
     auto result = r.Step(m);
@@ -172,10 +173,7 @@ TEST_CASE("snapshot with min term") {
         peers.push_back(std::make_unique<Interface>(std::move(n2)));
         auto network = Network::Create(std::move(peers));
 
-        Message hup;
-        hup.set_msg_type(MsgHup);
-        hup.set_from(1);
-        hup.set_to(1);
+        Message hup = NewMessage(1, 1, MessageType::MSG_HUP);
         network.Send({hup});
 
         // 1 will be elected as leader, and then send a snapshot and an empty entry to 2.
@@ -214,24 +212,25 @@ TEST_CASE("request snapshot") {
 
     // Advance matched.
     Message m;
-    m.set_msg_type(MsgAppendResponse);
-    m.set_from(2);
-    m.set_to(1);
-    m.set_index(11);
+    auto builder = m.builder();
+    builder.setMsgType(MessageType::MSG_APPEND_RESPONSE);
+    builder.setFrom(2);
+    builder.setTo(1);
+    builder.setIndex(11);
     auto res = r.Step(m);
     (void)res;
     auto& voter_2 = r->progress_tracker().progress_map().at(2);
     CHECK_EQ(voter_2.state(), ProgressState::Replicate);
 
     uint64_t request_snapshot_idx = r->raft_log().committed();
-    m.set_index(11);
-    m.set_reject(true);
-    m.set_reject_hint(INVALID_INDEX);
-    m.set_request_snapshot(request_snapshot_idx);
+    builder.setIndex(11);
+    builder.setReject(true);
+    builder.setRejectHint(INVALID_INDEX);
+    builder.setRequestSnapshot(request_snapshot_idx);
 
     // Ignore out of order request snapshot messages.
-    Message out_of_order = m;
-    out_of_order.set_index(9);
+    Message out_of_order = m.clone();
+    out_of_order.builder().setIndex(9);
     res = r.Step(out_of_order);
     (void)res;
     CHECK_EQ(voter_2.state(), ProgressState::Replicate);
@@ -249,12 +248,13 @@ TEST_CASE("request snapshot") {
 
     auto msgs = r.ReadMessages();
     CHECK_EQ(msgs.size(), 1);
-    CHECK_EQ(msgs[0].msg_type(), MsgSnapshot);
-    CHECK_EQ(msgs[0].snapshot().metadata().index(), request_snapshot_idx);
+    auto msg_reader = msgs[0].reader();
+    CHECK_EQ(msg_reader.getMsgType(), MessageType::MSG_SNAPSHOT);
+    CHECK_EQ(msg_reader.getSnapshot().getMetadata().getIndex(), request_snapshot_idx);
 
     // Append/heartbeats does not set the state from snapshot to probe.
-    m.set_msg_type(MsgAppendResponse);
-    m.set_index(11);
+    builder.setMsgType(MessageType::MSG_APPEND_RESPONSE);
+    builder.setIndex(11);
     res = r.Step(m);
     (void)res;
     CHECK_EQ(voter_2.state(), ProgressState::Snapshot);
@@ -263,7 +263,7 @@ TEST_CASE("request snapshot") {
     CHECK(voter_2.IsPaused());
 
     // However snapshot status report does set the stat to probe.
-    m.set_msg_type(MsgSnapStatus);
+    builder.setMsgType(MessageType::MSG_SNAP_STATUS);
     res = r.Step(m);
     (void)res;
     CHECK_EQ(voter_2.state(), ProgressState::Probe);

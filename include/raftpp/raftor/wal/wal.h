@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "raftpp/core/raft.h"
-#include "raftpp/core/raftpp.pb.h"
+#include "raftpp/core/types.h"
 #include "raftpp/raftor/wal/metadata_store.h"
 #include "raftpp/raftor/wal/segment_manager.h"
 #include "raftpp/raftor/wal/wal_config.h"

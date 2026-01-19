@@ -6,7 +6,7 @@
 #include <vector>
 
 #include "raftpp/core/error.h"
-#include "raftpp/core/raftpp.pb.h"
+#include "raftpp/core/types.h"
 
 namespace raftpp::raftor {
 

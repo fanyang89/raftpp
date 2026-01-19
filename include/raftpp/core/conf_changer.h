@@ -2,7 +2,7 @@
 
 #include "progress_tracker.h"
 #include "raftpp/core/error.h"
-#include "raftpp/core/raftpp.pb.h"
+#include "types.h"
 #include "tracker_conf.h"
 
 namespace raftpp {

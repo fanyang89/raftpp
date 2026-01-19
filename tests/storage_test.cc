@@ -2,7 +2,6 @@
 
 #include <absl/strings/str_join.h>
 #include <doctest/doctest.h>
-#include <google/protobuf/util/message_differencer.h>
 #include <spdlog/fmt/fmt.h>
 
 #include "harness/test_util.h"
@@ -15,7 +14,7 @@ namespace {
 
 template <typename T>
 size_t size_of(const T& m) {
-    return m.ByteSizeLong();
+    return m.serializeAsBytes().size();
 }
 
 }  // namespace
@@ -28,7 +27,14 @@ struct fmt::formatter<std::vector<Entry>> : formatter<std::string_view> {
         std::vector<std::string> s;
         s.reserve(values.size());
         for (const auto& v : values) {
-            s.emplace_back(fmt::format("{{{}}}", v.ShortDebugString()));
+            auto reader = v.reader();
+            auto data = reader.getData();
+            s.emplace_back(fmt::format(
+                "{{index={} term={} data_size={}}}",
+                reader.getIndex(),
+                reader.getTerm(),
+                data.size()
+            ));
         }
         return fmt::format_to(ctx.out(), "[\n{}\n]", absl::StrJoin(s, ",\n"));
     }
@@ -176,7 +182,7 @@ TEST_CASE("storage: compact") {
     uint64_t term = 0;
     if (const auto r = storage.Entries(index, index + 1, 1, GetEntriesContext::Empty(false))) {
         if (!r->empty()) {
-            term = r->front().term();
+            term = r->front().reader().getTerm();
         }
     }
     REQUIRE_EQ(wTerm, term);
@@ -206,7 +212,11 @@ TEST_CASE("storage: create snapshot") {
 
     const std::vector<uint64_t> nodes{1, 2, 3};
     ConfState conf_state;
-    conf_state.mutable_voters()->Add(nodes.begin(), nodes.end());
+    auto conf_builder = conf_state.builder();
+    auto voters_builder = conf_builder.initVoters(nodes.size());
+    for (size_t i = 0; i < nodes.size(); ++i) {
+        voters_builder.set(i, nodes[i]);
+    }
 
     RaftError unavailable(StorageErrorCode::SnapshotTemporarilyUnavailable);
     using TestParam = std::tuple<uint64_t, Result<Snapshot>, uint64_t>;
@@ -224,9 +234,10 @@ TEST_CASE("storage: create snapshot") {
     storage.SetEntries(ents);
 
     RaftState raft_state;
-    raft_state.hard_state.set_commit(idx);
-    raft_state.hard_state.set_term(idx);
-    raft_state.conf_state.CopyFrom(conf_state);
+    auto hs_builder = raft_state.hard_state.builder();
+    hs_builder.setCommit(idx);
+    hs_builder.setTerm(idx);
+    raft_state.conf_state = conf_state.clone();
     storage.SetRaftState(raft_state);
 
     if (!wResult.has_value()) {

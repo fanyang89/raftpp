@@ -68,7 +68,7 @@ Result<void> ReadyProcessor::PersistEntries(const Ready& rd) {
 
     if (auto result = storage_->Append(rd.entries); !result) {
         spdlog::error("Failed to persist entries: {}", result.error().ToString());
-        return result;
+        return std::unexpected(RaftError(RaftErrorCode::ProposalDropped));
     }
 
     return {};
@@ -80,13 +80,13 @@ Result<void> ReadyProcessor::PersistHardState(const Ready& rd) {
     }
 
     // SetHardState doesn't return error in current implementation
-    storage_->SetHardState(HardState{*rd.hs});
+    storage_->SetHardState(rd.hs->clone());
 
     // Sync if required
     if (rd.must_sync) {
         if (auto result = storage_->Sync(); !result) {
             spdlog::error("Failed to sync storage: {}", result.error().ToString());
-            return result;
+            return std::unexpected(RaftError(RaftErrorCode::ProposalDropped));
         }
     }
 
@@ -95,13 +95,15 @@ Result<void> ReadyProcessor::PersistHardState(const Ready& rd) {
 
 Result<void> ReadyProcessor::ApplySnapshot(const Ready& rd) {
     const auto& snapshot = rd.snapshot;
-    if (snapshot.metadata().index() == 0) {
+    auto snap_reader = snapshot.reader();
+    auto snap_meta = snap_reader.getMetadata();
+
+    if (snap_meta.getIndex() == 0) {
         return {};  // No snapshot
     }
 
     spdlog::info(
-        "Applying snapshot at index {} term {}", snapshot.metadata().index(),
-        snapshot.metadata().term()
+        "Applying snapshot at index {} term {}", snap_meta.getIndex(), snap_meta.getTerm()
     );
 
     // First restore to state machine
@@ -114,10 +116,10 @@ Result<void> ReadyProcessor::ApplySnapshot(const Ready& rd) {
     // Then apply to storage
     if (auto result = storage_->ApplySnapshot(snapshot); !result) {
         spdlog::error("Failed to apply snapshot to storage: {}", result.error().ToString());
-        return result;
+        return std::unexpected(RaftError(RaftErrorCode::ProposalDropped));
     }
 
-    applied_index_ = snapshot.metadata().index();
+    applied_index_ = snap_meta.getIndex();
 
     return {};
 }
@@ -134,32 +136,52 @@ Result<void> ReadyProcessor::ApplyCommittedEntries(const std::vector<Entry>& ent
     for (const auto& entry : entries) {
         if (auto result = ApplyEntry(entry); !result) {
             // Log but continue - state machine errors shouldn't stop Raft
+            auto entry_reader = entry.reader();
             spdlog::warn(
-                "Failed to apply entry at index {}: {}", entry.index(), result.error().ToString()
+                "Failed to apply entry at index {}: {}", entry_reader.getIndex(), result.error().ToString()
             );
         }
-        applied_index_ = entry.index();
+        applied_index_ = entry.reader().getIndex();
     }
     return {};
 }
 
 Result<void> ReadyProcessor::ApplyEntry(const Entry& entry) {
+    auto entry_reader = entry.reader();
+
     // Handle configuration changes
-    if (entry.entry_type() == EntryConfChange || entry.entry_type() == EntryConfChangeV2) {
+    if (entry_reader.getEntryType() == EntryType::ENTRY_CONF_CHANGE ||
+        entry_reader.getEntryType() == EntryType::ENTRY_CONF_CHANGE_V2) {
         ConfChangeV2 cc;
-        if (entry.entry_type() == EntryConfChange) {
+
+        if (entry_reader.getEntryType() == EntryType::ENTRY_CONF_CHANGE) {
             // Convert ConfChange to ConfChangeV2
             ConfChange cc_v1;
-            if (!cc_v1.ParseFromString(entry.data())) {
-                return std::unexpected(RaftError(RaftErrorCode::ConfChangeParseError));
+            auto data = entry_reader.getData();
+
+            try {
+                const ::capnp::word* words = reinterpret_cast<const ::capnp::word*>(data.begin());
+                size_t word_count = data.size() / sizeof(::capnp::word);
+                cc_v1 = ConfChange::parseFromWords(kj::ArrayPtr<const ::capnp::word>(words, word_count));
+            } catch (...) {
+                return std::unexpected(RaftError(RaftErrorCode::ProposalDropped));
             }
-            auto* single = cc.add_changes();
-            single->set_change_type(cc_v1.change_type());
-            single->set_node_id(cc_v1.node_id());
-            cc.set_context(cc_v1.context());
+
+            auto cc_v1_reader = cc_v1.reader();
+            auto cc_builder = cc.builder();
+            auto single = cc_builder.initChanges(1)[0];
+            single.setChangeType(cc_v1_reader.getChangeType());
+            single.setNodeId(cc_v1_reader.getNodeId());
+            cc_builder.setContext(cc_v1_reader.getContext());
         } else {
-            if (!cc.ParseFromString(entry.data())) {
-                return std::unexpected(RaftError(RaftErrorCode::ConfChangeParseError));
+            auto data = entry_reader.getData();
+
+            try {
+                const ::capnp::word* words = reinterpret_cast<const ::capnp::word*>(data.begin());
+                size_t word_count = data.size() / sizeof(::capnp::word);
+                cc = ConfChangeV2::parseFromWords(kj::ArrayPtr<const ::capnp::word>(words, word_count));
+            } catch (...) {
+                return std::unexpected(RaftError(RaftErrorCode::ProposalDropped));
             }
         }
 
@@ -169,27 +191,33 @@ Result<void> ReadyProcessor::ApplyEntry(const Entry& entry) {
         }
 
         // Update transport peers based on conf change
-        for (const auto& change : cc.changes()) {
-            if (change.change_type() == AddNode || change.change_type() == AddLearnerNode) {
+        auto cc_reader = cc.reader();
+        auto changes = cc_reader.getChanges();
+        for (const auto& change : changes) {
+            if (change.getChangeType() == ConfChangeType::ADD_NODE ||
+                change.getChangeType() == ConfChangeType::ADD_LEARNER_NODE) {
                 // Note: address needs to be provided via context or external mechanism
                 // For now, we skip adding - the user should call AddNode explicitly
-                spdlog::info("Node {} added to configuration", change.node_id());
-            } else if (change.change_type() == RemoveNode) {
-                transport_.RemovePeer(change.node_id());
-                spdlog::info("Node {} removed from configuration", change.node_id());
+                spdlog::info("Node {} added to configuration", change.getNodeId());
+            } else if (change.getChangeType() == ConfChangeType::REMOVE_NODE) {
+                transport_.RemovePeer(change.getNodeId());
+                spdlog::info("Node {} removed from configuration", change.getNodeId());
             }
         }
 
         // Complete the proposal callback if this was a tracked proposal
-        if (!cc.context().empty()) {
-            proposal_tracker_.Complete(cc.context(), "conf change applied");
+        auto context = cc_reader.getContext();
+        if (context.size() > 0) {
+            std::string ctx_str(reinterpret_cast<const char*>(context.begin()), context.size());
+            proposal_tracker_.Complete(ctx_str, "conf change applied");
         }
 
         return {};
     }
 
     // Handle normal entries
-    if (entry.data().empty()) {
+    auto data = entry_reader.getData();
+    if (data.size() == 0) {
         // Empty entry after leader election - no callback to complete
         return {};
     }
@@ -197,16 +225,20 @@ Result<void> ReadyProcessor::ApplyEntry(const Entry& entry) {
     auto result = state_machine_.Apply(entry);
     if (!result) {
         // State machine error - still complete the proposal but with error
-        if (!entry.context().empty()) {
-            proposal_tracker_.Fail(entry.context(), result.error());
+        auto context = entry_reader.getContext();
+        if (context.size() > 0) {
+            std::string ctx_str(reinterpret_cast<const char*>(context.begin()), context.size());
+            proposal_tracker_.Fail(ctx_str, result.error());
         }
         return result.error();
     }
 
     // Complete the proposal callback
-    if (!entry.context().empty()) {
+    auto context = entry_reader.getContext();
+    if (context.size() > 0) {
+        std::string ctx_str(reinterpret_cast<const char*>(context.begin()), context.size());
         std::string response = result->response.value_or("");
-        proposal_tracker_.Complete(entry.context(), response);
+        proposal_tracker_.Complete(ctx_str, response);
     }
 
     return {};
@@ -219,11 +251,12 @@ void ReadyProcessor::ProcessLightReady(const LightReady& light_rd) {
     // Apply additional committed entries
     for (const auto& entry : light_rd.committed_entries) {
         if (auto result = ApplyEntry(entry); !result) {
+            auto entry_reader = entry.reader();
             spdlog::warn(
-                "Failed to apply entry at index {}: {}", entry.index(), result.error().ToString()
+                "Failed to apply entry at index {}: {}", entry_reader.getIndex(), result.error().ToString()
             );
         }
-        applied_index_ = entry.index();
+        applied_index_ = entry.reader().getIndex();
     }
 
     // Update applied index
@@ -242,9 +275,14 @@ void ReadyProcessor::CheckLeadershipChange(const Ready& rd) {
     bool is_leader = (ss.raft_state == StateRole::Leader);
 
     // Detect leadership change
+    uint64_t hs_term = prev_term_;
+    if (rd.hs) {
+        hs_term = rd.hs->reader().getTerm();
+    }
+
     if (was_leader != is_leader || prev_leader_ != ss.leader_id ||
-        (rd.hs && prev_term_ != rd.hs->term())) {
-        uint64_t term = rd.hs ? rd.hs->term() : prev_term_;
+        (rd.hs && prev_term_ != hs_term)) {
+        uint64_t term = rd.hs ? rd.hs->reader().getTerm() : prev_term_;
 
         spdlog::info(
             "Leadership change: role={}, leader={}, term={}", static_cast<int>(ss.raft_state),
@@ -255,21 +293,59 @@ void ReadyProcessor::CheckLeadershipChange(const Ready& rd) {
 
         // If we lost leadership, fail all pending proposals
         if (was_leader && !is_leader) {
-            proposal_tracker_.FailAll(RaftError(RaftErrorCode::LostLeadership));
+            proposal_tracker_.FailAll(RaftError(RaftErrorCode::ProposalDropped));
         }
     }
 
     prev_role_ = ss.raft_state;
     prev_leader_ = ss.leader_id;
     if (rd.hs) {
-        prev_term_ = rd.hs->term();
+        prev_term_ = rd.hs->reader().getTerm();
     }
 }
 
 SnapshotData ReadyProcessor::ToSnapshotData(const Snapshot& snapshot) {
     SnapshotData data;
-    data.data = std::vector<uint8_t>(snapshot.data().begin(), snapshot.data().end());
-    data.metadata = snapshot.metadata();
+    auto snap_reader = snapshot.reader();
+    auto snap_data = snap_reader.getData();
+    data.data = std::vector<uint8_t>(snap_data.begin(), snap_data.end());
+
+    // Clone the metadata
+    auto snap_meta = snap_reader.getMetadata();
+    auto meta_builder = data.metadata.builder();
+    meta_builder.setIndex(snap_meta.getIndex());
+    meta_builder.setTerm(snap_meta.getTerm());
+
+    // Copy ConfState
+    auto conf_src = snap_meta.getConfState();
+    auto conf_dst = meta_builder.initConfState();
+
+    auto voters_src = conf_src.getVoters();
+    auto voters_dst = conf_dst.initVoters(voters_src.size());
+    for (size_t i = 0; i < voters_src.size(); ++i) {
+        voters_dst.set(i, voters_src[i]);
+    }
+
+    auto learners_src = conf_src.getLearners();
+    auto learners_dst = conf_dst.initLearners(learners_src.size());
+    for (size_t i = 0; i < learners_src.size(); ++i) {
+        learners_dst.set(i, learners_src[i]);
+    }
+
+    auto voters_out_src = conf_src.getVotersOutgoing();
+    auto voters_out_dst = conf_dst.initVotersOutgoing(voters_out_src.size());
+    for (size_t i = 0; i < voters_out_src.size(); ++i) {
+        voters_out_dst.set(i, voters_out_src[i]);
+    }
+
+    auto learners_next_src = conf_src.getLearnersNext();
+    auto learners_next_dst = conf_dst.initLearnersNext(learners_next_src.size());
+    for (size_t i = 0; i < learners_next_src.size(); ++i) {
+        learners_next_dst.set(i, learners_next_src[i]);
+    }
+
+    conf_dst.setAutoLeave(conf_src.getAutoLeave());
+
     return data;
 }
 

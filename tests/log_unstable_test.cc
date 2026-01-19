@@ -5,7 +5,7 @@
 #include <doctest/doctest.h>
 #include <spdlog/fmt/fmt.h>
 
-#include "raftpp/core/raftpp.pb.h"
+#include "raftpp/core/types.h"
 #include "raftpp/core/unstable_log.h"
 #include "raftpp/core/util.h"
 #include "test_util.h"
@@ -46,7 +46,8 @@ TEST_CASE("unstable_log: maybe first index") {
         entries_size += EntryApproximateSize(*ent);
     }
 
-    const Unstable u(entries, entries_size, offset, snapshot);
+    auto snapshot_copy = snapshot;
+    const Unstable u(std::move(entries), entries_size, offset, std::move(snapshot_copy));
     if (const auto index = u.MaybeFirstIndex(); index) {
         CHECK_EQ(w_index, index);
     } else {
@@ -83,7 +84,8 @@ TEST_CASE("unstable_log: maybe last index") {
         entries.emplace_back(*ent);
     }
 
-    Unstable u(entries, entries_size, offset, snapshot);
+    auto snapshot_copy = snapshot;
+    Unstable u(std::move(entries), entries_size, offset, std::move(snapshot_copy));
     const auto index = u.MaybeLastIndex();
     if (index) {
         CHECK_EQ(w_index, index);
@@ -155,7 +157,8 @@ TEST_CASE("unstable_log: maybe term") {
         entries.emplace_back(*ent);
     }
 
-    Unstable u(entries, entries_size, offset, snapshot);
+    auto snapshot_copy = snapshot;
+    Unstable u(std::move(entries), entries_size, offset, std::move(snapshot_copy));
     const auto term = u.MaybeTerm(index);
     if (term) {
         CHECK_EQ(w_term, term);
@@ -170,7 +173,7 @@ TEST_CASE("unstable_log: restore") {
     const auto s = NewSnapshot(6, 2);
     u.Restore(s);
 
-    CHECK_EQ(u.offset(), s.metadata().index() + 1);
+    CHECK_EQ(u.offset(), s.reader().getMetadata().getIndex() + 1);
     CHECK(u.entries().empty());
     CHECK_EQ(u.entries_size(), 0);
     CHECK_EQ(u.snapshot(), s);
@@ -185,11 +188,12 @@ TEST_CASE("unstable_log: stable snapshot and entries") {
 
     size_t entries_size =
         std::accumulate(ents.begin(), ents.end(), 0, [](const size_t acc, const Entry& ent) {
-            return acc + ent.ByteSizeLong();
+            return acc + ent.serializeAsBytes().size();
         });
 
-    Unstable u(ents, entries_size, 5, {NewSnapshot(4, 1)});
-    CHECK_EQ(ents, u.entries());
+    auto ents_copy = ents;
+    Unstable u(std::move(ents), entries_size, 5, {NewSnapshot(4, 1)});
+    CHECK_EQ(ents_copy, u.entries());
 
     u.StableSnapshot(4);
     u.StableEntries(6, 3);
@@ -266,7 +270,9 @@ TEST_CASE("unstable_log: truncate and append") {
         std::accumulate(entries.begin(), entries.end(), 0, [](const size_t acc, const Entry& ent) {
             return acc + EntryApproximateSize(ent);
         });
-    Unstable u(entries, entries_size, offset, snapshot);
+    auto entries_copy = entries;
+    auto snapshot_copy = snapshot;
+    Unstable u(std::move(entries_copy), entries_size, offset, std::move(snapshot_copy));
     u.TruncateAndAppend(to_append);
     CHECK_EQ(u.offset(), w_offset);
     CHECK_EQ(u.entries(), w_entries);

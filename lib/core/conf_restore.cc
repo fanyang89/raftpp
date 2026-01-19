@@ -10,42 +10,49 @@ std::pair<std::vector<ConfChangeSingle>, std::vector<ConfChangeSingle>> ToConfCh
     std::vector<ConfChangeSingle> outgoing;
     std::vector<ConfChangeSingle> incoming;
 
-    for (const uint64_t id : cs.voters_outgoing()) {
+    auto cs_reader = cs.reader();
+
+    for (const uint64_t id : cs_reader.getVotersOutgoing()) {
         ConfChangeSingle s;
-        s.set_node_id(id);
-        s.set_change_type(AddNode);
-        outgoing.emplace_back(s);
+        auto builder = s.builder();
+        builder.setNodeId(id);
+        builder.setChangeType(ConfChangeType::ADD_NODE);
+        outgoing.emplace_back(std::move(s));
     }
 
-    for (const uint64_t id : cs.voters_outgoing()) {
+    for (const uint64_t id : cs_reader.getVotersOutgoing()) {
         ConfChangeSingle s;
-        s.set_node_id(id);
-        s.set_change_type(RemoveNode);
-        incoming.emplace_back(s);
+        auto builder = s.builder();
+        builder.setNodeId(id);
+        builder.setChangeType(ConfChangeType::REMOVE_NODE);
+        incoming.emplace_back(std::move(s));
     }
 
-    for (const uint64_t id : cs.voters()) {
+    for (const uint64_t id : cs_reader.getVoters()) {
         ConfChangeSingle s;
-        s.set_node_id(id);
-        s.set_change_type(AddNode);
-        incoming.emplace_back(s);
+        auto builder = s.builder();
+        builder.setNodeId(id);
+        builder.setChangeType(ConfChangeType::ADD_NODE);
+        incoming.emplace_back(std::move(s));
     }
 
-    for (const uint64_t id : cs.learners()) {
+    for (const uint64_t id : cs_reader.getLearners()) {
         ConfChangeSingle s;
-        s.set_node_id(id);
-        s.set_change_type(AddLearnerNode);
-        incoming.emplace_back(s);
+        auto builder = s.builder();
+        builder.setNodeId(id);
+        builder.setChangeType(ConfChangeType::ADD_LEARNER_NODE);
+        incoming.emplace_back(std::move(s));
     }
 
-    for (const uint64_t id : cs.learners_next()) {
+    for (const uint64_t id : cs_reader.getLearnersNext()) {
         ConfChangeSingle s;
-        s.set_node_id(id);
-        s.set_change_type(AddLearnerNode);
-        incoming.emplace_back(s);
+        auto builder = s.builder();
+        builder.setNodeId(id);
+        builder.setChangeType(ConfChangeType::ADD_LEARNER_NODE);
+        incoming.emplace_back(std::move(s));
     }
 
-    return std::make_pair(outgoing, incoming);
+    return std::make_pair(std::move(outgoing), std::move(incoming));
 }
 
 Result<void> Restore(ProgressTracker& tracker, uint64_t next_idx, const ConfState& cs) {
@@ -96,7 +103,7 @@ Result<void> Restore(ProgressTracker& tracker, uint64_t next_idx, const ConfStat
             }
         }
 
-        if (const auto r = ConfChanger(tracker).EnterJoint(cs.auto_leave(), incoming)) {
+        if (const auto r = ConfChanger(tracker).EnterJoint(cs.reader().getAutoLeave(), incoming)) {
             const TrackerConfiguration& cfg = r->first;
             const MapChange& changes = r->second;
             tracker.ApplyConf(cfg, changes, next_idx);

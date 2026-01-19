@@ -7,8 +7,9 @@
 #include <thread>
 
 #include <spdlog/spdlog.h>
+#include <kj/array.h>
 
-#include "raftpp/raftor/rpc/rpclib_transport.h"
+#include "raftpp/raftor/rpc/capnp_transport.h"
 #include "raftpp/raftor/wal/wal_storage.h"
 #include "ready_processor.h"
 
@@ -96,6 +97,7 @@ class RaftorImpl : public Raftor {
     void OnMessage(Message msg);
     void OnPeerError(uint64_t peer_id, std::string error);
     std::string GenerateProposalContext();
+    void RefreshStatus();
 
     RaftorConfig config_;
     std::unique_ptr<StateMachine> state_machine_;
@@ -117,8 +119,9 @@ class RaftorImpl : public Raftor {
     // Proposal context counter
     std::atomic<uint64_t> proposal_counter_{0};
 
-    // Mutex for status access
+    // Cache status for thread-safe access from non-event-loop threads.
     mutable std::mutex status_mutex_;
+    NodeStatus cached_status_{};
 };
 
 RaftorImpl::RaftorImpl(
@@ -137,6 +140,8 @@ RaftorImpl::RaftorImpl(
     ready_processor_ = std::make_unique<ReadyProcessor>(
         *raw_node_, storage_, *state_machine_, *transport_, proposal_tracker_
     );
+
+    RefreshStatus();
 
     // Set up transport callbacks
     transport_->SetMessageCallback([this](Message msg) { OnMessage(std::move(msg)); });
@@ -223,6 +228,8 @@ void RaftorImpl::EventLoop() {
         if (auto result = ready_processor_->Process(); !result) {
             spdlog::error("Ready processing failed: {}", result.error().ToString());
         }
+
+        RefreshStatus();
     }
 }
 
@@ -240,6 +247,8 @@ void RaftorImpl::Poll(std::chrono::milliseconds timeout) {
     if (auto result = ready_processor_->Process(); !result) {
         spdlog::error("Ready processing failed: {}", result.error().ToString());
     }
+
+    RefreshStatus();
 }
 
 bool RaftorImpl::Tick() {
@@ -253,6 +262,7 @@ bool RaftorImpl::Tick() {
         spdlog::error("Ready processing failed: {}", result.error().ToString());
     }
 
+    RefreshStatus();
     return ticked;
 }
 
@@ -359,10 +369,12 @@ Result<void> RaftorImpl::ReadIndexSync(std::string ctx, std::chrono::millisecond
 
 Result<void> RaftorImpl::AddNode(uint64_t id, const std::string& addr) {
     ConfChangeV2 cc;
-    auto* change = cc.add_changes();
-    change->set_change_type(raftpp::AddNode);
-    change->set_node_id(id);
-    cc.set_context(addr);  // Store address in context
+    auto builder = cc.builder();
+    auto changes = builder.initChanges(1);
+    changes[0].setChangeType(ConfChangeType::ADD_NODE);
+    changes[0].setNodeId(id);
+    builder.setContext(kj::arrayPtr(
+        reinterpret_cast<const kj::byte*>(addr.data()), addr.size()));  // Store address in context
 
     std::string ctx = GenerateProposalContext();
     if (auto result = raw_node_->ProposeConfChange(ctx, cc); !result) {
@@ -377,9 +389,10 @@ Result<void> RaftorImpl::AddNode(uint64_t id, const std::string& addr) {
 
 Result<void> RaftorImpl::RemoveNode(uint64_t id) {
     ConfChangeV2 cc;
-    auto* change = cc.add_changes();
-    change->set_change_type(raftpp::RemoveNode);
-    change->set_node_id(id);
+    auto builder = cc.builder();
+    auto changes = builder.initChanges(1);
+    changes[0].setChangeType(ConfChangeType::REMOVE_NODE);
+    changes[0].setNodeId(id);
 
     std::string ctx = GenerateProposalContext();
     return raw_node_->ProposeConfChange(ctx, cc);
@@ -395,25 +408,17 @@ Result<void> RaftorImpl::Campaign() {
 
 NodeStatus RaftorImpl::GetStatus() const {
     std::lock_guard lock(status_mutex_);
-
-    auto status = raw_node_->GetStatus();
-    NodeStatus ns;
-    ns.id = status.id;
-    ns.role = status.ss.raft_state;
-    ns.term = status.hs.term();
-    ns.leader_id = status.ss.leader_id;
-    ns.commit_index = status.hs.commit();
-    ns.applied_index = status.applied;
-    ns.pending_proposals = proposal_tracker_.PendingCount();
-    return ns;
+    return cached_status_;
 }
 
 bool RaftorImpl::IsLeader() const {
-    return ready_processor_->IsLeader();
+    std::lock_guard lock(status_mutex_);
+    return cached_status_.role == StateRole::Leader;
 }
 
 uint64_t RaftorImpl::GetLeaderId() const {
-    return ready_processor_->GetLeaderId();
+    std::lock_guard lock(status_mutex_);
+    return cached_status_.leader_id;
 }
 
 Result<void> RaftorImpl::TakeSnapshot() {
@@ -439,10 +444,13 @@ Result<void> RaftorImpl::TakeSnapshot() {
         return snapshot_result.error();
     }
 
-    // Create protobuf snapshot
+    // Create Cap'n Proto snapshot
     Snapshot snapshot;
-    snapshot.set_data(snapshot_result->data.data(), snapshot_result->data.size());
-    *snapshot.mutable_metadata() = snapshot_result->metadata;
+    auto snap_builder = snapshot.builder();
+    snap_builder.setData(kj::arrayPtr(
+        reinterpret_cast<const kj::byte*>(snapshot_result->data.data()),
+        snapshot_result->data.size()));
+    snap_builder.setMetadata(snapshot_result->metadata.reader());
 
     // Apply to storage (this will compact the log)
     if (auto result = storage_->ApplySnapshot(snapshot); !result) {
@@ -454,6 +462,21 @@ Result<void> RaftorImpl::TakeSnapshot() {
 
 RawNode& RaftorImpl::GetRawNode() {
     return *raw_node_;
+}
+
+void RaftorImpl::RefreshStatus() {
+    auto status = raw_node_->GetStatus();
+    NodeStatus ns;
+    ns.id = status.id;
+    ns.role = status.ss.raft_state;
+    ns.term = status.hs.reader().getTerm();
+    ns.leader_id = status.ss.leader_id;
+    ns.commit_index = status.hs.reader().getCommit();
+    ns.applied_index = status.applied;
+    ns.pending_proposals = proposal_tracker_.PendingCount();
+
+    std::lock_guard lock(status_mutex_);
+    cached_status_ = ns;
 }
 
 // === Factory methods ===
@@ -482,7 +505,7 @@ Result<std::unique_ptr<Raftor>> Raftor::Create(
     transport_config.node_id = config.node_id;
     transport_config.connect_timeout = config.connect_timeout;
 
-    auto transport = std::make_unique<rpc::RpclibTransport>(transport_config);
+    auto transport = std::make_unique<rpc::CapnpTransport>(transport_config);
 
     return Create(
         config, std::move(state_machine), std::move(*storage_result), std::move(transport)

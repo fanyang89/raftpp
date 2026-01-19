@@ -12,14 +12,15 @@ namespace raftpp {
 Unstable::Unstable(const uint64_t offset) : entries_size_(0), offset_(offset) {}
 
 Unstable::Unstable(
-    const std::vector<Entry>& entries, const size_t entries_size, const uint64_t offset,
-    const std::optional<Snapshot>& snapshot
+    std::vector<Entry>&& entries, const size_t entries_size, const uint64_t offset,
+    std::optional<Snapshot>&& snapshot
 )
-    : snapshot_(snapshot), entries_(entries), entries_size_(entries_size), offset_(offset) {}
+    : snapshot_(std::move(snapshot)), entries_(std::move(entries)), entries_size_(entries_size), offset_(offset) {}
 
 std::optional<uint64_t> Unstable::MaybeFirstIndex() const {
     if (snapshot_) {
-        return snapshot_->metadata().index() + 1;
+        auto meta = snapshot_->reader().getMetadata();
+        return meta.getIndex() + 1;
     }
     return std::nullopt;
 }
@@ -27,7 +28,8 @@ std::optional<uint64_t> Unstable::MaybeFirstIndex() const {
 std::optional<uint64_t> Unstable::MaybeLastIndex() const {
     if (entries_.empty()) {
         if (snapshot_) {
-            return snapshot_->metadata().index();
+            auto meta = snapshot_->reader().getMetadata();
+            return meta.getIndex();
         }
         return std::nullopt;
     }
@@ -41,9 +43,9 @@ std::optional<uint64_t> Unstable::MaybeTerm(const uint64_t idx) const {
         }
 
         const Snapshot& snapshot = snapshot_.value();
-        const SnapshotMetadata& metadata = snapshot.metadata();
-        if (idx == metadata.index()) {
-            return metadata.term();
+        auto meta = snapshot.reader().getMetadata();
+        if (idx == meta.getIndex()) {
+            return meta.getTerm();
         }
 
         return {};
@@ -53,7 +55,8 @@ std::optional<uint64_t> Unstable::MaybeTerm(const uint64_t idx) const {
         if (idx > *last) {
             return {};
         }
-        return entries_[idx - offset_].term();
+        auto entry_reader = entries_[idx - offset_].reader();
+        return entry_reader.getTerm();
     }
 
     return {};
@@ -70,14 +73,15 @@ void Unstable::StableEntries(uint64_t index, uint32_t term) {
     }
 
     const auto& entry = entries_.back();
-    if (entry.index() != index || entry.term() != term) {
+    auto entry_reader = entry.reader();
+    if (entry_reader.getIndex() != index || entry_reader.getTerm() != term) {
         PANIC(
             "the last one of unstable.slice has different index {} and term {}, expect {} {}",
-            entry.index(), entry.term(), index, term
+            entry_reader.getIndex(), entry_reader.getTerm(), index, term
         );
     }
 
-    offset_ = entry.index() + 1;
+    offset_ = entry_reader.getIndex() + 1;
     entries_.clear();
     entries_size_ = 0;
 }
@@ -85,12 +89,13 @@ void Unstable::StableEntries(uint64_t index, uint32_t term) {
 void Unstable::Restore(const Snapshot& snapshot) {
     entries_.clear();
     entries_size_ = 0;
-    offset_ = snapshot.metadata().index() + 1;
-    snapshot_ = snapshot;
+    auto meta = snapshot.reader().getMetadata();
+    offset_ = meta.getIndex() + 1;
+    snapshot_ = snapshot.clone();
 }
 
 void Unstable::TruncateAndAppend(const std::vector<Entry>& ents) {
-    const uint64_t after = ents.front().index();
+    const uint64_t after = ents.front().reader().getIndex();
     if (after == offset_ + entries_.size()) {
         // after is the next index in the self.entries, append directly
     } else if (after <= offset_) {
@@ -108,16 +113,17 @@ void Unstable::TruncateAndAppend(const std::vector<Entry>& ents) {
 
     entries_.reserve(entries_.size() + ents.size());
     for (const auto& ent : ents) {
-        entries_.emplace_back(ent);
+        entries_.emplace_back(ent.clone());
         entries_size_ += EntryApproximateSize(ent);
     }
 }
 
 void Unstable::StableSnapshot(const uint64_t index) {
-    if (const auto snapshot = snapshot_) {
-        if (snapshot->metadata().index() != index) {
+    if (snapshot_.has_value()) {
+        auto meta = snapshot_->reader().getMetadata();
+        if (meta.getIndex() != index) {
             PANIC(
-                "unstable.snap has different index {}, expect {}", snapshot->metadata().index(),
+                "unstable.snap has different index {}, expect {}", meta.getIndex(),
                 index
             );
         }

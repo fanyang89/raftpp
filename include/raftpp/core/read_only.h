@@ -4,7 +4,7 @@
 #include <vector>
 
 #include "primitives.h"
-#include "raftpp/core/raftpp.pb.h"
+#include "types.h"
 
 namespace raftpp {
 

@@ -2,7 +2,7 @@
 
 #include "raftpp/core/memory_storage.h"
 #include "raftpp/core/raft_log.h"
-#include "raftpp/core/raftpp.pb.h"
+#include "raftpp/core/types.h"
 #include "test_util.h"
 
 using namespace raftpp;
@@ -164,7 +164,7 @@ TEST_CASE("raft_log: compaction side effects") {
     {
         const auto unstable_ents = raft_log.unstable().entries();
         REQUIRE_EQ(last_index - unstable_index, unstable_ents.size());
-        REQUIRE_EQ(unstable_index + 1, unstable_ents.front().index());
+        REQUIRE_EQ(unstable_index + 1, unstable_ents.front().reader().getIndex());
     }
 
     auto prev = raft_log.LastIndex();
@@ -305,7 +305,8 @@ TEST_CASE("raft_log: maybe persist with snapshot") {
 
         if (const auto& unstable = raft_log.unstable().entries(); !unstable.empty()) {
             const auto& e = unstable.back();
-            raft_log.StableEntries(e.index(), e.term());
+            auto reader = e.reader();
+            raft_log.StableEntries(reader.getIndex(), reader.getTerm());
             CHECK(store_ptr->MayAppend(unstable));
         }
 
@@ -354,11 +355,12 @@ TEST_CASE("raft_log: unstable entries") {
     const auto ents = raft_log.unstable().entries();
     if (!ents.empty()) {
         const auto& e = ents.back();
-        raft_log.StableEntries(e.index(), e.term());
+        auto reader = e.reader();
+        raft_log.StableEntries(reader.getIndex(), reader.getTerm());
     }
     CHECK_EQ(ents, w_entries);
 
-    const auto w = previous_ents.back().index() + 1;
+    const auto w = previous_ents.back().reader().getIndex() + 1;
     const auto g = raft_log.unstable().offset();
     REQUIRE_EQ(w, g);
 }
@@ -412,7 +414,8 @@ TEST_CASE("raft_log: has next entries and next entries") {
     const auto unstable = raft_log.unstable().entries();
     if (!unstable.empty()) {
         const auto& e = unstable.back();
-        raft_log.StableEntries(e.index(), e.term());
+        auto reader = e.reader();
+        raft_log.StableEntries(reader.getIndex(), reader.getTerm());
         REQUIRE(store_ptr->Append(unstable));
     }
 
@@ -489,7 +492,8 @@ TEST_CASE("raft_log: has next entries and next entries, 2") {
     const auto unstable = raft_log.unstable().entries();
     if (!unstable.empty()) {
         const auto& e = unstable.back();
-        raft_log.StableEntries(e.index(), e.term());
+        auto reader = e.reader();
+        raft_log.StableEntries(reader.getIndex(), reader.getTerm());
         REQUIRE(store_ptr->Append(unstable));
     }
 
@@ -512,7 +516,7 @@ TEST_CASE("raft_log: slice") {
     constexpr uint64_t last = offset + num;
     constexpr uint64_t half = offset + num / 2;
     const Entry half_e = NewEntry(half, half);
-    const auto half_e_size = half_e.ByteSizeLong();
+    const auto half_e_size = half_e.serializeAsBytes().size();
 
     auto store = std::make_unique<MemoryStorage>();
     CHECK(store->ApplySnapshot(NewSnapshot(offset, 0)));
@@ -642,7 +646,9 @@ TEST_CASE("raft_log: slice") {
 size_t ents_size(const std::vector<Entry>& ents) {
     return std::accumulate(
         ents.begin(), ents.end(), 0,
-        [](const size_t previous, const Entry& entry) { return previous + entry.ByteSizeLong(); }
+        [](const size_t previous, const Entry& entry) {
+            return previous + entry.serializeAsBytes().size();
+        }
     );
 }
 

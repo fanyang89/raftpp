@@ -4,9 +4,14 @@
 #include <vector>
 
 #include "raftpp/core/error.h"
-#include "raftpp/core/raftpp.pb.h"
+#include "raftpp/core/types.h"
 
 namespace raftpp::raftor::rpc {
+
+// Type aliases for RPC layer Cap'n Proto types
+namespace capnp = raftpp::capnp;
+using RpcHeader = OwnedMessage<capnp::RpcHeader>;
+using RpcHandshake = OwnedMessage<capnp::RpcHandshake>;
 
 /// Codec for message framing over TCP
 ///
@@ -14,7 +19,7 @@ namespace raftpp::raftor::rpc {
 /// ```
 /// ┌─────────────────────────────────────────────────────────────────────────────┐
 /// │  Magic (4 bytes)  │  Header Length (4 bytes)  │  RpcHeader  │  Payload      │
-/// │    0x52415046     │     uint32_t LE           │  protobuf   │  protobuf     │
+/// │    0x52415046     │     uint32_t LE           │  Cap'n Proto│  Cap'n Proto  │
 /// └─────────────────────────────────────────────────────────────────────────────┘
 /// ```
 class Codec {
@@ -72,7 +77,7 @@ class Codec {
 /// ```
 /// ┌─────────────────────────────────────────────────────────────────┐
 /// │  Magic (4 bytes)  │  Length (4 bytes)  │  RpcHandshake          │
-/// │    0x52415048     │   uint32_t LE      │  protobuf              │
+/// │    0x52415048     │   uint32_t LE      │  Cap'n Proto           │
 /// └─────────────────────────────────────────────────────────────────┘
 /// ```
 class HandshakeCodec {

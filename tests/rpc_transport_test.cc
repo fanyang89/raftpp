@@ -6,8 +6,9 @@
 
 #include <doctest/doctest.h>
 #include <spdlog/fmt/fmt.h>
+#include <kj/array.h>
 
-#include "raftpp/raftor/rpc/rpclib_transport.h"
+#include "raftpp/raftor/rpc/capnp_transport.h"
 
 using namespace raftpp;
 using namespace raftor::rpc;
@@ -160,31 +161,36 @@ bool WaitForAll(
 }
 
 // Create a simple test message
-Message MakeMessage(uint64_t from, uint64_t to, MessageType type = MsgAppend) {
+Message MakeMessage(uint64_t from, uint64_t to, MessageType type = MessageType::MSG_APPEND) {
     Message msg;
-    msg.set_from(from);
-    msg.set_to(to);
-    msg.set_msg_type(type);
-    msg.set_term(1);
+    auto builder = msg.builder();
+    builder.setFrom(from);
+    builder.setTo(to);
+    builder.setMsgType(type);
+    builder.setTerm(1);
     return msg;
+}
+
+std::string DataToString(::capnp::Data::Reader data) {
+    return std::string(reinterpret_cast<const char*>(data.begin()), data.size());
 }
 
 }  // namespace
 
 // =============================================================================
-// Rpclib Transport Tests
+// Capnp Transport Tests
 // =============================================================================
 
-TEST_SUITE("rpc::rpclib") {
+TEST_SUITE("rpc::capnp") {
 
-    TEST_CASE("rpclib_start_stop" * doctest::timeout(5)) {
+    TEST_CASE("capnp_start_stop" * doctest::timeout(5)) {
         auto port = PortAllocator::GetNextPort();
         TransportConfig config{
             .listen_addr = fmt::format("127.0.0.1:{}", port),
             .node_id = 1,
         };
 
-        RpclibTransport transport(config);
+        CapnpTransport transport(config);
 
         auto result = transport.Start();
         REQUIRE(result.has_value());
@@ -196,27 +202,27 @@ TEST_SUITE("rpc::rpclib") {
         transport.Stop();
     }
 
-    TEST_CASE("rpclib_start_invalid_address" * doctest::timeout(5)) {
+    TEST_CASE("capnp_start_invalid_address" * doctest::timeout(5)) {
         TransportConfig config{
             .listen_addr = "invalid:not-a-port",
             .node_id = 1,
         };
 
-        RpclibTransport transport(config);
+        CapnpTransport transport(config);
 
         auto result = transport.Start();
         CHECK(!result.has_value());
     }
 
-    TEST_CASE("rpclib_start_port_already_in_use" * doctest::timeout(5)) {
+    TEST_CASE("capnp_start_port_already_in_use" * doctest::timeout(5)) {
         auto port = PortAllocator::GetNextPort();
         TransportConfig config{
             .listen_addr = fmt::format("127.0.0.1:{}", port),
             .node_id = 1,
         };
 
-        RpclibTransport t1(config);
-        RpclibTransport t2(config);
+        CapnpTransport t1(config);
+        CapnpTransport t2(config);
 
         auto r1 = t1.Start();
         REQUIRE(r1.has_value());
@@ -228,14 +234,14 @@ TEST_SUITE("rpc::rpclib") {
         t1.Stop();
     }
 
-    TEST_CASE("rpclib_add_remove_peer" * doctest::timeout(5)) {
+    TEST_CASE("capnp_add_remove_peer" * doctest::timeout(5)) {
         auto port = PortAllocator::GetNextPort();
         TransportConfig config{
             .listen_addr = fmt::format("127.0.0.1:{}", port),
             .node_id = 1,
         };
 
-        RpclibTransport transport(config);
+        CapnpTransport transport(config);
         REQUIRE(transport.Start().has_value());
 
         // Add peers
@@ -253,15 +259,15 @@ TEST_SUITE("rpc::rpclib") {
         transport.Stop();
     }
 
-    TEST_CASE("rpclib_connect_single_peer" * doctest::timeout(10)) {
+    TEST_CASE("capnp_connect_single_peer" * doctest::timeout(10)) {
         auto port1 = PortAllocator::GetNextPort();
         auto port2 = PortAllocator::GetNextPort();
 
         TransportConfig cfg1{.listen_addr = fmt::format("127.0.0.1:{}", port1), .node_id = 1};
         TransportConfig cfg2{.listen_addr = fmt::format("127.0.0.1:{}", port2), .node_id = 2};
 
-        RpclibTransport t1(cfg1);
-        RpclibTransport t2(cfg2);
+        CapnpTransport t1(cfg1);
+        CapnpTransport t2(cfg2);
 
         MessageCollector collector1, collector2;
         t1.SetMessageCallback([&](Message m) { collector1.OnMessage(std::move(m)); });
@@ -288,23 +294,24 @@ TEST_SUITE("rpc::rpclib") {
         if (received) {
             auto messages = collector2.GetMessages();
             CHECK(messages.size() == 1);
-            CHECK(messages[0].from() == 1);
-            CHECK(messages[0].to() == 2);
+            auto reader = messages[0].reader();
+            CHECK(reader.getFrom() == 1);
+            CHECK(reader.getTo() == 2);
         }
 
         t1.Stop();
         t2.Stop();
     }
 
-    TEST_CASE("rpclib_bidirectional_messages" * doctest::timeout(10)) {
+    TEST_CASE("capnp_bidirectional_messages" * doctest::timeout(10)) {
         auto port1 = PortAllocator::GetNextPort();
         auto port2 = PortAllocator::GetNextPort();
 
         TransportConfig cfg1{.listen_addr = fmt::format("127.0.0.1:{}", port1), .node_id = 1};
         TransportConfig cfg2{.listen_addr = fmt::format("127.0.0.1:{}", port2), .node_id = 2};
 
-        RpclibTransport t1(cfg1);
-        RpclibTransport t2(cfg2);
+        CapnpTransport t1(cfg1);
+        CapnpTransport t2(cfg2);
 
         MessageCollector collector1, collector2;
         t1.SetMessageCallback([&](Message m) { collector1.OnMessage(std::move(m)); });
@@ -339,15 +346,15 @@ TEST_SUITE("rpc::rpclib") {
         t2.Stop();
     }
 
-    TEST_CASE("rpclib_message_callback_invoked" * doctest::timeout(10)) {
+    TEST_CASE("capnp_message_callback_invoked" * doctest::timeout(10)) {
         auto port1 = PortAllocator::GetNextPort();
         auto port2 = PortAllocator::GetNextPort();
 
         TransportConfig cfg1{.listen_addr = fmt::format("127.0.0.1:{}", port1), .node_id = 1};
         TransportConfig cfg2{.listen_addr = fmt::format("127.0.0.1:{}", port2), .node_id = 2};
 
-        RpclibTransport t1(cfg1);
-        RpclibTransport t2(cfg2);
+        CapnpTransport t1(cfg1);
+        CapnpTransport t2(cfg2);
 
         std::atomic<int> callback_count{0};
         t2.SetMessageCallback([&](Message) { callback_count++; });
@@ -374,15 +381,15 @@ TEST_SUITE("rpc::rpclib") {
         t2.Stop();
     }
 
-    TEST_CASE("rpclib_error_callback_invoked" * doctest::timeout(10)) {
+    TEST_CASE("capnp_error_callback_invoked" * doctest::timeout(10)) {
         auto port1 = PortAllocator::GetNextPort();
         auto port2 = PortAllocator::GetNextPort();
 
         TransportConfig cfg1{.listen_addr = fmt::format("127.0.0.1:{}", port1), .node_id = 1};
         TransportConfig cfg2{.listen_addr = fmt::format("127.0.0.1:{}", port2), .node_id = 2};
 
-        RpclibTransport t1(cfg1);
-        RpclibTransport t2(cfg2);
+        CapnpTransport t1(cfg1);
+        CapnpTransport t2(cfg2);
 
         ErrorCollector errors1;
         t1.SetErrorCallback([&](uint64_t peer_id, std::string err) {
@@ -411,7 +418,7 @@ TEST_SUITE("rpc::rpclib") {
         t1.Stop();
     }
 
-    TEST_CASE("rpclib_multiple_peers" * doctest::timeout(10)) {
+    TEST_CASE("capnp_multiple_peers" * doctest::timeout(10)) {
         auto port1 = PortAllocator::GetNextPort();
         auto port2 = PortAllocator::GetNextPort();
         auto port3 = PortAllocator::GetNextPort();
@@ -420,9 +427,9 @@ TEST_SUITE("rpc::rpclib") {
         TransportConfig cfg2{.listen_addr = fmt::format("127.0.0.1:{}", port2), .node_id = 2};
         TransportConfig cfg3{.listen_addr = fmt::format("127.0.0.1:{}", port3), .node_id = 3};
 
-        RpclibTransport t1(cfg1);
-        RpclibTransport t2(cfg2);
-        RpclibTransport t3(cfg3);
+        CapnpTransport t1(cfg1);
+        CapnpTransport t2(cfg2);
+        CapnpTransport t3(cfg3);
 
         MessageCollector collector2, collector3;
         t2.SetMessageCallback([&](Message m) { collector2.OnMessage(std::move(m)); });
@@ -460,14 +467,14 @@ TEST_SUITE("rpc::rpclib") {
         t3.Stop();
     }
 
-    TEST_CASE("rpclib_send_to_unknown_peer" * doctest::timeout(5)) {
+    TEST_CASE("capnp_send_to_unknown_peer" * doctest::timeout(5)) {
         auto port = PortAllocator::GetNextPort();
         TransportConfig config{
             .listen_addr = fmt::format("127.0.0.1:{}", port),
             .node_id = 1,
         };
 
-        RpclibTransport transport(config);
+        CapnpTransport transport(config);
         REQUIRE(transport.Start().has_value());
 
         // Send to unknown peer - should be silently dropped
@@ -480,15 +487,15 @@ TEST_SUITE("rpc::rpclib") {
         transport.Stop();
     }
 
-    TEST_CASE("rpclib_large_message" * doctest::timeout(10)) {
+    TEST_CASE("capnp_large_message" * doctest::timeout(10)) {
         auto port1 = PortAllocator::GetNextPort();
         auto port2 = PortAllocator::GetNextPort();
 
         TransportConfig cfg1{.listen_addr = fmt::format("127.0.0.1:{}", port1), .node_id = 1};
         TransportConfig cfg2{.listen_addr = fmt::format("127.0.0.1:{}", port2), .node_id = 2};
 
-        RpclibTransport t1(cfg1);
-        RpclibTransport t2(cfg2);
+        CapnpTransport t1(cfg1);
+        CapnpTransport t2(cfg2);
 
         MessageCollector collector;
         t2.SetMessageCallback([&](Message m) { collector.OnMessage(std::move(m)); });
@@ -503,18 +510,20 @@ TEST_SUITE("rpc::rpclib") {
 
         // Create large message with entries
         Message msg;
-        msg.set_from(1);
-        msg.set_to(2);
-        msg.set_msg_type(MsgAppend);
-        msg.set_term(1);
+        auto builder = msg.builder();
+        builder.setFrom(1);
+        builder.setTo(2);
+        builder.setMsgType(MessageType::MSG_APPEND);
+        builder.setTerm(1);
 
         // Add many entries with large data
         std::string large_data(1024, 'X');  // 1KB per entry
+        auto entries = builder.initEntries(100);
         for (int i = 0; i < 100; i++) {
-            auto* entry = msg.add_entries();
-            entry->set_term(1);
-            entry->set_index(i + 1);
-            entry->set_data(large_data);
+            entries[i].setTerm(1);
+            entries[i].setIndex(i + 1);
+            entries[i].setData(kj::arrayPtr(
+                reinterpret_cast<const kj::byte*>(large_data.data()), large_data.size()));
         }
 
         t1.Send(std::span(&msg, 1));
@@ -524,22 +533,23 @@ TEST_SUITE("rpc::rpclib") {
 
         if (received) {
             auto messages = collector.GetMessages();
-            CHECK(messages[0].entries_size() == 100);
+            auto reader = messages[0].reader();
+            CHECK(reader.getEntries().size() == 100);
         }
 
         t1.Stop();
         t2.Stop();
     }
 
-    TEST_CASE("rpclib_message_with_entries" * doctest::timeout(10)) {
+    TEST_CASE("capnp_message_with_entries" * doctest::timeout(10)) {
         auto port1 = PortAllocator::GetNextPort();
         auto port2 = PortAllocator::GetNextPort();
 
         TransportConfig cfg1{.listen_addr = fmt::format("127.0.0.1:{}", port1), .node_id = 1};
         TransportConfig cfg2{.listen_addr = fmt::format("127.0.0.1:{}", port2), .node_id = 2};
 
-        RpclibTransport t1(cfg1);
-        RpclibTransport t2(cfg2);
+        CapnpTransport t1(cfg1);
+        CapnpTransport t2(cfg2);
 
         MessageCollector collector;
         t2.SetMessageCallback([&](Message m) { collector.OnMessage(std::move(m)); });
@@ -554,18 +564,21 @@ TEST_SUITE("rpc::rpclib") {
 
         // Create message with entries
         Message msg;
-        msg.set_from(1);
-        msg.set_to(2);
-        msg.set_msg_type(MsgAppend);
-        msg.set_term(5);
-        msg.set_index(100);
-        msg.set_commit(50);
+        auto builder = msg.builder();
+        builder.setFrom(1);
+        builder.setTo(2);
+        builder.setMsgType(MessageType::MSG_APPEND);
+        builder.setTerm(5);
+        builder.setIndex(100);
+        builder.setCommit(50);
 
+        auto entries = builder.initEntries(5);
         for (int i = 0; i < 5; i++) {
-            auto* entry = msg.add_entries();
-            entry->set_term(5);
-            entry->set_index(101 + i);
-            entry->set_data("entry_" + std::to_string(i));
+            entries[i].setTerm(5);
+            entries[i].setIndex(101 + i);
+            auto data = std::string("entry_") + std::to_string(i);
+            entries[i].setData(kj::arrayPtr(
+                reinterpret_cast<const kj::byte*>(data.data()), data.size()));
         }
 
         t1.Send(std::span(&msg, 1));
@@ -575,15 +588,16 @@ TEST_SUITE("rpc::rpclib") {
 
         auto messages = collector.GetMessages();
         REQUIRE(messages.size() >= 1);
-        CHECK(messages[0].term() == 5);
-        CHECK(messages[0].entries_size() == 5);
-        CHECK(messages[0].entries(2).data() == "entry_2");
+        auto reader = messages[0].reader();
+        CHECK(reader.getTerm() == 5);
+        CHECK(reader.getEntries().size() == 5);
+        CHECK(DataToString(reader.getEntries()[2].getData()) == "entry_2");
 
         t1.Stop();
         t2.Stop();
     }
 
-    TEST_CASE("rpclib_auto_reconnect" * doctest::timeout(10)) {
+    TEST_CASE("capnp_auto_reconnect" * doctest::timeout(10)) {
         auto port1 = PortAllocator::GetNextPort();
         auto port2 = PortAllocator::GetNextPort();
 
@@ -594,7 +608,7 @@ TEST_SUITE("rpc::rpclib") {
         };
         TransportConfig cfg2{.listen_addr = fmt::format("127.0.0.1:{}", port2), .node_id = 2};
 
-        RpclibTransport t1(cfg1);
+        CapnpTransport t1(cfg1);
         MessageCollector collector;
 
         REQUIRE(t1.Start().has_value());
@@ -606,7 +620,7 @@ TEST_SUITE("rpc::rpclib") {
         PollFor(t1, 300ms);
 
         // Now start t2
-        RpclibTransport t2(cfg2);
+        CapnpTransport t2(cfg2);
         t2.SetMessageCallback([&](Message m) { collector.OnMessage(std::move(m)); });
         REQUIRE(t2.Start().has_value());
         t2.AddPeer(1, fmt::format("127.0.0.1:{}", port1));
@@ -625,4 +639,4 @@ TEST_SUITE("rpc::rpclib") {
         t2.Stop();
     }
 
-}  // TEST_SUITE("rpc::rpclib")
+}  // TEST_SUITE("rpc::capnp")
