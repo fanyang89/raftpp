@@ -226,10 +226,16 @@ Result<WALMetadata> MetadataStore::Deserialize(const std::vector<uint8_t>& data)
     ptr += sizeof(hs_len);
 
     try {
-        const ::capnp::word* words = reinterpret_cast<const ::capnp::word*>(ptr);
-        size_t word_count = hs_len / sizeof(::capnp::word);
-        meta.hard_state =
-            HardState::parseFromWords(kj::ArrayPtr<const ::capnp::word>(words, word_count));
+        if (hs_len > 0) {
+            // Allocate aligned buffer and copy data
+            kj::Array<::capnp::word> aligned_words = kj::heapArray<::capnp::word>((hs_len + 7) / 8);
+            std::memcpy(aligned_words.begin(), ptr, hs_len);
+
+            size_t word_count = hs_len / sizeof(::capnp::word);
+            meta.hard_state = HardState::parseFromWords(
+                kj::ArrayPtr<const ::capnp::word>(aligned_words.begin(), word_count)
+            );
+        }
     } catch (...) {
         return RaftError(StorageErrorCode::HardStateParseError);
     }
@@ -241,10 +247,16 @@ Result<WALMetadata> MetadataStore::Deserialize(const std::vector<uint8_t>& data)
     ptr += sizeof(cs_len);
 
     try {
-        const ::capnp::word* words = reinterpret_cast<const ::capnp::word*>(ptr);
-        size_t word_count = cs_len / sizeof(::capnp::word);
-        meta.conf_state =
-            ConfState::parseFromWords(kj::ArrayPtr<const ::capnp::word>(words, word_count));
+        if (cs_len > 0) {
+            // Allocate aligned buffer and copy data
+            kj::Array<::capnp::word> aligned_words = kj::heapArray<::capnp::word>((cs_len + 7) / 8);
+            std::memcpy(aligned_words.begin(), ptr, cs_len);
+
+            size_t word_count = cs_len / sizeof(::capnp::word);
+            meta.conf_state = ConfState::parseFromWords(
+                kj::ArrayPtr<const ::capnp::word>(aligned_words.begin(), word_count)
+            );
+        }
     } catch (...) {
         return RaftError(StorageErrorCode::ConfStateParseError);
     }

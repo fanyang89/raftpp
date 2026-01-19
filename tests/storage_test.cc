@@ -195,7 +195,10 @@ TEST_CASE("storage: compact") {
     }
 
     size_t len;
-    if (const auto r = storage.Entries(index, last + 1, 100, GetEntriesContext::Empty(false)); r) {
+    if (const auto r = storage.Entries(
+            index, last + 1, std::numeric_limits<uint64_t>::max(), GetEntriesContext::Empty(false)
+        );
+        r) {
         len = r->size();
     } else {
         FAIL("Entries()");
