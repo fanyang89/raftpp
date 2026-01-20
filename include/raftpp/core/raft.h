@@ -97,8 +97,8 @@ class Raft : public RaftCore {
     [[nodiscard]] uint64_t& max_committed_size_per_ready();
     [[nodiscard]] size_t max_inflight_messages() const;
     [[nodiscard]] size_t inflight_buffers_size() const;
-    void maybe_free_inflight_buffers();
-    void adjust_max_inflight_msgs(uint64_t id, size_t max_inflight);
+    void MaybeFreeInflightBuffers();
+    void AdjustMaxInflightMsgs(uint64_t id, size_t max_inflight);
     [[nodiscard]] static bool ConfStatesEqualIgnoringOrder(const ConfState& a, const ConfState& b);
     [[nodiscard]] const std::vector<Message>& messages() const;
     [[nodiscard]] std::vector<Message>& messages();

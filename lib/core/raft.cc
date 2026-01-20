@@ -1749,7 +1749,7 @@ size_t Raft::inflight_buffers_size() const {
     return total;
 }
 
-void Raft::maybe_free_inflight_buffers() {
+void Raft::MaybeFreeInflightBuffers() {
     for (auto& [id, pr] : progress_tracker_.progress_map()) {
         if (pr.inflights().Count() == 0 && pr.inflights().buffer_is_allocated()) {
             // Free the buffer if this peer has no inflight messages
@@ -1758,7 +1758,7 @@ void Raft::maybe_free_inflight_buffers() {
     }
 }
 
-void Raft::adjust_max_inflight_msgs(uint64_t id, size_t max_inflight) {
+void Raft::AdjustMaxInflightMsgs(uint64_t id, size_t max_inflight) {
     auto* pr = progress_tracker_.get(id);
     if (pr != nullptr) {
         pr->inflights().SetCapacity(max_inflight);
