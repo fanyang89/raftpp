@@ -19,8 +19,8 @@ void TrackerConfiguration::Clear() {
 }
 
 ConfState TrackerConfiguration::ToConfState() {
-    ConfState cs;
-    auto builder = cs.builder();
+    ConfState cs = capnp_util::make<msg::ConfState>();
+    auto builder = capnp_util::builder<msg::ConfState>(cs);
 
     // Convert voters incoming to a vector first
     auto incoming = voters.incoming();

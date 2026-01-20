@@ -47,7 +47,7 @@ bool RaftCore::TryBatching(
 ) const {
     bool is_batched = false;
     for (auto& msg : messages) {
-        auto msg_reader = msg.reader();
+        auto msg_reader = capnp_util::reader<msg::Message>(msg);
         if (msg_reader.getMsgType() == MessageType::MSG_APPEND && msg_reader.getTo() == to) {
             if (!entries.empty()) {
                 if (!IsContinuousEntries(msg, entries)) {
@@ -61,26 +61,26 @@ bool RaftCore::TryBatching(
 
                 // Copy existing entries
                 for (const auto& e : existing_entries) {
-                    Entry entry;
-                    auto entry_builder = entry.builder();
-                    entry_builder.setEntryType(e.getEntryType());
-                    entry_builder.setTerm(e.getTerm());
-                    entry_builder.setIndex(e.getIndex());
-                    entry_builder.setData(e.getData());
-                    entry_builder.setContext(e.getContext());
+                    auto entry = capnp_util::make<msg::Entry>([&](auto entry_builder) {
+                        entry_builder.setEntryType(e.getEntryType());
+                        entry_builder.setTerm(e.getTerm());
+                        entry_builder.setIndex(e.getIndex());
+                        entry_builder.setData(e.getData());
+                        entry_builder.setContext(e.getContext());
+                    });
                     all_entries.push_back(std::move(entry));
                 }
 
                 // Add new entries
                 for (const auto& entry : entries) {
-                    all_entries.push_back(entry.clone());
+                    all_entries.push_back(CloneEntry(entry));
                 }
 
                 // Rebuild message with new entries
-                auto msg_builder = msg.builder();
+                auto msg_builder = capnp_util::builder<msg::Message>(msg);
                 auto entries_builder = msg_builder.initEntries(all_entries.size());
                 for (size_t i = 0; i < all_entries.size(); ++i) {
-                    auto src_reader = all_entries[i].reader();
+                    auto src_reader = capnp_util::reader<msg::Entry>(all_entries[i]);
                     auto dst = entries_builder[i];
                     dst.setEntryType(src_reader.getEntryType());
                     dst.setTerm(src_reader.getTerm());
@@ -90,10 +90,11 @@ bool RaftCore::TryBatching(
                 }
 
                 const auto size = all_entries.size();
-                const uint64_t last_idx = all_entries[size - 1].reader().getIndex();
+                const uint64_t last_idx =
+                    capnp_util::reader<msg::Entry>(all_entries[size - 1]).getIndex();
                 pr.UpdateState(last_idx);
             }
-            msg.builder().setCommit(raft_log_.committed());
+            capnp_util::builder<msg::Message>(msg).setCommit(raft_log_.committed());
             is_batched = true;
             break;
         }
@@ -104,14 +105,14 @@ bool RaftCore::TryBatching(
 void RaftCore::PrepareSendEntries(
     Message& message, Progress& pr, const uint64_t term, const std::vector<Entry>& entries
 ) const {
-    auto msg_builder = message.builder();
+    auto msg_builder = capnp_util::builder<msg::Message>(message);
     msg_builder.setMsgType(MessageType::MSG_APPEND);
     msg_builder.setIndex(pr.next_idx() - 1);
     msg_builder.setLogTerm(term);
 
     auto entries_builder = msg_builder.initEntries(entries.size());
     for (size_t i = 0; i < entries.size(); ++i) {
-        auto src_reader = entries[i].reader();
+        auto src_reader = capnp_util::reader<msg::Entry>(entries[i]);
         auto dst = entries_builder[i];
         dst.setEntryType(src_reader.getEntryType());
         dst.setTerm(src_reader.getTerm());
@@ -122,7 +123,8 @@ void RaftCore::PrepareSendEntries(
 
     msg_builder.setCommit(raft_log_.committed());
     if (!entries.empty()) {
-        const uint64_t last_index = entries[entries.size() - 1].reader().getIndex();
+        const uint64_t last_index =
+            capnp_util::reader<msg::Entry>(entries[entries.size() - 1]).getIndex();
         pr.UpdateState(last_index);
     }
 }
@@ -136,8 +138,8 @@ void RaftCore::SendAppendAggressively(uint64_t to, Progress& pr, std::vector<Mes
 }
 
 void RaftCore::Send(Message& m, std::vector<Message>& messages) const {
-    auto m_reader = m.reader();
-    auto m_builder = m.builder();
+    auto m_reader = capnp_util::reader<msg::Message>(m);
+    auto m_builder = capnp_util::builder<msg::Message>(m);
 
     if (m_reader.getFrom() == INVALID_ID) {
         m_builder.setFrom(id_);
@@ -185,7 +187,7 @@ bool RaftCore::PrepareSendSnapshot(Message& m, Progress& pr, uint64_t to) {
         return false;
     }
 
-    m.builder().setMsgType(MessageType::MSG_SNAPSHOT);
+    capnp_util::builder<msg::Message>(m).setMsgType(MessageType::MSG_SNAPSHOT);
 
     auto snapshot_r = raft_log_.GetSnapshot(pr.pending_request_snapshot(), to);
     if (!snapshot_r) {
@@ -195,7 +197,7 @@ bool RaftCore::PrepareSendSnapshot(Message& m, Progress& pr, uint64_t to) {
         PANIC("unexpected error: {}", snapshot_r.error());
     } else {
         auto snapshot = std::move(snapshot_r).value();
-        auto snap_meta = snapshot.reader().getMetadata();
+        auto snap_meta = capnp_util::reader<msg::Snapshot>(snapshot).getMetadata();
         if (snap_meta.getIndex() == 0) {
             PANIC("need non-empty snapshot");
         }
@@ -204,9 +206,9 @@ bool RaftCore::PrepareSendSnapshot(Message& m, Progress& pr, uint64_t to) {
         const uint64_t s_term = snap_meta.getTerm();
 
         // Set the snapshot in the message
-        auto m_builder = m.builder();
+        auto m_builder = capnp_util::builder<msg::Message>(m);
         auto snap_builder = m_builder.initSnapshot();
-        auto src_reader = snapshot.reader();
+        auto src_reader = capnp_util::reader<msg::Snapshot>(snapshot);
         snap_builder.setData(src_reader.getData());
 
         // Copy metadata
@@ -256,8 +258,8 @@ bool RaftCore::MaybeSendAppend(
         return false;
     }
 
-    Message m;
-    m.builder().setTo(to);
+    auto m = capnp_util::make<msg::Message>();
+    capnp_util::builder<msg::Message>(m).setTo(to);
 
     if (pr.pending_request_snapshot() != INVALID_INDEX) {
         if (!PrepareSendSnapshot(m, pr, to)) {

@@ -42,8 +42,8 @@ class TempDir {
 
 // Helper to create an Entry
 Entry MakeWalEntry(uint64_t index, uint64_t term, const std::string& data = "") {
-    Entry entry;
-    auto builder = entry.builder();
+    Entry entry = capnp_util::make<msg::Entry>();
+    auto builder = capnp_util::builder<msg::Entry>(entry);
     builder.setIndex(index);
     builder.setTerm(term);
     builder.setData(kj::arrayPtr(reinterpret_cast<const kj::byte*>(data.data()), data.size()));
@@ -242,11 +242,11 @@ TEST_SUITE("wal") {
         auto read_result = (*wal)->ReadEntries(1, 4, std::nullopt);
         REQUIRE(read_result.has_value());
         CHECK(read_result->size() == 3);
-        CHECK((*read_result)[0].reader().getIndex() == 1);
-        auto data = (*read_result)[0].reader().getData();
+        CHECK(capnp_util::reader<msg::Entry>((*read_result)[0]).getIndex() == 1);
+        auto data = capnp_util::reader<msg::Entry>((*read_result)[0]).getData();
         CHECK(std::string(reinterpret_cast<const char*>(data.begin()), data.size()) == "entry1");
-        CHECK((*read_result)[2].reader().getIndex() == 3);
-        CHECK((*read_result)[2].reader().getTerm() == 2);
+        CHECK(capnp_util::reader<msg::Entry>((*read_result)[2]).getIndex() == 3);
+        CHECK(capnp_util::reader<msg::Entry>((*read_result)[2]).getTerm() == 2);
     }
 
     TEST_CASE("wal: term lookup") {
@@ -298,8 +298,8 @@ TEST_SUITE("wal") {
             auto append_result = (*wal)->Append(entries);
             REQUIRE(append_result.has_value());
 
-            HardState hs;
-            auto hs_builder = hs.builder();
+            HardState hs = capnp_util::make<msg::HardState>();
+            auto hs_builder = capnp_util::builder<msg::HardState>(hs);
             hs_builder.setTerm(5);
             hs_builder.setVote(2);
             hs_builder.setCommit(10);
@@ -314,7 +314,7 @@ TEST_SUITE("wal") {
             REQUIRE(wal.has_value());
 
             const auto& hs = (*wal)->GetHardState();
-            auto hs_reader = hs.reader();
+            auto hs_reader = capnp_util::reader<msg::HardState>(hs);
             CHECK(hs_reader.getTerm() == 5);
             CHECK(hs_reader.getVote() == 2);
             CHECK(hs_reader.getCommit() == 10);
@@ -351,7 +351,7 @@ TEST_SUITE("wal") {
             auto read_result = (*wal)->ReadEntries(50, 60, std::nullopt);
             REQUIRE(read_result.has_value());
             CHECK(read_result->size() == 10);
-            CHECK((*read_result)[0].reader().getIndex() == 50);
+            CHECK(capnp_util::reader<msg::Entry>((*read_result)[0]).getIndex() == 50);
         }
     }
 
@@ -442,8 +442,8 @@ TEST_SUITE("wal") {
         auto storage = WALStorage::Open(config);
         REQUIRE(storage.has_value());
 
-        HardState hs;
-        auto hs_builder = hs.builder();
+        HardState hs = capnp_util::make<msg::HardState>();
+        auto hs_builder = capnp_util::builder<msg::HardState>(hs);
         hs_builder.setTerm(3);
         hs_builder.setVote(1);
         hs_builder.setCommit(5);
@@ -452,7 +452,7 @@ TEST_SUITE("wal") {
 
         auto state = (*storage)->InitialState();
         REQUIRE(state.has_value());
-        auto hs_reader = state->hard_state.reader();
+        auto hs_reader = capnp_util::reader<msg::HardState>(state->hard_state);
         CHECK(hs_reader.getTerm() == 3);
         CHECK(hs_reader.getVote() == 1);
     }

@@ -48,8 +48,8 @@ Network Network::CreateWithConfig(
 
             // Initialize with conf state directly (not via ApplySnapshot
             // because first_index() > snap.index() would cause SnapshotOutOfDate)
-            ConfState conf_state;
-            auto conf_builder = conf_state.builder();
+            ConfState conf_state = capnp_util::make<msg::ConfState>();
+            auto conf_builder = capnp_util::builder<msg::ConfState>(conf_state);
             auto voters = conf_builder.initVoters(peer_ids.size());
             for (size_t j = 0; j < peer_ids.size(); ++j) {
                 voters.set(j, peer_ids[j]);
@@ -88,7 +88,7 @@ std::vector<Message> Network::Filter(std::vector<Message> msgs) {
     std::uniform_real_distribution<double> dist(0.0, 1.0);
 
     for (auto& m : msgs) {
-        auto reader = m.reader();
+        auto reader = capnp_util::reader<msg::Message>(m);
         // Check if message type is ignored
         auto it = ignore_map_.find(reader.getMsgType());
         if (it != ignore_map_.end() && it->second) {
@@ -128,7 +128,7 @@ void Network::Send(std::vector<Message> msgs) {
         std::vector<Message> new_msgs;
 
         for (auto& m : msgs) {
-            auto reader = m.reader();
+            auto reader = capnp_util::reader<msg::Message>(m);
             SPDLOG_DEBUG(
                 "Network::Send: type={}, from={}, to={}", static_cast<int>(reader.getMsgType()),
                 reader.getFrom(), reader.getTo()
@@ -163,7 +163,7 @@ void Network::FilterAndSend(std::vector<Message> msgs) {
 Result<void> Network::Dispatch(std::vector<Message> msgs) {
     auto filtered = Filter(std::move(msgs));
     for (auto& m : filtered) {
-        auto it = peers_.find(m.reader().getTo());
+        auto it = peers_.find(capnp_util::reader<msg::Message>(m).getTo());
         if (it == peers_.end()) {
             continue;
         }

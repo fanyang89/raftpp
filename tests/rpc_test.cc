@@ -1,6 +1,7 @@
 #include <doctest/doctest.h>
 #include <kj/array.h>
 
+#include "raftpp/core/capnp_util.h"
 #include "raftpp/raftor/rpc/codec.h"
 #include "raftpp/raftor/rpc/peer_manager.h"
 
@@ -17,8 +18,8 @@ std::string DataToString(::capnp::Data::Reader data) {
 
 TEST_SUITE("rpc") {
     TEST_CASE("Codec encode/decode round-trip") {
-        Message msg;
-        auto builder = msg.builder();
+        Message msg = capnp_util::make<msg::Message>();
+        auto builder = capnp_util::builder<msg::Message>(msg);
         builder.setMsgType(MessageType::MSG_APPEND);
         builder.setFrom(1);
         builder.setTo(2);
@@ -36,8 +37,8 @@ TEST_SUITE("rpc") {
 
         auto& decode_result = *result;
         CHECK(decode_result.bytes_consumed == encoded.size());
-        auto msg_reader = msg.reader();
-        auto decoded_reader = decode_result.message.reader();
+        auto msg_reader = capnp_util::reader<msg::Message>(msg);
+        auto decoded_reader = capnp_util::reader<msg::Message>(decode_result.message);
         CHECK(decoded_reader.getMsgType() == msg_reader.getMsgType());
         CHECK(decoded_reader.getFrom() == msg_reader.getFrom());
         CHECK(decoded_reader.getTo() == msg_reader.getTo());
@@ -46,7 +47,7 @@ TEST_SUITE("rpc") {
         CHECK(decoded_reader.getCommit() == msg_reader.getCommit());
 
         // Check RpcHeader fields
-        auto header_reader = decode_result.header.reader();
+        auto header_reader = capnp_util::reader<raftpp::capnp::RpcHeader>(decode_result.header);
         CHECK(header_reader.getVersion() == Codec::kVersion);
         CHECK(header_reader.getFromNode() == 1);
         CHECK(header_reader.getToNode() == 2);
@@ -55,8 +56,8 @@ TEST_SUITE("rpc") {
     }
 
     TEST_CASE("Codec handles incomplete buffer") {
-        Message msg;
-        auto builder = msg.builder();
+        Message msg = capnp_util::make<msg::Message>();
+        auto builder = capnp_util::builder<msg::Message>(msg);
         builder.setMsgType(MessageType::MSG_HEARTBEAT);
         builder.setFrom(1);
         builder.setTo(2);
@@ -85,8 +86,8 @@ TEST_SUITE("rpc") {
     }
 
     TEST_CASE("Codec rejects oversized message") {
-        Message msg;
-        auto builder = msg.builder();
+        Message msg = capnp_util::make<msg::Message>();
+        auto builder = capnp_util::builder<msg::Message>(msg);
         builder.setMsgType(MessageType::MSG_SNAPSHOT);
         builder.setFrom(1);
         builder.setTo(2);
@@ -100,8 +101,8 @@ TEST_SUITE("rpc") {
     }
 
     TEST_CASE("Codec handles message with entries") {
-        Message msg;
-        auto builder = msg.builder();
+        Message msg = capnp_util::make<msg::Message>();
+        auto builder = capnp_util::builder<msg::Message>(msg);
         builder.setMsgType(MessageType::MSG_APPEND);
         builder.setFrom(1);
         builder.setTo(2);
@@ -123,7 +124,7 @@ TEST_SUITE("rpc") {
         REQUIRE(result.has_value());
 
         auto& decode_result = *result;
-        auto decoded_reader = decode_result.message.reader();
+        auto decoded_reader = capnp_util::reader<msg::Message>(decode_result.message);
         CHECK(decoded_reader.getEntries().size() == 10);
         CHECK(DataToString(decoded_reader.getEntries()[5].getData()) == "test data 5");
     }
@@ -143,8 +144,8 @@ TEST_SUITE("rpc") {
     }
 
     TEST_CASE("HandshakeCodec encode/decode round-trip") {
-        RpcHandshake hs;
-        auto builder = hs.builder();
+        RpcHandshake hs = capnp_util::make<raftpp::capnp::RpcHandshake>();
+        auto builder = capnp_util::builder<raftpp::capnp::RpcHandshake>(hs);
         builder.setVersion(1);
         builder.setNodeId(54321);
         builder.setClusterId(888);
@@ -156,7 +157,7 @@ TEST_SUITE("rpc") {
         REQUIRE(result.has_value());
         auto& [decoded, consumed] = *result;
         CHECK(consumed == encoded.size());
-        auto decoded_reader = decoded.reader();
+        auto decoded_reader = capnp_util::reader<raftpp::capnp::RpcHandshake>(decoded);
         CHECK(decoded_reader.getVersion() == 1);
         CHECK(decoded_reader.getNodeId() == 54321);
         CHECK(decoded_reader.getClusterId() == 888);

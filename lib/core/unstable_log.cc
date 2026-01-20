@@ -22,7 +22,7 @@ Unstable::Unstable(
 
 std::optional<uint64_t> Unstable::MaybeFirstIndex() const {
     if (snapshot_) {
-        auto meta = snapshot_->reader().getMetadata();
+        auto meta = capnp_util::reader<msg::Snapshot>(*snapshot_).getMetadata();
         return meta.getIndex() + 1;
     }
     return std::nullopt;
@@ -31,7 +31,7 @@ std::optional<uint64_t> Unstable::MaybeFirstIndex() const {
 std::optional<uint64_t> Unstable::MaybeLastIndex() const {
     if (entries_.empty()) {
         if (snapshot_) {
-            auto meta = snapshot_->reader().getMetadata();
+            auto meta = capnp_util::reader<msg::Snapshot>(*snapshot_).getMetadata();
             return meta.getIndex();
         }
         return std::nullopt;
@@ -46,7 +46,7 @@ std::optional<uint64_t> Unstable::MaybeTerm(const uint64_t idx) const {
         }
 
         const Snapshot& snapshot = snapshot_.value();
-        auto meta = snapshot.reader().getMetadata();
+        auto meta = capnp_util::reader<msg::Snapshot>(snapshot).getMetadata();
         if (idx == meta.getIndex()) {
             return meta.getTerm();
         }
@@ -58,7 +58,7 @@ std::optional<uint64_t> Unstable::MaybeTerm(const uint64_t idx) const {
         if (idx > *last) {
             return {};
         }
-        auto entry_reader = entries_[idx - offset_].reader();
+        auto entry_reader = capnp_util::reader<msg::Entry>(entries_[idx - offset_]);
         return entry_reader.getTerm();
     }
 
@@ -76,7 +76,7 @@ void Unstable::StableEntries(uint64_t index, uint32_t term) {
     }
 
     const auto& entry = entries_.back();
-    auto entry_reader = entry.reader();
+    auto entry_reader = capnp_util::reader<msg::Entry>(entry);
     if (entry_reader.getIndex() != index || entry_reader.getTerm() != term) {
         PANIC(
             "the last one of unstable.slice has different index {} and term {}, expect {} {}",
@@ -92,13 +92,13 @@ void Unstable::StableEntries(uint64_t index, uint32_t term) {
 void Unstable::Restore(const Snapshot& snapshot) {
     entries_.clear();
     entries_size_ = 0;
-    auto meta = snapshot.reader().getMetadata();
+    auto meta = capnp_util::reader<msg::Snapshot>(snapshot).getMetadata();
     offset_ = meta.getIndex() + 1;
-    snapshot_ = snapshot.clone();
+    snapshot_ = CloneSnapshot(snapshot);
 }
 
 void Unstable::TruncateAndAppend(const std::vector<Entry>& ents) {
-    const uint64_t after = ents.front().reader().getIndex();
+    const uint64_t after = capnp_util::reader<msg::Entry>(ents.front()).getIndex();
     if (after == offset_ + entries_.size()) {
         // after is the next index in the self.entries, append directly
     } else if (after <= offset_) {
@@ -116,14 +116,14 @@ void Unstable::TruncateAndAppend(const std::vector<Entry>& ents) {
 
     entries_.reserve(entries_.size() + ents.size());
     for (const auto& ent : ents) {
-        entries_.emplace_back(ent.clone());
+        entries_.emplace_back(CloneEntry(ent));
         entries_size_ += EntryApproximateSize(ent);
     }
 }
 
 void Unstable::StableSnapshot(const uint64_t index) {
     if (snapshot_.has_value()) {
-        auto meta = snapshot_->reader().getMetadata();
+        auto meta = capnp_util::reader<msg::Snapshot>(*snapshot_).getMetadata();
         if (meta.getIndex() != index) {
             PANIC("unstable.snap has different index {}, expect {}", meta.getIndex(), index);
         }

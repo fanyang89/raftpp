@@ -33,8 +33,8 @@ TEST_CASE("sending snapshot set pending snapshot") {
     auto& pr = r->progress_tracker().progress_map().at(2);
     pr.next_idx() = r->raft_log().LastIndex();
 
-    Message m;
-    auto builder = m.builder();
+    Message m = capnp_util::make<msg::Message>();
+    auto builder = capnp_util::builder<msg::Message>(m);
     builder.setMsgType(MessageType::MSG_APPEND_RESPONSE);
     builder.setFrom(2);
     builder.setTo(1);
@@ -62,7 +62,9 @@ TEST_CASE("pending snapshot pause replication") {
     pr.BecomeSnapshot(11);
 
     Entry entry = NewEntry(0, 0, "test");
-    Message m = NewMessageWithEntries(1, 1, MessageType::MSG_PROPOSE, std::vector<Entry>{entry});
+    std::vector<Entry> prop_entries;
+    prop_entries.push_back(std::move(entry));
+    Message m = NewMessageWithEntries(1, 1, MessageType::MSG_PROPOSE, std::move(prop_entries));
     auto result = r.Step(m);
     (void)result;
 
@@ -84,8 +86,8 @@ TEST_CASE("snapshot failure") {
     pr.next_idx() = 1;
     pr.BecomeSnapshot(11);
 
-    Message m;
-    auto builder = m.builder();
+    Message m = capnp_util::make<msg::Message>();
+    auto builder = capnp_util::builder<msg::Message>(m);
     builder.setMsgType(MessageType::MSG_SNAP_STATUS);
     builder.setFrom(2);
     builder.setTo(1);
@@ -113,8 +115,8 @@ TEST_CASE("snapshot succeed") {
     pr.next_idx() = 1;
     pr.BecomeSnapshot(11);
 
-    Message m;
-    auto builder = m.builder();
+    Message m = capnp_util::make<msg::Message>();
+    auto builder = capnp_util::builder<msg::Message>(m);
     builder.setMsgType(MessageType::MSG_SNAP_STATUS);
     builder.setFrom(2);
     builder.setTo(1);
@@ -142,8 +144,8 @@ TEST_CASE("snapshot abort") {
     pr.next_idx() = 1;
     pr.BecomeSnapshot(11);
 
-    Message m;
-    auto builder = m.builder();
+    Message m = capnp_util::make<msg::Message>();
+    auto builder = capnp_util::builder<msg::Message>(m);
     builder.setMsgType(MessageType::MSG_APPEND_RESPONSE);
     builder.setFrom(2);
     builder.setTo(1);
@@ -173,7 +175,9 @@ TEST_CASE("snapshot with min term") {
         auto network = Network::Create(std::move(peers));
 
         Message hup = NewMessage(1, 1, MessageType::MSG_HUP);
-        network.Send({hup});
+        std::vector<Message> hup_msgs;
+        hup_msgs.push_back(std::move(hup));
+        network.Send(std::move(hup_msgs));
 
         // 1 will be elected as leader, and then send a snapshot and an empty entry to 2.
         CHECK_EQ(network.GetPeer(2)->raft_log().LastIndex(), 2);
@@ -210,8 +214,8 @@ TEST_CASE("request snapshot") {
     CHECK(!result);
 
     // Advance matched.
-    Message m;
-    auto builder = m.builder();
+    Message m = capnp_util::make<msg::Message>();
+    auto builder = capnp_util::builder<msg::Message>(m);
     builder.setMsgType(MessageType::MSG_APPEND_RESPONSE);
     builder.setFrom(2);
     builder.setTo(1);
@@ -228,8 +232,8 @@ TEST_CASE("request snapshot") {
     builder.setRequestSnapshot(request_snapshot_idx);
 
     // Ignore out of order request snapshot messages.
-    Message out_of_order = m.clone();
-    out_of_order.builder().setIndex(9);
+    Message out_of_order = CloneMessage(m);
+    capnp_util::builder<msg::Message>(out_of_order).setIndex(9);
     res = r.Step(out_of_order);
     (void)res;
     CHECK_EQ(voter_2.state(), ProgressState::Replicate);
@@ -247,7 +251,7 @@ TEST_CASE("request snapshot") {
 
     auto msgs = r.ReadMessages();
     CHECK_EQ(msgs.size(), 1);
-    auto msg_reader = msgs[0].reader();
+    auto msg_reader = capnp_util::reader<msg::Message>(msgs[0]);
     CHECK_EQ(msg_reader.getMsgType(), MessageType::MSG_SNAPSHOT);
     CHECK_EQ(msg_reader.getSnapshot().getMetadata().getIndex(), request_snapshot_idx);
 

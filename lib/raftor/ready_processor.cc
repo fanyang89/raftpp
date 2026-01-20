@@ -80,7 +80,7 @@ Result<void> ReadyProcessor::PersistHardState(const Ready& rd) {
     }
 
     // SetHardState doesn't return error in current implementation
-    storage_->SetHardState(rd.hs->clone());
+    storage_->SetHardState(CloneHardState(*rd.hs));
 
     // Sync if required
     if (rd.must_sync) {
@@ -95,7 +95,10 @@ Result<void> ReadyProcessor::PersistHardState(const Ready& rd) {
 
 Result<void> ReadyProcessor::ApplySnapshot(const Ready& rd) {
     const auto& snapshot = rd.snapshot;
-    auto snap_reader = snapshot.reader();
+    if (!snapshot) {
+        return {};  // No snapshot
+    }
+    auto snap_reader = capnp_util::reader<msg::Snapshot>(snapshot);
     auto snap_meta = snap_reader.getMetadata();
 
     if (snap_meta.getIndex() == 0) {
@@ -136,24 +139,24 @@ Result<void> ReadyProcessor::ApplyCommittedEntries(const std::vector<Entry>& ent
     for (const auto& entry : entries) {
         if (auto result = ApplyEntry(entry); !result) {
             // Log but continue - state machine errors shouldn't stop Raft
-            auto entry_reader = entry.reader();
+            auto entry_reader = capnp_util::reader<msg::Entry>(entry);
             spdlog::warn(
                 "Failed to apply entry at index {}: {}", entry_reader.getIndex(),
                 result.error().ToString()
             );
         }
-        applied_index_ = entry.reader().getIndex();
+        applied_index_ = capnp_util::reader<msg::Entry>(entry).getIndex();
     }
     return {};
 }
 
 Result<void> ReadyProcessor::ApplyEntry(const Entry& entry) {
-    auto entry_reader = entry.reader();
+    auto entry_reader = capnp_util::reader<msg::Entry>(entry);
 
     // Handle configuration changes
     if (entry_reader.getEntryType() == EntryType::ENTRY_CONF_CHANGE ||
         entry_reader.getEntryType() == EntryType::ENTRY_CONF_CHANGE_V2) {
-        ConfChangeV2 cc;
+        ConfChangeV2 cc = capnp_util::make<msg::ConfChangeV2>();
 
         if (entry_reader.getEntryType() == EntryType::ENTRY_CONF_CHANGE) {
             // Convert ConfChange to ConfChangeV2
@@ -163,15 +166,15 @@ Result<void> ReadyProcessor::ApplyEntry(const Entry& entry) {
             try {
                 const ::capnp::word* words = reinterpret_cast<const ::capnp::word*>(data.begin());
                 size_t word_count = data.size() / sizeof(::capnp::word);
-                cc_v1 = ConfChange::parseFromWords(
-                    kj::ArrayPtr<const ::capnp::word>(words, word_count)
+                cc_v1 = capnp_util::fromBytes<msg::ConfChange>(
+                    std::span<const uint8_t>(data.begin(), data.size())
                 );
             } catch (...) {
                 return std::unexpected(RaftError(RaftErrorCode::ProposalDropped));
             }
 
-            auto cc_v1_reader = cc_v1.reader();
-            auto cc_builder = cc.builder();
+            auto cc_v1_reader = capnp_util::reader<msg::ConfChange>(cc_v1);
+            auto cc_builder = capnp_util::builder<msg::ConfChangeV2>(cc);
             auto single = cc_builder.initChanges(1)[0];
             single.setChangeType(cc_v1_reader.getChangeType());
             single.setNodeId(cc_v1_reader.getNodeId());
@@ -180,10 +183,8 @@ Result<void> ReadyProcessor::ApplyEntry(const Entry& entry) {
             auto data = entry_reader.getData();
 
             try {
-                const ::capnp::word* words = reinterpret_cast<const ::capnp::word*>(data.begin());
-                size_t word_count = data.size() / sizeof(::capnp::word);
-                cc = ConfChangeV2::parseFromWords(
-                    kj::ArrayPtr<const ::capnp::word>(words, word_count)
+                cc = capnp_util::fromBytes<msg::ConfChangeV2>(
+                    std::span<const uint8_t>(data.begin(), data.size())
                 );
             } catch (...) {
                 return std::unexpected(RaftError(RaftErrorCode::ProposalDropped));
@@ -196,7 +197,7 @@ Result<void> ReadyProcessor::ApplyEntry(const Entry& entry) {
         }
 
         // Update transport peers based on conf change
-        auto cc_reader = cc.reader();
+        auto cc_reader = capnp_util::reader<msg::ConfChangeV2>(cc);
         auto changes = cc_reader.getChanges();
         for (const auto& change : changes) {
             if (change.getChangeType() == ConfChangeType::ADD_NODE ||
@@ -256,13 +257,13 @@ void ReadyProcessor::ProcessLightReady(const LightReady& light_rd) {
     // Apply additional committed entries
     for (const auto& entry : light_rd.committed_entries) {
         if (auto result = ApplyEntry(entry); !result) {
-            auto entry_reader = entry.reader();
+            auto entry_reader = capnp_util::reader<msg::Entry>(entry);
             spdlog::warn(
                 "Failed to apply entry at index {}: {}", entry_reader.getIndex(),
                 result.error().ToString()
             );
         }
-        applied_index_ = entry.reader().getIndex();
+        applied_index_ = capnp_util::reader<msg::Entry>(entry).getIndex();
     }
 
     // Update applied index
@@ -283,12 +284,12 @@ void ReadyProcessor::CheckLeadershipChange(const Ready& rd) {
     // Detect leadership change
     uint64_t hs_term = prev_term_;
     if (rd.hs) {
-        hs_term = rd.hs->reader().getTerm();
+        hs_term = capnp_util::reader<msg::HardState>(*rd.hs).getTerm();
     }
 
     if (was_leader != is_leader || prev_leader_ != ss.leader_id ||
         (rd.hs && prev_term_ != hs_term)) {
-        uint64_t term = rd.hs ? rd.hs->reader().getTerm() : prev_term_;
+        uint64_t term = rd.hs ? capnp_util::reader<msg::HardState>(*rd.hs).getTerm() : prev_term_;
 
         spdlog::info(
             "Leadership change: role={}, leader={}, term={}", static_cast<int>(ss.raft_state),
@@ -306,19 +307,19 @@ void ReadyProcessor::CheckLeadershipChange(const Ready& rd) {
     prev_role_ = ss.raft_state;
     prev_leader_ = ss.leader_id;
     if (rd.hs) {
-        prev_term_ = rd.hs->reader().getTerm();
+        prev_term_ = capnp_util::reader<msg::HardState>(*rd.hs).getTerm();
     }
 }
 
 SnapshotData ReadyProcessor::ToSnapshotData(const Snapshot& snapshot) {
     SnapshotData data;
-    auto snap_reader = snapshot.reader();
+    auto snap_reader = capnp_util::reader<msg::Snapshot>(snapshot);
     auto snap_data = snap_reader.getData();
     data.data = std::vector<uint8_t>(snap_data.begin(), snap_data.end());
 
     // Clone the metadata
     auto snap_meta = snap_reader.getMetadata();
-    auto meta_builder = data.metadata.builder();
+    auto meta_builder = capnp_util::builder<msg::SnapshotMetadata>(data.metadata);
     meta_builder.setIndex(snap_meta.getIndex());
     meta_builder.setTerm(snap_meta.getTerm());
 

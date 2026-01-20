@@ -12,188 +12,183 @@
 
 using namespace raftpp;
 
-struct LogUnstableTestParams {
-    std::optional<Entry> ent;
-    uint64_t offset = 0;
-    std::optional<Snapshot> snapshot;
-    bool w_ok = false;
-    uint64_t w_index = 0;
-
-    friend std::ostream& operator<<(std::ostream& os, const LogUnstableTestParams& param) {
-        return os << (param.snapshot.has_value() ? "has entry" : "don't have entry");
-    }
-};
-
 TEST_SUITE_BEGIN("unstable_log");
 
 TEST_CASE("unstable_log: maybe first index") {
-    LogUnstableTestParams params;
-    std::list<LogUnstableTestParams> tests{
-        // NoSnapshot
-        {NewEntry(5, 1), 5, {}, false, 0},
-        {{}, 0, {}, false, 0},
-        // HasSnapshot
-        {NewEntry(5, 1), 5, NewSnapshot(4, 1), true, 5},
-        {{}, 5, NewSnapshot(4, 1), true, 5},
+    // Test cases: has_entry, offset, has_snapshot, w_ok, w_index
+    struct TestSpec {
+        bool has_entry;
+        uint64_t offset;
+        bool has_snapshot;
+        bool w_ok;
+        uint64_t w_index;
     };
-    DOCTEST_VALUE_PARAMETERIZED_DATA(params, tests);
-    const auto& [ent, offset, snapshot, w_ok, w_index] = params;
 
-    size_t entries_size = 0;
-    std::vector<Entry> entries;
-    if (ent) {
-        entries.emplace_back(*ent);
-        entries_size += EntryApproximateSize(*ent);
-    }
+    std::vector<TestSpec> tests{
+        // NoSnapshot
+        {true, 5, false, false, 0},
+        {false, 0, false, false, 0},
+        // HasSnapshot
+        {true, 5, true, true, 5},
+        {false, 5, true, true, 5},
+    };
 
-    auto snapshot_copy = snapshot;
-    const Unstable u(std::move(entries), entries_size, offset, std::move(snapshot_copy));
-    if (const auto index = u.MaybeFirstIndex(); index) {
-        CHECK_EQ(w_index, index);
-    } else {
-        CHECK_FALSE(w_ok);
+    for (const auto& test : tests) {
+        size_t entries_size = 0;
+        std::vector<Entry> entries;
+        if (test.has_entry) {
+            Entry ent = NewEntry(5, 1);
+            entries_size = EntryApproximateSize(ent);
+            entries.push_back(std::move(ent));
+        }
+
+        std::optional<Snapshot> snapshot;
+        if (test.has_snapshot) {
+            snapshot = NewSnapshot(4, 1);
+        }
+
+        const Unstable u(std::move(entries), entries_size, test.offset, std::move(snapshot));
+        if (const auto index = u.MaybeFirstIndex(); index) {
+            CHECK_EQ(test.w_index, index);
+        } else {
+            CHECK_FALSE(test.w_ok);
+        }
     }
 }
 
 TEST_CASE("unstable_log: maybe last index") {
-    struct TestParam {
-        std::optional<Entry> entry;
-        uint64_t offset = 0;
-        std::optional<Snapshot> snapshot;
-        bool w_ok = false;
-        uint64_t w_index = 0;
+    // Test cases: has_entry, offset, has_snapshot, w_ok, w_index
+    struct TestSpec {
+        bool has_entry;
+        uint64_t offset;
+        bool has_snapshot;
+        bool w_ok;
+        uint64_t w_index;
     };
 
-    TestParam test;
-    std::vector<TestParam> tests{
-        {NewEntry(5, 1), 5, std::nullopt, true, 5},
-        {NewEntry(5, 1), 5, NewSnapshot(4, 1), true, 5},
+    std::vector<TestSpec> tests{
+        {true, 5, false, true, 5},
+        {true, 5, true, true, 5},
         // last in snapshot
-        {std::nullopt, 5, NewSnapshot(4, 1), true, 4},
+        {false, 5, true, true, 4},
         // empty unstable
-        {std::nullopt, 0, std::nullopt, false, 0},
+        {false, 0, false, false, 0},
     };
-    DOCTEST_VALUE_PARAMETERIZED_DATA(test, tests);
-    const auto& [ent, offset, snapshot, w_ok, w_index] = test;
 
-    size_t entries_size = 0;
-    std::vector<Entry> entries;
+    for (const auto& test : tests) {
+        size_t entries_size = 0;
+        std::vector<Entry> entries;
 
-    if (ent) {
-        entries_size = EntryApproximateSize(*ent);
-        entries.emplace_back(*ent);
-    }
+        if (test.has_entry) {
+            Entry ent = NewEntry(5, 1);
+            entries_size = EntryApproximateSize(ent);
+            entries.push_back(std::move(ent));
+        }
 
-    auto snapshot_copy = snapshot;
-    Unstable u(std::move(entries), entries_size, offset, std::move(snapshot_copy));
-    const auto index = u.MaybeLastIndex();
-    if (index) {
-        CHECK_EQ(w_index, index);
-    } else {
-        CHECK_FALSE(w_ok);
+        std::optional<Snapshot> snapshot;
+        if (test.has_snapshot) {
+            snapshot = NewSnapshot(4, 1);
+        }
+
+        Unstable u(std::move(entries), entries_size, test.offset, std::move(snapshot));
+        const auto index = u.MaybeLastIndex();
+        if (index) {
+            CHECK_EQ(test.w_index, index);
+        } else {
+            CHECK_FALSE(test.w_ok);
+        }
     }
 }
 
 TEST_CASE("unstable_log: maybe term") {
-    struct TestParam {
-        std::optional<Entry> entry;
-        uint64_t offset = 0;
-        std::optional<Snapshot> snapshot;
-        uint64_t index = 0;
-        bool w_ok = false;
-        uint64_t w_term = 0;
+    // Test cases: has_entry, offset, has_snapshot, index, w_ok, w_term
+    struct TestSpec {
+        bool has_entry;
+        uint64_t offset;
+        bool has_snapshot;
+        uint64_t index;
+        bool w_ok;
+        uint64_t w_term;
     };
 
-    TestParam test;
-    std::vector<TestParam> tests{
-        {NewEntry(5, 1), 5, std::nullopt, 5, true, 1},
-        {NewEntry(5, 1), 5, std::nullopt, 6, false, 0},
-        {NewEntry(5, 1), 5, std::nullopt, 4, false, 0},
-        {
-            NewEntry(5, 1),
-            5,
-            NewSnapshot(4, 1),
-            5,
-            true,
-            1,
-        },
-        {
-            NewEntry(5, 1),
-            5,
-            NewSnapshot(4, 1),
-            6,
-            false,
-            0,
-        },
+    std::vector<TestSpec> tests{
+        {true, 5, false, 5, true, 1},
+        {true, 5, false, 6, false, 0},
+        {true, 5, false, 4, false, 0},
+        {true, 5, true, 5, true, 1},
+        {true, 5, true, 6, false, 0},
         // term from snapshot
-        {
-            NewEntry(5, 1),
-            5,
-            NewSnapshot(4, 1),
-            4,
-            true,
-            1,
-        },
-        {
-            NewEntry(5, 1),
-            5,
-            NewSnapshot(4, 1),
-            3,
-            false,
-            0,
-        },
-        {std::nullopt, 5, NewSnapshot(4, 1), 5, false, 0},
-        {std::nullopt, 5, NewSnapshot(4, 1), 4, true, 1},
-        {std::nullopt, 0, std::nullopt, 5, false, 0},
+        {true, 5, true, 4, true, 1},
+        {true, 5, true, 3, false, 0},
+        {false, 5, true, 5, false, 0},
+        {false, 5, true, 4, true, 1},
+        {false, 0, false, 5, false, 0},
     };
-    DOCTEST_VALUE_PARAMETERIZED_DATA(test, tests);
-    const auto& [ent, offset, snapshot, index, w_ok, w_term] = test;
 
-    size_t entries_size = 0;
-    std::vector<Entry> entries;
+    for (const auto& test : tests) {
+        size_t entries_size = 0;
+        std::vector<Entry> entries;
 
-    if (ent) {
-        entries_size = EntryApproximateSize(*ent);
-        entries.emplace_back(*ent);
-    }
+        if (test.has_entry) {
+            Entry ent = NewEntry(5, 1);
+            entries_size = EntryApproximateSize(ent);
+            entries.push_back(std::move(ent));
+        }
 
-    auto snapshot_copy = snapshot;
-    Unstable u(std::move(entries), entries_size, offset, std::move(snapshot_copy));
-    const auto term = u.MaybeTerm(index);
-    if (term) {
-        CHECK_EQ(w_term, term);
-    } else {
-        CHECK_FALSE(w_ok);
+        std::optional<Snapshot> snapshot;
+        if (test.has_snapshot) {
+            snapshot = NewSnapshot(4, 1);
+        }
+
+        Unstable u(std::move(entries), entries_size, test.offset, std::move(snapshot));
+        const auto term = u.MaybeTerm(test.index);
+        if (term) {
+            CHECK_EQ(test.w_term, term);
+        } else {
+            CHECK_FALSE(test.w_ok);
+        }
     }
 }
 
 TEST_CASE("unstable_log: restore") {
-    Unstable u({NewEntry(5, 1)}, EntryApproximateSize(NewEntry(5, 1)), 5, {NewSnapshot(4, 1)});
+    std::vector<Entry> init_entries;
+    Entry init_ent = NewEntry(5, 1);
+    size_t entries_size = EntryApproximateSize(init_ent);
+    init_entries.push_back(std::move(init_ent));
+    Unstable u(std::move(init_entries), entries_size, 5, NewSnapshot(4, 1));
 
     const auto s = NewSnapshot(6, 2);
     u.Restore(s);
 
-    CHECK_EQ(u.offset(), s.reader().getMetadata().getIndex() + 1);
+    CHECK_EQ(u.offset(), capnp_util::reader<msg::Snapshot>(s).getMetadata().getIndex() + 1);
     CHECK(u.entries().empty());
     CHECK_EQ(u.entries_size(), 0);
-    CHECK_EQ(u.snapshot(), s);
+    // Snapshot comparison: check metadata matches
+    REQUIRE(u.snapshot().has_value());
+    auto u_snap_reader = capnp_util::reader<msg::Snapshot>(*u.snapshot());
+    auto s_reader = capnp_util::reader<msg::Snapshot>(s);
+    CHECK_EQ(u_snap_reader.getMetadata().getIndex(), s_reader.getMetadata().getIndex());
+    CHECK_EQ(u_snap_reader.getMetadata().getTerm(), s_reader.getMetadata().getTerm());
 }
 
 TEST_CASE("unstable_log: stable snapshot and entries") {
-    std::vector<Entry> ents{
-        NewEntry(5, 1),
-        NewEntry(5, 2),
-        NewEntry(6, 3),
-    };
+    std::vector<Entry> ents;
+    ents.push_back(NewEntry(5, 1));
+    ents.push_back(NewEntry(5, 2));
+    ents.push_back(NewEntry(6, 3));
 
-    size_t entries_size =
-        std::accumulate(ents.begin(), ents.end(), 0, [](const size_t acc, const Entry& ent) {
-            return acc + ent.serializeAsBytes().size();
-        });
+    size_t entries_size = 0;
+    for (const auto& ent : ents) {
+        entries_size += capnp_util::toBytes(ent).size();
+    }
 
-    auto ents_copy = ents;
-    Unstable u(std::move(ents), entries_size, 5, {NewSnapshot(4, 1)});
-    CHECK_EQ(ents_copy, u.entries());
+    std::vector<Entry> ents_copy;
+    for (const auto& ent : ents) {
+        ents_copy.push_back(CloneEntry(ent));
+    }
+
+    Unstable u(std::move(ents), entries_size, 5, NewSnapshot(4, 1));
+    CHECK(raftpp::operator==(ents_copy, u.entries()));
 
     u.StableSnapshot(4);
     u.StableEntries(6, 3);
@@ -203,85 +198,69 @@ TEST_CASE("unstable_log: stable snapshot and entries") {
 }
 
 TEST_CASE("unstable_log: truncate and append") {
-    struct TestParam {
-        std::vector<Entry> entries;
-        uint64_t offset = 0;
-        std::optional<Snapshot> snapshot;
-        std::vector<Entry> to_append;
-        uint64_t w_offset = 0;
-        std::vector<Entry> w_entries;
+    // Test case specifications using entry index/term pairs
+    struct EntrySpec {
+        uint64_t index;
+        uint64_t term;
     };
 
-    TestParam test;
-    std::vector<TestParam> tests{
-        TestParam{
-            {NewEntry(5, 1)},
-            5,
-            std::nullopt,
-            {NewEntry(6, 1), NewEntry(7, 1)},
-            5,
-            {NewEntry(5, 1), NewEntry(6, 1), NewEntry(7, 1)}
-        },
-        // replace to unstable entries
-        TestParam{
-            {NewEntry(5, 1)},
-            5,
-            std::nullopt,
-            {NewEntry(5, 2), NewEntry(6, 2)},
-            5,
-            {NewEntry(5, 2), NewEntry(6, 2)}
-        },
-        TestParam{
-            {NewEntry(5, 1)},
-            5,
-            std::nullopt,
-            {NewEntry(4, 2), NewEntry(5, 2), NewEntry(6, 2)},
-            4,
-            {NewEntry(4, 2), NewEntry(5, 2), NewEntry(6, 2)}
-        },
+    struct TestSpec {
+        std::vector<EntrySpec> entries;
+        uint64_t offset;
+        std::vector<EntrySpec> to_append;
+        uint64_t w_offset;
+        std::vector<EntrySpec> w_entries;
+    };
+
+    std::vector<TestSpec> tests{
+        // append to existing entries
+        TestSpec{{{5, 1}}, 5, {{6, 1}, {7, 1}}, 5, {{5, 1}, {6, 1}, {7, 1}}},
+        // replace unstable entries
+        TestSpec{{{5, 1}}, 5, {{5, 2}, {6, 2}}, 5, {{5, 2}, {6, 2}}},
+        TestSpec{{{5, 1}}, 5, {{4, 2}, {5, 2}, {6, 2}}, 4, {{4, 2}, {5, 2}, {6, 2}}},
         // truncate existing entries and append
-        TestParam{
-            {NewEntry(5, 1), NewEntry(6, 1), NewEntry(7, 1)},
-            5,
-            std::nullopt,
-            {NewEntry(6, 2)},
-            5,
-            {NewEntry(5, 1), NewEntry(6, 2)}
-        },
-        TestParam{
-            {NewEntry(5, 1), NewEntry(6, 1), NewEntry(7, 1)},
-            5,
-            std::nullopt,
-            {NewEntry(7, 2), NewEntry(8, 2)},
-            5,
-            {
-                NewEntry(5, 1),
-                NewEntry(6, 1),
-                NewEntry(7, 2),
-                NewEntry(8, 2),
-            }
+        TestSpec{{{5, 1}, {6, 1}, {7, 1}}, 5, {{6, 2}}, 5, {{5, 1}, {6, 2}}},
+        TestSpec{
+            {{5, 1}, {6, 1}, {7, 1}}, 5, {{7, 2}, {8, 2}}, 5, {{5, 1}, {6, 1}, {7, 2}, {8, 2}}
         },
     };
 
-    DOCTEST_VALUE_PARAMETERIZED_DATA(test, tests);
-    const auto& [entries, offset, snapshot, to_append, w_offset, w_entries] = test;
+    for (const auto& test : tests) {
+        // Build entries from specs
+        std::vector<Entry> entries;
+        for (const auto& spec : test.entries) {
+            entries.push_back(NewEntry(spec.index, spec.term));
+        }
 
-    const size_t entries_size =
-        std::accumulate(entries.begin(), entries.end(), 0, [](const size_t acc, const Entry& ent) {
-            return acc + EntryApproximateSize(ent);
-        });
-    auto entries_copy = entries;
-    auto snapshot_copy = snapshot;
-    Unstable u(std::move(entries_copy), entries_size, offset, std::move(snapshot_copy));
-    u.TruncateAndAppend(to_append);
-    CHECK_EQ(u.offset(), w_offset);
-    CHECK_EQ(u.entries(), w_entries);
+        const size_t entries_size = std::accumulate(
+            entries.begin(), entries.end(), size_t{0},
+            [](size_t acc, const Entry& ent) { return acc + EntryApproximateSize(ent); }
+        );
 
-    const size_t w_entries_size = std::accumulate(
-        w_entries.begin(), w_entries.end(), 0,
-        [](const size_t acc, const Entry& ent) { return acc + EntryApproximateSize(ent); }
-    );
-    CHECK_EQ(u.entries_size(), w_entries_size);
+        Unstable u(std::move(entries), entries_size, test.offset, std::nullopt);
+
+        // Build to_append entries
+        std::vector<Entry> to_append;
+        for (const auto& spec : test.to_append) {
+            to_append.push_back(NewEntry(spec.index, spec.term));
+        }
+        u.TruncateAndAppend(to_append);
+
+        CHECK_EQ(u.offset(), test.w_offset);
+
+        // Build expected entries for comparison
+        std::vector<Entry> w_entries;
+        for (const auto& spec : test.w_entries) {
+            w_entries.push_back(NewEntry(spec.index, spec.term));
+        }
+        CHECK(raftpp::operator==(u.entries(), w_entries));
+
+        const size_t w_entries_size = std::accumulate(
+            w_entries.begin(), w_entries.end(), size_t{0},
+            [](size_t acc, const Entry& ent) { return acc + EntryApproximateSize(ent); }
+        );
+        CHECK_EQ(u.entries_size(), w_entries_size);
+    }
 }
 
 TEST_SUITE_END();

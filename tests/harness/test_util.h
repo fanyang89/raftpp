@@ -9,6 +9,7 @@
 
 #include "harness/interface.h"
 #include "harness/network.h"
+#include "raftpp/core/capnp_util.h"
 #include "raftpp/core/memory_storage.h"
 #include "raftpp/core/raft.h"
 #include "raftpp/core/raft_config.h"
@@ -18,6 +19,39 @@
 #include "raftpp/core/types.h"
 
 namespace raftpp {
+
+/// Helper to create a vector of Entry from variadic args (using moves)
+template <typename... Args>
+std::vector<Entry> Entries(Args&&... args) {
+    std::vector<Entry> v;
+    v.reserve(sizeof...(args));
+    (v.push_back(std::forward<Args>(args)), ...);
+    return v;
+}
+
+/// Get reader from Entry
+inline msg::Entry::Reader EntryReader(const Entry& e) {
+    return capnp_util::reader<msg::Entry>(e);
+}
+
+/// Get serialized size of an Entry
+inline size_t EntrySize(const Entry& e) {
+    return capnp_util::toBytes(e).size();
+}
+
+/// Clone a range of entries from a vector (by cloning each entry)
+inline std::vector<Entry> EntriesSlice(const std::vector<Entry>& v, size_t start, size_t end) {
+    std::vector<Entry> result;
+    for (size_t i = start; i < end && i < v.size(); ++i) {
+        result.push_back(CloneEntry(v[i]));
+    }
+    return result;
+}
+
+/// Clone all entries from a vector
+inline std::vector<Entry> CloneEntries(const std::vector<Entry>& v) {
+    return EntriesSlice(v, 0, v.size());
+}
 
 constexpr uint64_t NO_LIMIT = std::numeric_limits<uint64_t>::max();
 
@@ -147,13 +181,17 @@ ConfState MakeConfStateV2(
     bool auto_leave
 );
 
+// Explicit comparison functions (needed because Entry, Snapshot, HardState are all unique_ptr aliases)
+bool EntryEquals(const Entry& e1, const Entry& e2);
+bool HardStateEquals(const HardState& e1, const HardState& e2);
+bool SnapshotEquals(const Snapshot& e1, const Snapshot& e2);
+bool ConfStateEquals(const ConfState& e1, const ConfState& e2);
+
+// These operators still work because they have distinct signatures
 bool operator==(const std::optional<HardState>& e1, const std::optional<HardState>& e2);
-bool operator==(const Snapshot& e1, const Snapshot& e2);
-bool operator==(const Entry& e1, const Entry& e2);
 bool operator==(const std::vector<Entry>& e1, const std::vector<Entry>& e2);
 bool operator==(Result<Snapshot> e1, Result<Snapshot> e2);
 bool operator==(const ReadState& e1, const ReadState& e2);
 bool operator==(const std::vector<ReadState>& e1, const std::vector<ReadState>& e2);
-bool operator==(const ConfState& e1, const ConfState& e2);
 
 }  // namespace raftpp

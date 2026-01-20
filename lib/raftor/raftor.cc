@@ -368,8 +368,8 @@ Result<void> RaftorImpl::ReadIndexSync(std::string ctx, std::chrono::millisecond
 }
 
 Result<void> RaftorImpl::AddNode(uint64_t id, const std::string& addr) {
-    ConfChangeV2 cc;
-    auto builder = cc.builder();
+    ConfChangeV2 cc = capnp_util::make<msg::ConfChangeV2>();
+    auto builder = capnp_util::builder<msg::ConfChangeV2>(cc);
     auto changes = builder.initChanges(1);
     changes[0].setChangeType(ConfChangeType::ADD_NODE);
     changes[0].setNodeId(id);
@@ -389,8 +389,8 @@ Result<void> RaftorImpl::AddNode(uint64_t id, const std::string& addr) {
 }
 
 Result<void> RaftorImpl::RemoveNode(uint64_t id) {
-    ConfChangeV2 cc;
-    auto builder = cc.builder();
+    ConfChangeV2 cc = capnp_util::make<msg::ConfChangeV2>();
+    auto builder = capnp_util::builder<msg::ConfChangeV2>(cc);
     auto changes = builder.initChanges(1);
     changes[0].setChangeType(ConfChangeType::REMOVE_NODE);
     changes[0].setNodeId(id);
@@ -446,15 +446,15 @@ Result<void> RaftorImpl::TakeSnapshot() {
     }
 
     // Create Cap'n Proto snapshot
-    Snapshot snapshot;
-    auto snap_builder = snapshot.builder();
+    Snapshot snapshot = capnp_util::make<msg::Snapshot>();
+    auto snap_builder = capnp_util::builder<msg::Snapshot>(snapshot);
     snap_builder.setData(
         kj::arrayPtr(
             reinterpret_cast<const kj::byte*>(snapshot_result->data.data()),
             snapshot_result->data.size()
         )
     );
-    snap_builder.setMetadata(snapshot_result->metadata.reader());
+    snap_builder.setMetadata(capnp_util::reader<msg::SnapshotMetadata>(snapshot_result->metadata));
 
     // Apply to storage (this will compact the log)
     if (auto result = storage_->ApplySnapshot(snapshot); !result) {
@@ -473,9 +473,9 @@ void RaftorImpl::RefreshStatus() {
     NodeStatus ns;
     ns.id = status.id;
     ns.role = status.ss.raft_state;
-    ns.term = status.hs.reader().getTerm();
+    ns.term = capnp_util::reader<msg::HardState>(status.hs).getTerm();
     ns.leader_id = status.ss.leader_id;
-    ns.commit_index = status.hs.reader().getCommit();
+    ns.commit_index = capnp_util::reader<msg::HardState>(status.hs).getCommit();
     ns.applied_index = status.applied;
     ns.pending_proposals = proposal_tracker_.PendingCount();
 

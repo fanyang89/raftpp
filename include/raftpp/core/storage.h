@@ -11,8 +11,12 @@ struct RaftState {
     HardState hard_state;
     ConfState conf_state;
 
+    // Default constructor initializes empty messages
+    RaftState()
+        : hard_state(capnp_util::make<msg::HardState>()),
+          conf_state(capnp_util::make<msg::ConfState>()) {}
+
     // Moveable but not copyable to avoid large copies
-    RaftState() = default;
     RaftState(const RaftState&) = delete;
     RaftState& operator=(const RaftState&) = delete;
     RaftState(RaftState&&) noexcept = default;
@@ -21,8 +25,8 @@ struct RaftState {
     // Deep clone
     [[nodiscard]] RaftState clone() const {
         RaftState rs;
-        rs.hard_state = hard_state.clone();
-        rs.conf_state = conf_state.clone();
+        rs.hard_state = CloneHardState(hard_state);
+        rs.conf_state = CloneConfState(conf_state);
         return rs;
     }
 };

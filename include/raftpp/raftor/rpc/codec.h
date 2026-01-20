@@ -10,8 +10,8 @@ namespace raftpp::raftor::rpc {
 
 // Type aliases for RPC layer Cap'n Proto types
 namespace capnp = raftpp::capnp;
-using RpcHeader = OwnedMessage<capnp::RpcHeader>;
-using RpcHandshake = OwnedMessage<capnp::RpcHandshake>;
+using RpcHeader = std::unique_ptr<::capnp::MallocMessageBuilder>;
+using RpcHandshake = std::unique_ptr<::capnp::MallocMessageBuilder>;
 
 /// Codec for message framing over TCP
 ///

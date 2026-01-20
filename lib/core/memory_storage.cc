@@ -7,7 +7,9 @@
 namespace raftpp {
 
 MemoryStorageCore::MemoryStorageCore()
-    : trigger_snapshot_unavailable_(false), trigger_log_unavailable_(false) {}
+    : snapshot_metadata_(capnp_util::make<msg::SnapshotMetadata>()),
+      trigger_snapshot_unavailable_(false),
+      trigger_log_unavailable_(false) {}
 
 void MemoryStorageCore::SetHardState(HardState&& hs) {
     static_assert(std::is_rvalue_reference_v<decltype(hs)>, "hs must be rvalue reference");
@@ -16,9 +18,10 @@ void MemoryStorageCore::SetHardState(HardState&& hs) {
 
 void MemoryStorageCore::CommitTo(uint64_t index) {
     ASSERT(HasEntryAt(index), "commit_to {} but the entry does not exist", index);
-    const size_t diff = index - entries_[0].reader().getIndex();
-    raft_state_.hard_state.builder().setCommit(index);
-    raft_state_.hard_state.builder().setTerm(entries_[diff].reader().getTerm());
+    const size_t diff = index - capnp_util::reader<msg::Entry>(entries_[0]).getIndex();
+    capnp_util::builder<msg::HardState>(raft_state_.hard_state).setCommit(index);
+    capnp_util::builder<msg::HardState>(raft_state_.hard_state)
+        .setTerm(capnp_util::reader<msg::Entry>(entries_[diff]).getTerm());
 }
 
 bool MemoryStorageCore::HasEntryAt(const uint64_t index) const {
@@ -26,7 +29,7 @@ bool MemoryStorageCore::HasEntryAt(const uint64_t index) const {
 }
 
 Result<void> MemoryStorageCore::ApplySnapshot(const Snapshot& snapshot) {
-    auto snapshot_reader = snapshot.reader();
+    auto snapshot_reader = capnp_util::reader<msg::Snapshot>(snapshot);
     auto meta = snapshot_reader.getMetadata();
     const uint64_t index = meta.getIndex();
     if (first_index() > index) {
@@ -34,8 +37,8 @@ Result<void> MemoryStorageCore::ApplySnapshot(const Snapshot& snapshot) {
     }
 
     // Copy snapshot metadata
-    snapshot_metadata_ = SnapshotMetadata();
-    auto meta_builder = snapshot_metadata_.builder();
+    snapshot_metadata_ = capnp_util::make<msg::SnapshotMetadata>();
+    auto meta_builder = capnp_util::builder<msg::SnapshotMetadata>(snapshot_metadata_);
     meta_builder.setIndex(meta.getIndex());
     meta_builder.setTerm(meta.getTerm());
     auto meta_conf = meta_builder.initConfState();
@@ -66,15 +69,15 @@ Result<void> MemoryStorageCore::ApplySnapshot(const Snapshot& snapshot) {
     }
     meta_conf.setAutoLeave(src_conf.getAutoLeave());
 
-    auto hard_state_builder = raft_state_.hard_state.builder();
+    auto hard_state_builder = capnp_util::builder<msg::HardState>(raft_state_.hard_state);
     auto current_term = hard_state_builder.getTerm();
     hard_state_builder.setTerm(std::max(current_term, meta.getTerm()));
     hard_state_builder.setCommit(index);
     entries_.clear();
 
     // Copy conf state to raft_state_
-    raft_state_.conf_state = ConfState();
-    auto conf_builder = raft_state_.conf_state.builder();
+    raft_state_.conf_state = capnp_util::make<msg::ConfState>();
+    auto conf_builder = capnp_util::builder<msg::ConfState>(raft_state_.conf_state);
     auto conf_voters = conf_builder.initVoters(voters.size());
     for (size_t i = 0; i < voters.size(); ++i) {
         conf_voters.set(i, voters[i]);
@@ -113,7 +116,7 @@ Result<void> MemoryStorageCore::Compact(uint64_t compact_index) {
         return {};
     }
 
-    const uint64_t offset = compact_index - entries_[0].reader().getIndex();
+    const uint64_t offset = compact_index - capnp_util::reader<msg::Entry>(entries_[0]).getIndex();
     entries_.erase(entries_.begin(), entries_.begin() + static_cast<int64_t>(offset));
     return {};
 }
@@ -127,7 +130,7 @@ Result<void> MemoryStorageCore::MayAppend(const std::vector<Entry>& ents) {
         return {};
     }
 
-    const auto new_appended = ents.front().reader().getIndex();
+    const auto new_appended = capnp_util::reader<msg::Entry>(ents.front()).getIndex();
     if (first_index() > new_appended) {
         const auto compacted = first_index() - 1;
         return RaftError(
@@ -153,7 +156,7 @@ Result<void> MemoryStorageCore::MayAppend(const std::vector<Entry>& ents) {
     entries_.reserve(entries_.size() + ents.size());
     // Manual insertion instead of insert_range
     for (const auto& ent : ents) {
-        entries_.push_back(ent.clone());
+        entries_.push_back(CloneEntry(ent));
     }
     return {};
 }
@@ -174,30 +177,30 @@ std::optional<GetEntriesContext> MemoryStorageCore::TakeGetEntriesContext() {
 
 uint64_t MemoryStorageCore::first_index() const {
     if (entries_.empty()) {
-        return snapshot_metadata_.reader().getIndex() + 1;
+        return capnp_util::reader<msg::SnapshotMetadata>(snapshot_metadata_).getIndex() + 1;
     }
-    return entries_[0].reader().getIndex();
+    return capnp_util::reader<msg::Entry>(entries_[0]).getIndex();
 }
 
 uint64_t MemoryStorageCore::last_index() const {
     if (entries_.empty()) {
-        return snapshot_metadata_.reader().getIndex();
+        return capnp_util::reader<msg::SnapshotMetadata>(snapshot_metadata_).getIndex();
     }
-    return entries_.back().reader().getIndex();
+    return capnp_util::reader<msg::Entry>(entries_.back()).getIndex();
 }
 
 Snapshot MemoryStorageCore::snapshot() const {
-    Snapshot snapshot;
-    auto snapshot_builder = snapshot.builder();
+    auto snapshot = capnp_util::make<msg::Snapshot>();
+    auto snapshot_builder = capnp_util::builder<msg::Snapshot>(snapshot);
     // Set empty data to ensure consistent serialization
     snapshot_builder.setData(::capnp::Data::Reader(nullptr, 0));
     auto meta_builder = snapshot_builder.initMetadata();
 
-    auto hard_state_reader = raft_state_.hard_state.reader();
+    auto hard_state_reader = capnp_util::reader<msg::HardState>(raft_state_.hard_state);
     meta_builder.setIndex(hard_state_reader.getCommit());
 
     uint64_t term;
-    auto snapshot_meta_reader = snapshot_metadata_.reader();
+    auto snapshot_meta_reader = capnp_util::reader<msg::SnapshotMetadata>(snapshot_metadata_);
     if (meta_builder.getIndex() < snapshot_meta_reader.getIndex()) {
         PANIC(
             "commit {} < snapshot_metadata.index {}", meta_builder.getIndex(),
@@ -205,8 +208,9 @@ Snapshot MemoryStorageCore::snapshot() const {
         );
     }
     if (meta_builder.getIndex() > snapshot_meta_reader.getIndex()) {
-        const uint64_t offset = entries_[0].reader().getIndex();
-        term = entries_[(meta_builder.getIndex() - offset)].reader().getTerm();
+        const uint64_t offset = capnp_util::reader<msg::Entry>(entries_[0]).getIndex();
+        term =
+            capnp_util::reader<msg::Entry>(entries_[(meta_builder.getIndex() - offset)]).getTerm();
     } else {
         term = snapshot_meta_reader.getTerm();
     }
@@ -214,7 +218,7 @@ Snapshot MemoryStorageCore::snapshot() const {
     meta_builder.setTerm(term);
 
     // Copy conf_state
-    auto conf_state_reader = raft_state_.conf_state.reader();
+    auto conf_state_reader = capnp_util::reader<msg::ConfState>(raft_state_.conf_state);
     auto meta_conf_builder = meta_builder.initConfState();
 
     auto voters = conf_state_reader.getVoters();
@@ -272,12 +276,12 @@ Result<std::vector<Entry>> MemoryStorage::Entries(
         return RaftError(StorageErrorCode::LogTemporarilyUnavailable);
     }
 
-    const uint64_t offset = core_.entries_.front().reader().getIndex();
+    const uint64_t offset = capnp_util::reader<msg::Entry>(core_.entries_.front()).getIndex();
     const auto lo = static_cast<int64_t>(low - offset);
     const auto hi = static_cast<int64_t>(high - offset);
     std::vector<Entry> entries;
     for (auto it = core_.entries_.begin() + lo; it != core_.entries_.begin() + hi; ++it) {
-        entries.push_back(it->clone());
+        entries.push_back(CloneEntry(*it));
     }
     if (max_size) {
         LimitSize(entries, *max_size);
@@ -290,7 +294,7 @@ void MemoryStorage::SetEntries(const std::vector<Entry>& entries) {
     core_.entries_.clear();
     core_.entries_.reserve(entries.size());
     for (const auto& ent : entries) {
-        core_.entries_.push_back(ent.clone());
+        core_.entries_.push_back(CloneEntry(ent));
     }
 }
 
@@ -311,9 +315,9 @@ void MemoryStorage::SetRaftState(const RaftState& raft_state) {
 
 void MemoryStorage::SetConfState(const ConfState& conf_state) {
     std::lock_guard lock(mutex_);
-    auto src_reader = conf_state.reader();
-    core_.raft_state_.conf_state = ConfState();
-    auto conf_builder = core_.raft_state_.conf_state.builder();
+    auto src_reader = capnp_util::reader<msg::ConfState>(conf_state);
+    core_.raft_state_.conf_state = capnp_util::make<msg::ConfState>();
+    auto conf_builder = capnp_util::builder<msg::ConfState>(core_.raft_state_.conf_state);
 
     // Copy voters
     auto voters = src_reader.getVoters();
@@ -371,7 +375,7 @@ std::vector<Entry> MemoryStorage::AllEntries() {
     std::vector<Entry> result;
     result.reserve(core_.entries_.size());
     for (const auto& ent : core_.entries_) {
-        result.push_back(ent.clone());
+        result.push_back(CloneEntry(ent));
     }
     return result;
 }
@@ -383,7 +387,7 @@ Result<void> MemoryStorage::MayAppend(const std::vector<Entry>& entries) {
 
 Result<uint64_t> MemoryStorage::Term(const uint64_t idx) {
     std::lock_guard lock(mutex_);
-    auto snapshot_meta_reader = core_.snapshot_metadata_.reader();
+    auto snapshot_meta_reader = capnp_util::reader<msg::SnapshotMetadata>(core_.snapshot_metadata_);
     if (idx == snapshot_meta_reader.getIndex()) {
         return snapshot_meta_reader.getTerm();
     }
@@ -397,7 +401,7 @@ Result<uint64_t> MemoryStorage::Term(const uint64_t idx) {
         return RaftError(StorageErrorCode::Unavailable);
     }
 
-    return core_.entries_[idx - offset].reader().getTerm();
+    return capnp_util::reader<msg::Entry>(core_.entries_[idx - offset]).getTerm();
 }
 
 Result<uint64_t> MemoryStorage::FirstIndex() {
@@ -418,14 +422,14 @@ Result<Snapshot> MemoryStorage::GetSnapshot(const uint64_t request_index, uint64
     }
 
     Snapshot snapshot = core_.snapshot();
-    auto meta_reader = snapshot.reader().getMetadata();
+    auto meta_reader = capnp_util::reader<msg::Snapshot>(snapshot).getMetadata();
     if (meta_reader.getIndex() < request_index) {
         // Need to rebuild snapshot with new index
-        Snapshot new_snapshot;
-        auto builder = new_snapshot.builder();
+        auto new_snapshot = capnp_util::make<msg::Snapshot>();
+        auto builder = capnp_util::builder<msg::Snapshot>(new_snapshot);
 
         // Copy data from original snapshot
-        auto orig_reader = snapshot.reader();
+        auto orig_reader = capnp_util::reader<msg::Snapshot>(snapshot);
         auto orig_data = orig_reader.getData();
         builder.setData(orig_data);
 

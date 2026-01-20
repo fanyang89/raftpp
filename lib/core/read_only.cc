@@ -9,7 +9,7 @@ namespace raftpp {
 ReadOnly::ReadOnly(const ReadOnlyOption option) : option_(option) {}
 
 void ReadOnly::AddRequest(const uint64_t index, const Message& req, const uint64_t self_id) {
-    auto req_reader = req.reader();
+    auto req_reader = capnp_util::reader<msg::Message>(req);
     auto entries = req_reader.getEntries();
     if (entries.size() == 0) {
         return;
@@ -22,7 +22,7 @@ void ReadOnly::AddRequest(const uint64_t index, const Message& req, const uint64
     }
     Set<uint64_t> acks;
     acks.insert(self_id);
-    ReadIndexStatus status{req.clone(), index, std::move(acks)};
+    ReadIndexStatus status{CloneMessage(req), index, std::move(acks)};
     pending_read_index_.emplace(ctx, std::move(status));
     read_index_queue_.push_back(ctx);
 }

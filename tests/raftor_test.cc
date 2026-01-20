@@ -30,7 +30,7 @@ class MockStateMachine : public StateMachine {
   public:
     Result<ApplyResult> Apply(const Entry& entry) override {
         std::lock_guard lock(mutex_);
-        auto reader = entry.reader();
+        auto reader = EntryReader(entry);
         auto data = reader.getData();
         applied_entries_.push_back(
             std::string(reinterpret_cast<const char*>(data.begin()), data.size())
@@ -49,17 +49,19 @@ class MockStateMachine : public StateMachine {
         snapshot_count_++;
         SnapshotData data;
         data.data = std::vector<uint8_t>{'s', 'n', 'a', 'p'};
-        auto meta_builder = data.metadata.builder();
+        data.metadata = capnp_util::make<msg::SnapshotMetadata>();
+        auto meta_builder = capnp_util::builder<msg::SnapshotMetadata>(data.metadata);
         meta_builder.setIndex(applied_index);
         meta_builder.setTerm(applied_term);
-        meta_builder.setConfState(conf_state.reader());
+        meta_builder.setConfState(capnp_util::reader<msg::ConfState>(conf_state));
         return data;
     }
 
     Result<void> RestoreSnapshot(const SnapshotData& snapshot) override {
         std::lock_guard lock(mutex_);
         restore_count_++;
-        last_restored_index_ = snapshot.metadata.reader().getIndex();
+        last_restored_index_ =
+            capnp_util::reader<msg::SnapshotMetadata>(snapshot.metadata).getIndex();
         return {};
     }
 
@@ -178,7 +180,7 @@ class MockTransport : public rpc::Transport {
     void Send(std::span<const Message> messages) override {
         std::lock_guard lock(mutex_);
         for (const auto& msg : messages) {
-            sent_messages_.push_back(msg.clone());
+            sent_messages_.push_back(CloneMessage(msg));
         }
     }
 
@@ -217,7 +219,7 @@ class MockTransport : public rpc::Transport {
         std::vector<Message> result;
         result.reserve(sent_messages_.size());
         for (const auto& msg : sent_messages_) {
-            result.push_back(msg.clone());
+            result.push_back(CloneMessage(msg));
         }
         return result;
     }
@@ -568,8 +570,8 @@ TEST_CASE("raftor_config: to_raft_config") {
 TEST_CASE("mock_state_machine: apply entry") {
     MockStateMachine sm;
 
-    Entry entry;
-    auto builder = entry.builder();
+    Entry entry = capnp_util::make<msg::Entry>();
+    auto builder = capnp_util::builder<msg::Entry>(entry);
     const std::string data = "test_data";
     builder.setData(kj::arrayPtr(reinterpret_cast<const kj::byte*>(data.data()), data.size()));
 
@@ -587,8 +589,8 @@ TEST_CASE("mock_state_machine: apply entry failure") {
     MockStateMachine sm;
     sm.SetShouldFailApply(true);
 
-    Entry entry;
-    auto builder = entry.builder();
+    Entry entry = capnp_util::make<msg::Entry>();
+    auto builder = capnp_util::builder<msg::Entry>(entry);
     const std::string data = "test_data";
     builder.setData(kj::arrayPtr(reinterpret_cast<const kj::byte*>(data.data()), data.size()));
 
@@ -600,15 +602,15 @@ TEST_CASE("mock_state_machine: apply entry failure") {
 TEST_CASE("mock_state_machine: take snapshot") {
     MockStateMachine sm;
 
-    ConfState conf_state;
-    auto conf_builder = conf_state.builder();
+    ConfState conf_state = capnp_util::make<msg::ConfState>();
+    auto conf_builder = capnp_util::builder<msg::ConfState>(conf_state);
     auto voters = conf_builder.initVoters(2);
     voters.set(0, 1);
     voters.set(1, 2);
 
     auto result = sm.TakeSnapshot(100, 5, conf_state);
     REQUIRE(result.has_value());
-    auto meta_reader = result->metadata.reader();
+    auto meta_reader = capnp_util::reader<msg::SnapshotMetadata>(result->metadata);
     CHECK(meta_reader.getIndex() == 100);
     CHECK(meta_reader.getTerm() == 5);
     CHECK(meta_reader.getConfState().getVoters().size() == 2);
@@ -619,7 +621,8 @@ TEST_CASE("mock_state_machine: restore snapshot") {
     MockStateMachine sm;
 
     SnapshotData snapshot;
-    auto meta_builder = snapshot.metadata.builder();
+    snapshot.metadata = capnp_util::make<msg::SnapshotMetadata>();
+    auto meta_builder = capnp_util::builder<msg::SnapshotMetadata>(snapshot.metadata);
     meta_builder.setIndex(50);
 
     auto result = sm.RestoreSnapshot(snapshot);
@@ -694,9 +697,10 @@ TEST_CASE("mock_transport: send messages") {
     MockTransport transport;
 
     std::vector<Message> messages;
-    Message m1, m2;
-    m1.builder().setTo(1);
-    m2.builder().setTo(2);
+    Message m1 = capnp_util::make<msg::Message>();
+    Message m2 = capnp_util::make<msg::Message>();
+    capnp_util::builder<msg::Message>(m1).setTo(1);
+    capnp_util::builder<msg::Message>(m2).setTo(2);
     messages.push_back(std::move(m1));
     messages.push_back(std::move(m2));
 
@@ -704,8 +708,8 @@ TEST_CASE("mock_transport: send messages") {
 
     auto sent = transport.SentMessages();
     REQUIRE(sent.size() == 2);
-    CHECK(sent[0].reader().getTo() == 1);
-    CHECK(sent[1].reader().getTo() == 2);
+    CHECK(capnp_util::reader<msg::Message>(sent[0]).getTo() == 1);
+    CHECK(capnp_util::reader<msg::Message>(sent[1]).getTo() == 2);
 
     transport.ClearSentMessages();
     CHECK(transport.SentMessages().empty());
@@ -717,13 +721,13 @@ TEST_CASE("mock_transport: message callback") {
     Message received;
     transport.SetMessageCallback([&](Message msg) { received = std::move(msg); });
 
-    Message m;
-    m.builder().setFrom(42);
-    transport.InjectMessage(m);
+    Message m = capnp_util::make<msg::Message>();
+    capnp_util::builder<msg::Message>(m).setFrom(42);
+    transport.InjectMessage(std::move(m));
 
     transport.Poll(std::chrono::milliseconds(0));
 
-    CHECK(received.reader().getFrom() == 42);
+    CHECK(capnp_util::reader<msg::Message>(received).getFrom() == 42);
 }
 
 TEST_CASE("mock_transport: error callback") {
