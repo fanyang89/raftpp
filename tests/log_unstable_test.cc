@@ -188,7 +188,7 @@ TEST_CASE("unstable_log: stable snapshot and entries") {
     }
 
     Unstable u(std::move(ents), entries_size, 5, NewSnapshot(4, 1));
-    CHECK_EQ(ents_copy, u.entries());
+    CHECK(raftpp::operator==(ents_copy, u.entries()));
 
     u.StableSnapshot(4);
     u.StableEntries(6, 3);
@@ -253,7 +253,7 @@ TEST_CASE("unstable_log: truncate and append") {
         for (const auto& spec : test.w_entries) {
             w_entries.push_back(NewEntry(spec.index, spec.term));
         }
-        CHECK_EQ(u.entries(), w_entries);
+        CHECK(raftpp::operator==(u.entries(), w_entries));
 
         const size_t w_entries_size = std::accumulate(
             w_entries.begin(), w_entries.end(), size_t{0},

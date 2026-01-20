@@ -7,7 +7,6 @@
 
 #include <capnp/ez-rpc.h>
 #include <kj/async-io.h>
-#include <kj/time.h>
 #include <spdlog/spdlog.h>
 
 #include "raftpp/core/types.h"
@@ -183,7 +182,6 @@ void CapnpTransport::RpcLoop(std::promise<Result<void>> start_promise) {
         );
 
         auto& wait_scope = server->getWaitScope();
-        auto& timer = server->getIoProvider().getTimer();
 
         std::unordered_map<uint64_t, RpcClient> clients;
 
@@ -237,14 +235,22 @@ void CapnpTransport::RpcLoop(std::promise<Result<void>> start_promise) {
                 }
             }
 
-            timer.afterDelay(10 * kj::MILLISECONDS).wait(wait_scope);
+            wait_scope.poll();
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
+        wait_scope.cancelAllDetached();
     } catch (const kj::Exception& e) {
         set_start(std::unexpected(RaftError(RpcErrorCode::BindFailed)));
         SPDLOG_ERROR("Cap'n Proto RPC loop failed: {}", e.getDescription().cStr());
         if (on_error_) {
             on_error_(0, e.getDescription().cStr());
         }
+    } catch (const std::exception& e) {
+        set_start(std::unexpected(RaftError(RpcErrorCode::BindFailed)));
+        SPDLOG_ERROR("Cap'n Proto RPC loop failed: {}", e.what());
+    } catch (...) {
+        set_start(std::unexpected(RaftError(RpcErrorCode::BindFailed)));
+        SPDLOG_ERROR("Cap'n Proto RPC loop failed: unknown error");
     }
 }
 

@@ -422,7 +422,7 @@ TEST_CASE("raw_node: start") {
     storage->Append(rd2.entries).value();
     auto light_rd = raw_node.Advance(rd2);
     CHECK_EQ(light_rd.commit_index, std::make_optional<uint64_t>(2));
-    CHECK_EQ(light_rd.committed_entries, MakeEntryVec(NewEntry(2, 2)));
+    CHECK(raftpp::operator==(light_rd.committed_entries, MakeEntryVec(NewEntry(2, 2))));
     CHECK_FALSE(raw_node.HasReady());
 
     raw_node.Propose("", "somedata").value();
@@ -436,7 +436,11 @@ TEST_CASE("raw_node: start") {
     storage->Append(rd3.entries).value();
     auto light_rd2 = raw_node.Advance(rd3);
     CHECK_EQ(light_rd2.commit_index, std::make_optional<uint64_t>(3));
-    CHECK_EQ(light_rd2.committed_entries, MakeEntryVec(NewEntry(3, 2, "somedata", "")));
+    CHECK(
+        raftpp::operator==(
+            light_rd2.committed_entries, MakeEntryVec(NewEntry(3, 2, "somedata", ""))
+        )
+    );
 
     CHECK_FALSE(raw_node.HasReady());
 }
@@ -809,7 +813,7 @@ TEST_CASE("raw_node: propose and conf change - simple add node") {
         capnp_util::reader<msg::Entry>(entries[1]).getEntryType(), EntryType::ENTRY_CONF_CHANGE_V2
     );
     CHECK_EQ(DataToString(capnp_util::reader<msg::Entry>(entries[1]).getData()), ccdata);
-    CHECK_EQ(cs.value(), MakeConfState({1, 2}));
+    CHECK(ConfStateEquals(cs.value(), MakeConfState({1, 2})));
 }
 
 /// Test configuration change mechanism - add learner node.
@@ -985,7 +989,7 @@ TEST_CASE("raw_node: joint auto leave") {
 
     // Lie and pretend ConfChange applied.
     auto final_cs = raw_node.ApplyConfChange(leave_cc).value();
-    CHECK_EQ(final_cs, MakeConfState({1}, {2}));
+    CHECK(ConfStateEquals(final_cs, MakeConfState({1}, {2})));
 }
 
 /// Test bounded uncommitted entries growth with partition.
@@ -1081,7 +1085,7 @@ TEST_CASE("raw_node: with async apply") {
         storage->Append(entries).value();
 
         auto light_rd = raw_node.Advance(rd2);
-        CHECK_EQ(light_rd.committed_entries, entries);
+        CHECK(raftpp::operator==(light_rd.committed_entries, entries));
         CHECK(light_rd.commit_index.has_value());
         CHECK_EQ(light_rd.commit_index.value(), last_index + cnt);
 
@@ -1138,7 +1142,7 @@ TEST_CASE("raw_node: entries_after_snapshot") {
     for (int i = 2; i < 6; ++i) {
         expected_committed.push_back(NewEntry(i, 2, "hello"));
     }
-    CHECK_EQ(light_rd.committed_entries, expected_committed);
+    CHECK(raftpp::operator==(light_rd.committed_entries, expected_committed));
     CHECK(light_rd.messages.empty());
 
     Snapshot snap = NewSnapshot(10, 3, {1, 2});
@@ -1188,7 +1192,7 @@ TEST_CASE("raw_node: entries_after_snapshot") {
     for (int i = 11; i < 13; ++i) {
         expected_committed2.push_back(NewEntry(i, 3, "hello"));
     }
-    CHECK_EQ(light_rd2.committed_entries, expected_committed2);
+    CHECK(raftpp::operator==(light_rd2.committed_entries, expected_committed2));
     CHECK(light_rd2.messages.empty());
 }
 
@@ -1284,7 +1288,7 @@ TEST_CASE("raw_node: overwrite_entries") {
     std::vector<Entry> expected_new_committed;
     expected_new_committed.push_back(NewEntry(4, 3, "hello"));
     expected_new_committed.push_back(NewEntry(5, 3, "hello"));
-    CHECK_EQ(light_rd2.committed_entries, expected_new_committed);
+    CHECK(raftpp::operator==(light_rd2.committed_entries, expected_new_committed));
     CHECK(light_rd2.messages.empty());
 }
 

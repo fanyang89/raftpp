@@ -4,6 +4,8 @@
 
 namespace raftpp::raftor::wal {
 
+WALStorage::WALStorage() : snapshot_(capnp_util::make<msg::Snapshot>()) {}
+
 WALStorage::~WALStorage() = default;
 
 Result<std::shared_ptr<WALStorage>> WALStorage::Open(const WALConfig& config) {

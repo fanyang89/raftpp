@@ -690,6 +690,9 @@ bool HardStateEquals(const HardState& e1, const HardState& e2) {
 
 // Snapshot comparison - uses value equality via Cap'n Proto
 bool SnapshotEquals(const Snapshot& e1, const Snapshot& e2) {
+    if (!e1 || !e2) {
+        return !e1 && !e2;
+    }
     return capnp_util::equal<msg::Snapshot>(
         capnp_util::reader<msg::Snapshot>(e1), capnp_util::reader<msg::Snapshot>(e2)
     );
@@ -793,16 +796,19 @@ void MustCmpReady(
     bool must_sync
 ) {
     CHECK_EQ(rd.ss, ss);
-    CHECK_EQ(rd.hs, hs);
-    CHECK_EQ(rd.entries, entries);
-    CHECK_EQ(rd.light.committed_entries, committed_entries);
+    CHECK(raftpp::operator==(rd.hs, hs));
+    CHECK(raftpp::operator==(rd.entries, entries));
+    CHECK(raftpp::operator==(rd.light.committed_entries, committed_entries));
     CHECK_EQ(rd.read_states.empty(), true);
 
     if (snapshot.has_value()) {
-        CHECK_EQ(rd.snapshot, *snapshot);
+        CHECK(rd.snapshot);
+        CHECK(SnapshotEquals(rd.snapshot, *snapshot));
     } else {
-        Snapshot default_snap = capnp_util::make<msg::Snapshot>();
-        CHECK_EQ(rd.snapshot, default_snap);
+        if (rd.snapshot) {
+            Snapshot default_snap = capnp_util::make<msg::Snapshot>();
+            CHECK(SnapshotEquals(rd.snapshot, default_snap));
+        }
     }
 
     CHECK_EQ(rd.Messages().empty(), msg_is_empty);

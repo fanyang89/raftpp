@@ -147,7 +147,7 @@ TEST_CASE("storage: entries") {
             for (const auto& [idx, term] : t.wEntries) {
                 wEntries.push_back(NewEntry(idx, term));
             }
-            CHECK_EQ(*result, wEntries);
+            CHECK(raftpp::operator==(*result, wEntries));
         }
     }
 }
@@ -374,7 +374,7 @@ TEST_CASE("storage: append") {
                 wEntries.push_back(NewEntry(idx, term));
             }
 
-            CHECK_EQ(wEntries, storage.AllEntries());
+            CHECK(raftpp::operator==(wEntries, storage.AllEntries()));
         }
     }
 }

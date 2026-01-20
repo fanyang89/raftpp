@@ -57,7 +57,7 @@ class WALStorage final : public Storage {
     [[nodiscard]] std::vector<Entry> AllEntries();
 
   private:
-    WALStorage() = default;
+    WALStorage();
 
     std::unique_ptr<WAL> wal_;
     mutable std::mutex mutex_;

@@ -12,7 +12,7 @@ TEST_SUITE_BEGIN("raft_log");
 
 TEST_CASE("raft_log: find conflict") {
     // Test helper to run a single find conflict test case
-    auto run_test = [](std::vector<Entry> ents, uint64_t w_conflict) {
+    auto run_test = [](const std::vector<Entry>& ents, const uint64_t w_conflict) {
         auto previous_entries = Entries(NewEntry(1, 1), NewEntry(2, 2), NewEntry(3, 3));
         auto store = std::make_unique<MemoryStorage>();
         RaftLog raft_log(DefaultConfig(), std::move(store));
@@ -90,8 +90,8 @@ TEST_CASE("raft_log: is up-to-date") {
 }
 
 TEST_CASE("raft_log: append") {
-    auto run_test = [](std::vector<Entry> entries, uint64_t w_index, std::vector<Entry> w_entries,
-                       uint64_t w_unstable) {
+    auto run_test = [](const std::vector<Entry>& entries, uint64_t w_index,
+                       std::vector<Entry> w_entries, uint64_t w_unstable) {
         auto previous_entries = Entries(NewEntry(1, 1), NewEntry(2, 2));
         auto store = std::make_unique<MemoryStorage>();
         const auto r = store->MayAppend(previous_entries);
@@ -198,7 +198,7 @@ TEST_CASE("raft_log: term with unstable snapshot") {
         uint64_t w;
     };
 
-    TestParam test;
+    TestParam test{};
     const std::vector<TestParam> tests{
         // cannot get term from storage
         {storage_snap_idx, 0},
@@ -234,7 +234,7 @@ TEST_CASE("raft_log: term") {
         uint64_t w;
     };
 
-    TestParam test;
+    TestParam test{};
     const std::vector<TestParam> tests{
         {offset - 1, 0},
         {offset, 1},
@@ -278,8 +278,10 @@ TEST_CASE("raft_log: maybe persist with snapshot") {
     constexpr uint64_t snap_term = 2;
 
     // All test cases use empty new_entries
-    auto run_test = [snap_index,
-                     snap_term](uint64_t stable_index, uint64_t stable_term, uint64_t w_persist) {
+    auto run_test = [snap_index](
+                        const uint64_t stable_index, const uint64_t stable_term,
+                        const uint64_t w_persist
+                    ) {
         auto store = std::make_unique<MemoryStorage>();
         auto* store_ptr = store.get();
         REQUIRE(store->ApplySnapshot(NewSnapshot(snap_index, snap_term)));
@@ -364,12 +366,12 @@ TEST_CASE("raft_log: unstable entries") {
 
         const auto& ents = raft_log.unstable().entries();
         REQUIRE_EQ(2, ents.size());
+        CHECK(raftpp::operator==(ents, previous_ents));
         if (!ents.empty()) {
             const auto& e = ents.back();
             auto reader = EntryReader(e);
             raft_log.StableEntries(reader.getIndex(), reader.getTerm());
         }
-        CHECK(raftpp::operator==(ents, previous_ents));
         CHECK_EQ(3, raft_log.unstable().offset());
     }
 }
@@ -377,7 +379,7 @@ TEST_CASE("raft_log: unstable entries") {
 TEST_CASE("raft_log: has next entries and next entries") {
     // Test with range-based expected entries
     // w_entries_range = std::nullopt means no entries expected
-    // w_entries_range = {start, end} means entries[start..end] expected
+    // w_entries_range = {start, end} means entries[start, end] expected
     struct TestParam {
         uint64_t applied = 0;
         uint64_t persisted = 0;
@@ -412,8 +414,8 @@ TEST_CASE("raft_log: has next entries and next entries") {
     if (!unstable.empty()) {
         const auto& e = unstable.back();
         auto reader = EntryReader(e);
-        raft_log.StableEntries(reader.getIndex(), reader.getTerm());
         REQUIRE(store_ptr->Append(unstable));
+        raft_log.StableEntries(reader.getIndex(), reader.getTerm());
     }
 
     std::ignore = raft_log.MaybePersist(persisted, 1);
@@ -427,16 +429,18 @@ TEST_CASE("raft_log: has next entries and next entries") {
     CHECK_EQ(w_entries_range.has_value(), raft_log.HasNextEntries());
     const auto next_entries = raft_log.NextEntries({});
     if (w_entries_range.has_value()) {
+        REQUIRE(next_entries.has_value());
         const auto [start, end] = *w_entries_range;
         auto expected = EntriesSlice(ents, start, end);
-        CHECK_EQ(next_entries, expected);
+        CHECK(raftpp::operator==(*next_entries, expected));
     } else {
         CHECK_FALSE(next_entries.has_value());
     }
 }
 
 TEST_CASE("raft_log: has next entries and next entries, 2") {
-    // Range-based expected entries: nullopt means no entries, {start, end} means entries[start..end]
+    // Range-based expected entries: nullopt means no entries,
+    //   {start, end} means entries[start, end]
     // Using 7 as "all" since entries has 7 elements
     struct TestParam {
         uint64_t applied = 0;
@@ -500,8 +504,8 @@ TEST_CASE("raft_log: has next entries and next entries, 2") {
     if (!unstable.empty()) {
         const auto& e = unstable.back();
         auto reader = EntryReader(e);
-        raft_log.StableEntries(reader.getIndex(), reader.getTerm());
         REQUIRE(store_ptr->Append(unstable));
+        raft_log.StableEntries(reader.getIndex(), reader.getTerm());
     }
 
     std::ignore = raft_log.MaybePersist(persisted, 1);
@@ -515,9 +519,10 @@ TEST_CASE("raft_log: has next entries and next entries, 2") {
     CHECK_EQ(w_entries_range.has_value(), raft_log.HasNextEntries());
     const auto next_entries = raft_log.NextEntries({});
     if (w_entries_range.has_value()) {
+        REQUIRE(next_entries.has_value());
         const auto [start, end] = *w_entries_range;
         auto expected = EntriesSlice(ents, start, end);
-        CHECK_EQ(next_entries, expected);
+        CHECK(raftpp::operator==(*next_entries, expected));
     } else {
         CHECK_FALSE(next_entries.has_value());
     }
@@ -543,7 +548,7 @@ TEST_CASE("raft_log: slice") {
     }
 
     // Helper to create expected entries for a range [from, to)
-    auto expected_entries = [](uint64_t from, uint64_t to) {
+    auto expected_entries = [](const uint64_t from, const uint64_t to) {
         std::vector<Entry> entries;
         for (uint64_t i = from; i < to; ++i) {
             entries.push_back(NewEntry(i, i));
@@ -602,7 +607,8 @@ TEST_CASE("raft_log: slice") {
     }
 
     auto w = expected_entries(w_from, w_to);
-    REQUIRE_EQ(slice_result, w);
+    REQUIRE(slice_result);
+    CHECK(raftpp::operator==(*slice_result, w));
 }
 
 size_t ents_size(const std::vector<Entry>& ents) {
@@ -617,7 +623,7 @@ TEST_CASE("raft_log: scan") {
     constexpr auto num = 20;
     constexpr auto last = offset + num;
     constexpr auto half = offset + num / 2;
-    auto entries = [](uint64_t from, uint64_t to) {
+    auto entries = [](const uint64_t from, const uint64_t to) {
         std::vector<Entry> ents;
         for (uint64_t i = from; i < to; ++i) {
             ents.emplace_back(NewEntry(i, i));
@@ -654,7 +660,7 @@ TEST_CASE("raft_log: scan") {
             ));
             auto want = raft_log.Slice(lo, hi, {}, GetEntriesContext::Empty(false));
             REQUIRE(want);
-            CHECK_EQ(want, got);
+            CHECK(raftpp::operator==(*want, got));
         }
     }
 
@@ -759,7 +765,8 @@ TEST_CASE("raft_log: maybe append") {
                 const auto to = raft_log.LastIndex() + 1;
                 const auto g_ents =
                     raft_log.Slice(from, to, std::nullopt, GetEntriesContext::Empty(false));
-                REQUIRE_EQ(g_ents, ents);
+                REQUIRE(g_ents);
+                CHECK(raftpp::operator==(*g_ents, ents));
             }
         }
     };
@@ -1088,8 +1095,12 @@ TEST_CASE("raft_log: restore snapshot") {
     raft_log.StableSnapshot(200);
 
     const auto& unstable = raft_log.unstable().entries();
-    raft_log.StableEntries(209, 1);
     REQUIRE(store_ptr->Append(CloneEntries(unstable)));
+    if (!unstable.empty()) {
+        const auto& e = unstable.back();
+        auto reader = EntryReader(e);
+        raft_log.StableEntries(reader.getIndex(), reader.getTerm());
+    }
     REQUIRE(raft_log.MaybePersist(209, 1));
     CHECK_EQ(raft_log.persisted(), 209);
 

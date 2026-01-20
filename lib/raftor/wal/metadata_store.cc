@@ -139,8 +139,14 @@ Result<void> MetadataStore::AtomicWrite(const std::vector<uint8_t>& data) {
 
 std::vector<uint8_t> MetadataStore::Serialize(const WALMetadata& meta) const {
     // Serialize Cap'n Proto messages
-    auto hard_state_bytes = capnp_util::toBytes(meta.hard_state);
-    auto conf_state_bytes = capnp_util::toBytes(meta.conf_state);
+    std::vector<uint8_t> hard_state_bytes;
+    if (meta.hard_state) {
+        hard_state_bytes = capnp_util::toBytes(meta.hard_state);
+    }
+    std::vector<uint8_t> conf_state_bytes;
+    if (meta.conf_state) {
+        conf_state_bytes = capnp_util::toBytes(meta.conf_state);
+    }
 
     // Calculate total size:
     // MetadataHeader (16) + MetadataContent (24) + hard_state_len (4) + hard_state + conf_state_len (4) + conf_state
@@ -260,6 +266,13 @@ Result<WALMetadata> MetadataStore::Deserialize(const std::vector<uint8_t>& data)
         }
     } catch (...) {
         return RaftError(StorageErrorCode::ConfStateParseError);
+    }
+
+    if (!meta.hard_state) {
+        meta.hard_state = capnp_util::make<msg::HardState>();
+    }
+    if (!meta.conf_state) {
+        meta.conf_state = capnp_util::make<msg::ConfState>();
     }
 
     auto hs_reader = capnp_util::reader<msg::HardState>(meta.hard_state);
