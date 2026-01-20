@@ -95,6 +95,9 @@ Result<void> ReadyProcessor::PersistHardState(const Ready& rd) {
 
 Result<void> ReadyProcessor::ApplySnapshot(const Ready& rd) {
     const auto& snapshot = rd.snapshot;
+    if (!snapshot) {
+        return {};  // No snapshot
+    }
     auto snap_reader = capnp_util::reader<msg::Snapshot>(snapshot);
     auto snap_meta = snap_reader.getMetadata();
 
