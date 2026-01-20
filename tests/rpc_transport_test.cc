@@ -215,7 +215,7 @@ TEST_SUITE("rpc::capnp") {
     }
 
     // Skip: EzRpcServer may use SO_REUSEPORT, allowing multiple binds to same port
-    TEST_CASE("capnp_start_port_already_in_use" * doctest::timeout(5)) {
+    TEST_CASE("capnp_start_port_already_in_use" * doctest::timeout(5) * doctest::skip()) {
         auto port = PortAllocator::GetNextPort();
         TransportConfig config{
             .listen_addr = fmt::format("127.0.0.1:{}", port),

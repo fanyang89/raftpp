@@ -5,7 +5,7 @@
 #include <unordered_map>
 #include <utility>
 
-#include <capnp/rpc-twoparty.h>
+#include <capnp/ez-rpc.h>
 #include <kj/async-io.h>
 #include <kj/time.h>
 #include <spdlog/spdlog.h>
@@ -43,8 +43,7 @@ class RaftTransportImpl final : public raftpp::capnp::RaftTransport::Server {
 };
 
 struct RpcClient {
-    kj::Own<kj::AsyncIoStream> stream;
-    std::unique_ptr<::capnp::TwoPartyClient> client;
+    std::unique_ptr<::capnp::EzRpcClient> client;
     raftpp::capnp::RaftTransport::Client cap;
 };
 
@@ -72,15 +71,7 @@ Result<void> CapnpTransport::Start() {
     std::promise<Result<void>> start_promise;
     auto start_future = start_promise.get_future();
     rpc_thread_ = std::thread([this, promise = std::move(start_promise)]() mutable {
-        try {
-            RpcLoop(std::move(promise));
-        } catch (const kj::Exception& e) {
-            SPDLOG_ERROR("Cap'n Proto RPC thread crashed: {}", e.getDescription().cStr());
-        } catch (const std::exception& e) {
-            SPDLOG_ERROR("Cap'n Proto RPC thread crashed: {}", e.what());
-        } catch (...) {
-            SPDLOG_ERROR("Cap'n Proto RPC thread crashed with unknown exception");
-        }
+        RpcLoop(std::move(promise));
     });
 
     auto result = start_future.get();
@@ -188,13 +179,12 @@ void CapnpTransport::RpcLoop(std::promise<Result<void>> start_promise) {
     };
 
     try {
-        auto io = kj::setupAsyncIo();
-        auto addr =
-            io.provider->getNetwork().parseAddress(config_.listen_addr, 0).wait(io.waitScope);
-        auto listener = addr->listen();
+        auto server = std::make_unique<::capnp::EzRpcServer>(
+            kj::heap<RaftTransportImpl>(*this), config_.listen_addr, 0
+        );
 
-        ::capnp::TwoPartyServer server(kj::heap<RaftTransportImpl>(*this));
-        auto listen_promise = server.listen(*listener);
+        auto& wait_scope = server->getWaitScope();
+        auto& timer = server->getIoProvider().getTimer();
 
         std::unordered_map<uint64_t, RpcClient> clients;
 
@@ -211,29 +201,22 @@ void CapnpTransport::RpcLoop(std::promise<Result<void>> start_promise) {
                 auto batch = std::move(outgoing.front());
                 outgoing.pop();
 
-                std::string addr_str;
+                std::string addr;
                 {
                     std::lock_guard lock(peers_mutex_);
                     auto it = peers_.find(batch.peer_id);
                     if (it == peers_.end()) {
                         continue;
                     }
-                    addr_str = it->second;
+                    addr = it->second;
                 }
 
                 auto client_it = clients.find(batch.peer_id);
                 if (client_it == clients.end()) {
-                    auto peer_addr =
-                        io.provider->getNetwork().parseAddress(addr_str, 0).wait(io.waitScope);
-                    auto stream = peer_addr->connect().wait(io.waitScope);
-                    auto client = std::make_unique<::capnp::TwoPartyClient>(*stream);
-                    auto cap = client->bootstrap().castAs<raftpp::capnp::RaftTransport>();
+                    auto client = std::make_unique<::capnp::EzRpcClient>(addr, 0);
+                    auto cap = client->getMain<raftpp::capnp::RaftTransport>();
                     client_it =
-                        clients
-                            .emplace(
-                                batch.peer_id, RpcClient{std::move(stream), std::move(client), cap}
-                            )
-                            .first;
+                        clients.emplace(batch.peer_id, RpcClient{std::move(client), cap}).first;
                 }
 
                 auto& cap = client_it->second.cap;
@@ -243,7 +226,7 @@ void CapnpTransport::RpcLoop(std::promise<Result<void>> start_promise) {
                     for (size_t i = 0; i < batch.messages.size(); ++i) {
                         list.setWithCaveats(i, batch.messages[i].reader());
                     }
-                    req.send().wait(io.waitScope);
+                    req.send().wait(wait_scope);
                 } catch (const kj::Exception& e) {
                     SPDLOG_WARN(
                         "RPC send to {} failed: {}", batch.peer_id, e.getDescription().cStr()
@@ -255,15 +238,8 @@ void CapnpTransport::RpcLoop(std::promise<Result<void>> start_promise) {
                 }
             }
 
-            // Keep the listener promise alive and drive async I/O.
-            listen_promise.poll(io.waitScope);
-            io.waitScope.poll();
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            timer.afterDelay(10 * kj::MILLISECONDS).wait(wait_scope);
         }
-
-        clients.clear();
-        listen_promise.poll(io.waitScope);
-        io.waitScope.poll();
     } catch (const kj::Exception& e) {
         set_start(std::unexpected(RaftError(RpcErrorCode::BindFailed)));
         SPDLOG_ERROR("Cap'n Proto RPC loop failed: {}", e.getDescription().cStr());

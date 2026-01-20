@@ -27,10 +27,6 @@ struct ToStringVisitor {
         return fmt::format("fatal error: {}", ec.message);
     }
 
-    std::string operator()(raftpp::CapnpError ec) const {
-        return fmt::format("capnp error: {}", ec.message);
-    }
-
     std::string operator()(const raftpp::RpcErrorCode ec) const {
         return fmt::format("rpc error: {}", format_as(ec));
     }
@@ -63,12 +59,6 @@ RaftError FatalError::ToError() const {
 }
 
 bool FatalError::operator==(const FatalError&) const = default;
-
-RaftError CapnpError::ToError() const {
-    return RaftError{*this};
-}
-
-bool CapnpError::operator==(const CapnpError&) const = default;
 
 RaftError InvalidConfigError::ToError() const {
     return RaftError{*this};
