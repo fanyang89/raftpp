@@ -1,7 +1,9 @@
 #pragma once
 
+#include <cstring>
 #include <memory>
 #include <span>
+#include <stdexcept>
 #include <vector>
 
 #include <capnp/any.h>
@@ -94,9 +96,13 @@ inline std::vector<uint8_t> toBytes(const std::unique_ptr<capnp::MallocMessageBu
 // Parse message from bytes
 template <typename T>
 std::unique_ptr<capnp::MallocMessageBuilder> fromBytes(std::span<const uint8_t> bytes) {
-    const capnp::word* words = reinterpret_cast<const capnp::word*>(bytes.data());
+    if (bytes.size() % sizeof(capnp::word) != 0) {
+        throw std::runtime_error("Cap'n Proto buffer size is not a multiple of word size");
+    }
     size_t wordCount = bytes.size() / sizeof(capnp::word);
-    capnp::FlatArrayMessageReader reader(kj::ArrayPtr<const capnp::word>(words, wordCount));
+    auto aligned = kj::heapArray<capnp::word>(wordCount);
+    std::memcpy(aligned.begin(), bytes.data(), bytes.size());
+    capnp::FlatArrayMessageReader reader(aligned.asPtr());
 
     auto builder = std::make_unique<capnp::MallocMessageBuilder>();
     builder->setRoot(reader.getRoot<T>());
