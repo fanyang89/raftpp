@@ -1,5 +1,7 @@
 #include "harness/interface.h"
 
+#include "raftpp/core/capnp_util.h"
+
 namespace raftpp {
 
 Interface::Interface(std::unique_ptr<Raft> raft) : raft_(std::move(raft)), storage_(nullptr) {}
@@ -40,8 +42,8 @@ void Interface::Persist() {
     const auto& snapshot_opt = static_cast<const Unstable&>(unstable).snapshot();
     if (snapshot_opt.has_value()) {
         // Clone snapshot BEFORE calling StableSnapshot, which clears it
-        Snapshot snap = snapshot_opt->clone();
-        auto snap_reader = snap.reader();
+        Snapshot snap = CloneSnapshot(*snapshot_opt);
+        auto snap_reader = capnp_util::reader<msg::Snapshot>(snap);
         const uint64_t index = snap_reader.getMetadata().getIndex();
 
         // First apply to storage, then mark as stable
@@ -54,7 +56,7 @@ void Interface::Persist() {
         // Also update the external storage for test verification
         if (storage_) {
             // Clone again for external storage
-            std::ignore = storage_->ApplySnapshot(snap.clone());
+            std::ignore = storage_->ApplySnapshot(CloneSnapshot(snap));
         }
         // Now mark snapshot as stable (this clears unstable snapshot)
         raft_log.StableSnapshot(index);
@@ -69,10 +71,10 @@ void Interface::Persist() {
         std::vector<Entry> entries_to_persist;
         entries_to_persist.reserve(unstable_entries.size());
         for (const auto& entry : unstable_entries) {
-            entries_to_persist.push_back(entry.clone());
+            entries_to_persist.push_back(CloneEntry(entry));
         }
         const auto& last_entry = entries_to_persist.back();
-        auto last_reader = last_entry.reader();
+        auto last_reader = capnp_util::reader<msg::Entry>(last_entry);
         const uint64_t last_idx = last_reader.getIndex();
         const uint64_t last_term = last_reader.getTerm();
 
@@ -89,7 +91,7 @@ void Interface::Persist() {
             std::vector<Entry> external_copy;
             external_copy.reserve(entries_to_persist.size());
             for (const auto& entry : entries_to_persist) {
-                external_copy.push_back(entry.clone());
+                external_copy.push_back(CloneEntry(entry));
             }
             std::ignore = storage_->Append(external_copy);
         }

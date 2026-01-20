@@ -25,7 +25,7 @@ bool UncommittedState::MaybeIncreaseUncommittedSize(std::span<const Entry> entri
 
     const std::size_t size = std::transform_reduce(
         entries.begin(), entries.end(), std::size_t{0}, std::plus{},
-        [](const Entry& e) { return e.reader().getData().size(); }
+        [](const Entry& e) { return capnp_util::reader<msg::Entry>(e).getData().size(); }
     );
 
     if (size == 0 || uncommitted_size == 0 || size + uncommitted_size <= max_uncommitted_size) {
@@ -43,8 +43,10 @@ bool UncommittedState::MaybeReduceUncommittedSize(std::span<const Entry> entries
 
     const std::size_t size = std::ranges::fold_left(
         entries | std::views::drop_while([this](const Entry& e) {
-            return e.reader().getIndex() <= last_log_tail_index;
-        }) | std::views::transform([](const Entry& e) { return e.reader().getData().size(); }),
+            return capnp_util::reader<msg::Entry>(e).getIndex() <= last_log_tail_index;
+        }) | std::views::transform([](const Entry& e) {
+            return capnp_util::reader<msg::Entry>(e).getData().size();
+        }),
         std::size_t{0}, std::plus{}
     );
 
@@ -83,10 +85,11 @@ Raft::Raft(const Config& config, const std::shared_ptr<Storage>& store)
 
     // Only load hard state if it's explicitly configured (for production use)
     // In tests, we start with default state to match raft-rs behavior
-    HardState default_hs;
+    auto default_hs = capnp_util::make<msg::HardState>();
     if (config.load_state_on_startup &&
-        !messagesEqual<raftpp::capnp::HardState>(
-            raft_state.hard_state.reader(), default_hs.reader()
+        !capnp_util::equal<msg::HardState>(
+            capnp_util::reader<msg::HardState>(raft_state.hard_state),
+            capnp_util::reader<msg::HardState>(default_hs)
         )) {
         LoadState(raft_state.hard_state);
     }
@@ -116,7 +119,7 @@ ConfState Raft::PostConfChange() {
         return cs;
     }
 
-    auto cs_reader = cs.reader();
+    auto cs_reader = capnp_util::reader<msg::ConfState>(cs);
     if (state_ != StateRole::Leader || cs_reader.getVoters().size() == 0) {
         return cs;
     }
@@ -151,7 +154,7 @@ ConfState Raft::PostConfChange() {
 }
 
 void Raft::LoadState(const HardState& hs) {
-    auto hs_reader = hs.reader();
+    auto hs_reader = capnp_util::reader<msg::HardState>(hs);
     if (hs_reader.getCommit() < raft_log_.committed() ||
         hs_reader.getCommit() > raft_log_.LastIndex()) {
         PANIC(
@@ -170,7 +173,7 @@ bool Raft::MaybeIncreaseUncommittedSize(const std::span<const Entry> entries) {
 
 bool Raft::AppendEntry(const Entry& entry) {
     std::vector<Entry> vec;
-    vec.push_back(entry.clone());
+    vec.push_back(CloneEntry(entry));
     return AppendEntry(std::move(vec));
 }
 
@@ -182,7 +185,7 @@ bool Raft::AppendEntry(std::vector<Entry> entries) {
     const uint64_t last_index = raft_log_.LastIndex();
     for (size_t i = 0; i < entries.size(); ++i) {
         auto& entry = entries[i];
-        auto builder = entry.builder();
+        auto builder = capnp_util::builder<msg::Entry>(entry);
         builder.setTerm(term_);
         builder.setIndex(last_index + i + 1);
     }
@@ -278,7 +281,7 @@ void Raft::BecomeLeader() {
     progress_tracker_.at(id_).BecomeReplicate();
     pending_conf_index_ = last_index;
 
-    if (!AppendEntry(Entry())) {
+    if (!AppendEntry(capnp_util::make<msg::Entry>())) {
         PANIC("appending an empty entry should never be dropped");
     }
 
@@ -339,8 +342,8 @@ void Raft::Campaign(std::string_view campaign_type) {
             continue;
         }
 
-        Message m;
-        auto m_builder = m.builder();
+        auto m = capnp_util::make<msg::Message>();
+        auto m_builder = capnp_util::builder<msg::Message>(m);
         m_builder.setTo(id);
         m_builder.setMsgType(vote_msg);
         m_builder.setTerm(term);
@@ -406,7 +409,8 @@ bool Raft::HasUnappliedConfChanges(uint64_t low, uint64_t high, const GetEntries
 
     const auto scanFn = [&found](const std::vector<Entry>& ents) -> bool {
         for (const auto& e : ents) {
-            if (e.reader().getEntryType() == EntryType::ENTRY_CONF_CHANGE_V2) {
+            if (capnp_util::reader<msg::Entry>(e).getEntryType() ==
+                EntryType::ENTRY_CONF_CHANGE_V2) {
                 found = true;
                 return false;
             }
@@ -433,12 +437,12 @@ void Raft::CommitApplyInternal(uint64_t applied, bool skip_check) {
     if (progress_tracker_.conf().auto_leave && old_applied <= pending_conf_index_ &&
         applied >= pending_conf_index_ && state_ == StateRole::Leader) {
         // Create an empty ConfChangeV2 for leaving joint configuration
-        ConfChangeV2 leave_cc;
+        auto leave_cc = capnp_util::make<msg::ConfChangeV2>();
         // The empty ConfChangeV2 signals leaving joint configuration
-        std::string serialized = leave_cc.serializeAsString();
+        std::string serialized = capnp_util::toString(leave_cc);
 
-        Entry ent;
-        auto ent_builder = ent.builder();
+        auto ent = capnp_util::make<msg::Entry>();
+        auto ent_builder = capnp_util::builder<msg::Entry>(ent);
         ent_builder.setEntryType(EntryType::ENTRY_CONF_CHANGE_V2);
         ent_builder.setData(
             kj::arrayPtr(reinterpret_cast<const kj::byte*>(serialized.data()), serialized.size())
@@ -452,7 +456,7 @@ void Raft::CommitApplyInternal(uint64_t applied, bool skip_check) {
 }
 
 void Raft::MaybeCommitByVote(const Message& m) {
-    auto m_reader = m.reader();
+    auto m_reader = capnp_util::reader<msg::Message>(m);
     if (m_reader.getCommit() == 0 || m_reader.getCommitTerm() == 0) {
         return;
     }
@@ -491,15 +495,15 @@ void Raft::MaybeCommitByVote(const Message& m) {
 }
 
 void Raft::SendTimeoutNow(const uint64_t to) {
-    Message m;
-    auto m_builder = m.builder();
+    auto m = capnp_util::make<msg::Message>();
+    auto m_builder = capnp_util::builder<msg::Message>(m);
     m_builder.setTo(to);
     m_builder.setMsgType(MessageType::MSG_TIMEOUT_NOW);
     Send(m, messages_);
 }
 
 void Raft::HandleAppendResponse(const Message& m) {
-    auto m_reader = m.reader();
+    auto m_reader = capnp_util::reader<msg::Message>(m);
     auto next_probe_index = m_reader.getRejectHint();
     // pull out find_conflict_by_term for immutable borrow
     if (m_reader.getReject() && m_reader.getLogTerm() > 0) {
@@ -576,8 +580,8 @@ void Raft::HandleAppendResponse(const Message& m) {
 }
 
 void Raft::SendRequestSnapshot() {
-    Message m;
-    auto m_builder = m.builder();
+    auto m = capnp_util::make<msg::Message>();
+    auto m_builder = capnp_util::builder<msg::Message>(m);
     m_builder.setMsgType(MessageType::MSG_APPEND_RESPONSE);
     m_builder.setIndex(raft_log_.committed());
     m_builder.setReject(true);
@@ -594,15 +598,15 @@ void Raft::SendRequestSnapshot() {
 }
 
 void Raft::HandleHeartbeat(const Message& m) {
-    auto m_reader = m.reader();
+    auto m_reader = capnp_util::reader<msg::Message>(m);
     std::ignore = raft_log_.CommitTo(m_reader.getCommit());
     if (pending_request_snapshot_ != INVALID_INDEX) {
         SendRequestSnapshot();
         return;
     }
 
-    Message to_send;
-    auto to_send_builder = to_send.builder();
+    auto to_send = capnp_util::make<msg::Message>();
+    auto to_send_builder = capnp_util::builder<msg::Message>(to_send);
     to_send_builder.setTo(m_reader.getFrom());
     to_send_builder.setMsgType(MessageType::MSG_HEARTBEAT_RESPONSE);
     to_send_builder.setContext(m_reader.getContext());
@@ -611,7 +615,7 @@ void Raft::HandleHeartbeat(const Message& m) {
 }
 
 bool Raft::Restore(const Snapshot& snapshot) {
-    auto snap_meta = snapshot.reader().getMetadata();
+    auto snap_meta = capnp_util::reader<msg::Snapshot>(snapshot).getMetadata();
     if (snap_meta.getIndex() < raft_log_.committed()) {
         return false;
     }
@@ -656,16 +660,16 @@ bool Raft::Restore(const Snapshot& snapshot) {
 }
 
 void Raft::HandleSnapshot(const Message& m) {
-    auto m_reader = m.reader();
-    Message to_send;
-    auto to_send_builder = to_send.builder();
+    auto m_reader = capnp_util::reader<msg::Message>(m);
+    auto to_send = capnp_util::make<msg::Message>();
+    auto to_send_builder = capnp_util::builder<msg::Message>(to_send);
     to_send_builder.setMsgType(MessageType::MSG_APPEND_RESPONSE);
     to_send_builder.setTo(m_reader.getFrom());
 
     // Copy snapshot from message reader
     auto snap_reader = m_reader.getSnapshot();
-    Snapshot snapshot;
-    auto snap_builder = snapshot.builder();
+    auto snapshot = capnp_util::make<msg::Snapshot>();
+    auto snap_builder = capnp_util::builder<msg::Snapshot>(snapshot);
     snap_builder.setData(snap_reader.getData());
 
     auto snap_meta_src = snap_reader.getMetadata();
@@ -707,7 +711,7 @@ void Raft::HandleSnapshot(const Message& m) {
 }
 
 std::optional<Message> Raft::HandleReadyReadIndex(const Message& req, uint64_t index) {
-    auto req_reader = req.reader();
+    auto req_reader = capnp_util::reader<msg::Message>(req);
     if (req_reader.getFrom() == INVALID_ID || req_reader.getFrom() == id_) {
         ReadState rs;
         rs.index = index;
@@ -720,8 +724,8 @@ std::optional<Message> Raft::HandleReadyReadIndex(const Message& req, uint64_t i
         return {};
     }
 
-    Message m;
-    auto m_builder = m.builder();
+    auto m = capnp_util::make<msg::Message>();
+    auto m_builder = capnp_util::builder<msg::Message>(m);
     m_builder.setTo(req_reader.getFrom());
     m_builder.setMsgType(MessageType::MSG_READ_INDEX_RESP);
     m_builder.setIndex(index);
@@ -740,7 +744,7 @@ std::optional<Message> Raft::HandleReadyReadIndex(const Message& req, uint64_t i
 }
 
 Result<void> Raft::StepCandidate(const Message& m) {
-    auto m_reader = m.reader();
+    auto m_reader = capnp_util::reader<msg::Message>(m);
     switch (m_reader.getMsgType()) {
         case MessageType::MSG_PROPOSE:
             return RaftError(RaftErrorCode::ProposalDropped);
@@ -793,7 +797,7 @@ Result<void> Raft::StepCandidate(const Message& m) {
 }
 
 Result<void> Raft::StepFollower(Message& m) {
-    auto m_reader = m.reader();
+    auto m_reader = capnp_util::reader<msg::Message>(m);
     switch (m_reader.getMsgType()) {
         case MessageType::MSG_PROPOSE:
             if (leader_id_ == INVALID_ID) {
@@ -802,7 +806,7 @@ Result<void> Raft::StepFollower(Message& m) {
             if (disable_proposal_forwarding_) {
                 return RaftError(RaftErrorCode::ProposalDropped);
             }
-            m.builder().setTo(leader_id_);
+            capnp_util::builder<msg::Message>(m).setTo(leader_id_);
             Send(m, messages_);
             break;
 
@@ -829,7 +833,7 @@ Result<void> Raft::StepFollower(Message& m) {
                 SPDLOG_INFO("no leader at term {}; dropping leader transfer msg", term_);
                 return {};
             }
-            m.builder().setTo(leader_id_);
+            capnp_util::builder<msg::Message>(m).setTo(leader_id_);
             Send(m, messages_);
             break;
 
@@ -848,7 +852,7 @@ Result<void> Raft::StepFollower(Message& m) {
                 SPDLOG_INFO("no leader at term {}; dropping read index msg", term_);
                 return {};
             }
-            m.builder().setTo(leader_id_);
+            capnp_util::builder<msg::Message>(m).setTo(leader_id_);
             Send(m, messages_);
             break;
 
@@ -889,7 +893,7 @@ bool Raft::CommitToCurrentTerm() const {
 }
 
 void Raft::HandleHeartbeatResponse(const Message& m) {
-    auto m_reader = m.reader();
+    auto m_reader = capnp_util::reader<msg::Message>(m);
     Progress* p;
     if (p = progress_tracker_.get(m_reader.getFrom()); p == nullptr) {
         SPDLOG_INFO("no progress available for {}", m_reader.getFrom());
@@ -941,7 +945,7 @@ void Raft::HandleHeartbeatResponse(const Message& m) {
 }
 
 void Raft::HandleSnapshotStatus(const Message& m) {
-    auto m_reader = m.reader();
+    auto m_reader = capnp_util::reader<msg::Message>(m);
     Progress* p = progress_tracker_.get(m_reader.getFrom());
     if (p == nullptr) {
         return;
@@ -968,7 +972,7 @@ void Raft::HandleSnapshotStatus(const Message& m) {
 }
 
 void Raft::HandleUnreachable(const Message& m) {
-    auto m_reader = m.reader();
+    auto m_reader = capnp_util::reader<msg::Message>(m);
     Progress* p = progress_tracker_.get(m_reader.getFrom());
     if (p == nullptr) {
         return;
@@ -983,7 +987,7 @@ void Raft::HandleUnreachable(const Message& m) {
 }
 
 void Raft::HandleTransferLeader(const Message& m) {
-    auto m_reader = m.reader();
+    auto m_reader = capnp_util::reader<msg::Message>(m);
     const uint64_t from = m_reader.getFrom();
     Progress* p = progress_tracker_.get(from);
     if (p == nullptr) {
@@ -1026,8 +1030,8 @@ void Raft::SendHeartbeat(
     const uint64_t to, const Progress& pr, const std::optional<std::string>& ctx,
     std::vector<Message>& messages
 ) {
-    Message m;
-    auto m_builder = m.builder();
+    auto m = capnp_util::make<msg::Message>();
+    auto m_builder = capnp_util::builder<msg::Message>(m);
     m_builder.setTo(to);
     m_builder.setMsgType(MessageType::MSG_HEARTBEAT);
     m_builder.setCommit(std::min(pr.matched(), raft_log_.committed()));
@@ -1049,7 +1053,7 @@ void Raft::BroadcastHeartbeat(const std::optional<std::string>& ctx) {
 }
 
 Result<void> Raft::StepLeader(const Message& m) {
-    auto m_reader = m.reader();
+    auto m_reader = capnp_util::reader<msg::Message>(m);
     switch (m_reader.getMsgType()) {
         case MessageType::MSG_BEAT:
             BroadcastHeartbeat();
@@ -1094,8 +1098,8 @@ Result<void> Raft::StepLeader(const Message& m) {
                 std::vector<Entry> entries_vec;
                 entries_vec.reserve(entries.size());
                 for (const auto& e : entries) {
-                    Entry entry;
-                    auto entry_builder = entry.builder();
+                    auto entry = capnp_util::make<msg::Entry>();
+                    auto entry_builder = capnp_util::builder<msg::Entry>(entry);
                     entry_builder.setEntryType(e.getEntryType());
                     entry_builder.setTerm(e.getTerm());
                     entry_builder.setIndex(e.getIndex());
@@ -1191,7 +1195,7 @@ void Raft::SendAppendAggressively(const uint64_t to) {
 }
 
 Result<void> Raft::Step(Message& m) {
-    auto m_reader = m.reader();
+    auto m_reader = capnp_util::reader<msg::Message>(m);
     if (m_reader.getTerm() == 0) {
         // local message - fall through to process based on current state
     } else if (m_reader.getTerm() > term_) {
@@ -1229,14 +1233,14 @@ Result<void> Raft::Step(Message& m) {
         if ((check_quorum_ || pre_vote_) &&
             (m_reader.getMsgType() == MessageType::MSG_HEARTBEAT ||
              m_reader.getMsgType() == MessageType::MSG_APPEND)) {
-            Message to_send;
-            auto to_send_builder = to_send.builder();
+            auto to_send = capnp_util::make<msg::Message>();
+            auto to_send_builder = capnp_util::builder<msg::Message>(to_send);
             to_send_builder.setTo(m_reader.getFrom());
             to_send_builder.setMsgType(MessageType::MSG_APPEND_RESPONSE);
             Send(to_send, messages_);
         } else if (m_reader.getMsgType() == MessageType::MSG_REQUEST_PRE_VOTE) {
-            Message to_send;
-            auto to_send_builder = to_send.builder();
+            auto to_send = capnp_util::make<msg::Message>();
+            auto to_send_builder = capnp_util::builder<msg::Message>(to_send);
             to_send_builder.setTo(m_reader.getFrom());
             to_send_builder.setMsgType(MessageType::MSG_REQUEST_PRE_VOTE_RESPONSE);
             to_send_builder.setReject(true);
@@ -1265,8 +1269,8 @@ Result<void> Raft::Step(Message& m) {
             if (can_vote && raft_log_.IsUpToDate(m_reader.getIndex(), m_reader.getLogTerm()) &&
                 (m_reader.getIndex() > raft_log_.LastIndex() ||
                  priority_ <= m_reader.getPriority())) {
-                Message to_send;
-                auto to_send_builder = to_send.builder();
+                auto to_send = capnp_util::make<msg::Message>();
+                auto to_send_builder = capnp_util::builder<msg::Message>(to_send);
                 to_send_builder.setTo(m_reader.getFrom());
                 to_send_builder.setMsgType(VoteRespMsgType(m_reader.getMsgType()));
                 to_send_builder.setReject(false);
@@ -1279,8 +1283,8 @@ Result<void> Raft::Step(Message& m) {
                     vote_ = m_reader.getFrom();
                 }
             } else {
-                Message to_send;
-                auto to_send_builder = to_send.builder();
+                auto to_send = capnp_util::make<msg::Message>();
+                auto to_send_builder = capnp_util::builder<msg::Message>(to_send);
                 to_send_builder.setTo(m_reader.getFrom());
                 to_send_builder.setMsgType(VoteRespMsgType(m_reader.getMsgType()));
                 to_send_builder.setReject(true);
@@ -1314,15 +1318,15 @@ Result<void> Raft::Step(Message& m) {
 }
 
 void Raft::HandleAppendEntries(const Message& m) {
-    auto m_reader = m.reader();
+    auto m_reader = capnp_util::reader<msg::Message>(m);
     if (pending_request_snapshot_ != INVALID_INDEX) {
         SendRequestSnapshot();
         return;
     }
 
     if (m_reader.getIndex() < raft_log_.committed()) {
-        Message to_send;
-        auto to_send_builder = to_send.builder();
+        auto to_send = capnp_util::make<msg::Message>();
+        auto to_send_builder = capnp_util::builder<msg::Message>(to_send);
         to_send_builder.setTo(m_reader.getFrom());
         to_send_builder.setMsgType(MessageType::MSG_APPEND_RESPONSE);
         to_send_builder.setIndex(raft_log_.committed());
@@ -1331,8 +1335,8 @@ void Raft::HandleAppendEntries(const Message& m) {
         return;
     }
 
-    Message to_send;
-    auto to_send_builder = to_send.builder();
+    auto to_send = capnp_util::make<msg::Message>();
+    auto to_send_builder = capnp_util::builder<msg::Message>(to_send);
     to_send_builder.setTo(m_reader.getFrom());
     to_send_builder.setMsgType(MessageType::MSG_APPEND_RESPONSE);
 
@@ -1347,8 +1351,8 @@ void Raft::HandleAppendEntries(const Message& m) {
     std::vector<Entry> entries_vec;
     entries_vec.reserve(entries_list.size());
     for (const auto& e : entries_list) {
-        Entry entry;
-        auto entry_builder = entry.builder();
+        auto entry = capnp_util::make<msg::Entry>();
+        auto entry_builder = capnp_util::builder<msg::Entry>(entry);
         entry_builder.setEntryType(e.getEntryType());
         entry_builder.setTerm(e.getTerm());
         entry_builder.setIndex(e.getIndex());
@@ -1391,8 +1395,8 @@ bool Raft::TickElection() {
     bool has_ready = false;
     if (election_elapsed_ >= randomized_election_timeout_) {
         election_elapsed_ = 0;
-        Message m;
-        auto m_builder = m.builder();
+        auto m = capnp_util::make<msg::Message>();
+        auto m_builder = capnp_util::builder<msg::Message>(m);
         m_builder.setTo(INVALID_ID);
         m_builder.setMsgType(MessageType::MSG_HUP);
         m_builder.setFrom(id_);
@@ -1407,8 +1411,8 @@ bool Raft::TickElection() {
     if (heartbeat_elapsed_ >= heartbeat_timeout_) {
         heartbeat_elapsed_ = 0;
         has_ready = true;
-        Message m;
-        auto m_builder = m.builder();
+        auto m = capnp_util::make<msg::Message>();
+        auto m_builder = capnp_util::builder<msg::Message>(m);
         m_builder.setTo(INVALID_ID);
         m_builder.setMsgType(MessageType::MSG_BEAT);
         m_builder.setFrom(id_);
@@ -1426,8 +1430,8 @@ bool Raft::TickHeartbeat() {
     if (election_elapsed_ >= randomized_election_timeout_) {
         election_elapsed_ = 0;
         if (check_quorum_) {
-            Message m;
-            auto m_builder = m.builder();
+            auto m = capnp_util::make<msg::Message>();
+            auto m_builder = capnp_util::builder<msg::Message>(m);
             m_builder.setTo(INVALID_ID);
             m_builder.setMsgType(MessageType::MSG_CHECK_QUORUM);
             m_builder.setFrom(id_);
@@ -1446,8 +1450,8 @@ bool Raft::TickHeartbeat() {
     if (heartbeat_elapsed_ >= heartbeat_timeout_) {
         heartbeat_elapsed_ = 0;
         has_ready = true;
-        Message m;
-        auto m_builder = m.builder();
+        auto m = capnp_util::make<msg::Message>();
+        auto m_builder = capnp_util::builder<msg::Message>(m);
         m_builder.setTo(INVALID_ID);
         m_builder.setMsgType(MessageType::MSG_BEAT);
         m_builder.setFrom(id_);
@@ -1482,7 +1486,7 @@ void Raft::ReduceUncommittedSize(const std::vector<Entry>& ents) {
     if (!uncommitted_state_.MaybeReduceUncommittedSize(ents)) {
         SPDLOG_WARN(
             "try to reduce uncommitted size less than 0, first index of pending ents is {}",
-            ents.front().reader().getIndex()
+            capnp_util::reader<msg::Entry>(ents.front()).getIndex()
         );
     }
 }
@@ -1523,12 +1527,11 @@ const ProgressTracker& Raft::progress_tracker() const {
 }
 
 HardState Raft::hard_state() const {
-    HardState hs;
-    auto hs_builder = hs.builder();
-    hs_builder.setTerm(term_);
-    hs_builder.setVote(vote_);
-    hs_builder.setCommit(raft_log_.committed());
-    return hs;
+    return capnp_util::make<msg::HardState>([this](auto hs_builder) {
+        hs_builder.setTerm(term_);
+        hs_builder.setVote(vote_);
+        hs_builder.setCommit(raft_log_.committed());
+    });
 }
 
 SoftState Raft::soft_state() const {
@@ -1597,13 +1600,13 @@ void Raft::Ping() {
 }
 
 bool LeaveJoint(const ConfChangeV2& cc) {
-    auto cc_reader = cc.reader();
+    auto cc_reader = capnp_util::reader<msg::ConfChangeV2>(cc);
     return cc_reader.getTransition() == ConfChangeTransition::AUTO &&
         cc_reader.getChanges().size() == 0;
 }
 
 std::optional<bool> EnterJoint(const ConfChangeV2& cc) {
-    auto cc_reader = cc.reader();
+    auto cc_reader = capnp_util::reader<msg::ConfChangeV2>(cc);
     if (cc_reader.getTransition() != ConfChangeTransition::AUTO ||
         cc_reader.getChanges().size() > 1) {
         switch (cc_reader.getTransition()) {
@@ -1627,13 +1630,13 @@ Result<ConfState> Raft::ApplyConfChange(const ConfChangeV2& cc) {
         SPDLOG_INFO("ApplyConfChange: LeaveJoint");
         r = changer.LeaveJoint();
     } else {
-        auto cc_reader = cc.reader();
+        auto cc_reader = capnp_util::reader<msg::ConfChangeV2>(cc);
         auto changes_list = cc_reader.getChanges();
         std::vector<ConfChangeSingle> ccs;
         ccs.reserve(changes_list.size());
         for (const auto& c : changes_list) {
-            ConfChangeSingle single;
-            auto single_builder = single.builder();
+            auto single = capnp_util::make<msg::ConfChangeSingle>();
+            auto single_builder = capnp_util::builder<msg::ConfChangeSingle>(single);
             single_builder.setChangeType(c.getChangeType());
             single_builder.setNodeId(c.getNodeId());
             ccs.push_back(std::move(single));
@@ -1763,8 +1766,8 @@ void Raft::adjust_max_inflight_msgs(uint64_t id, size_t max_inflight) {
 }
 
 bool Raft::ConfStatesEqualIgnoringOrder(const ConfState& a, const ConfState& b) {
-    auto a_reader = a.reader();
-    auto b_reader = b.reader();
+    auto a_reader = capnp_util::reader<msg::ConfState>(a);
+    auto b_reader = capnp_util::reader<msg::ConfState>(b);
 
     // Compare voters
     auto a_voters_list = a_reader.getVoters();

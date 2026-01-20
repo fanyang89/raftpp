@@ -156,7 +156,7 @@ Result<void> ConfChanger::Apply(
     TrackerConfiguration& cfg, IncrChangeMap& prs, const std::span<const ConfChangeSingle> ccs
 ) {
     for (const auto& cc : ccs) {
-        auto cc_reader = cc.reader();
+        auto cc_reader = capnp_util::reader<msg::ConfChangeSingle>(cc);
         if (cc_reader.getNodeId() == 0) {
             continue;
         }
@@ -185,7 +185,7 @@ Result<std::pair<TrackerConfiguration, MapChange>> ConfChanger::Simple(
     const ConfChangeSingle& ccs
 ) const {
     std::vector<ConfChangeSingle> v;
-    v.emplace_back(ccs.clone());
+    v.emplace_back(capnp_util::clone<msg::ConfChangeSingle>(ccs));
     return Simple(std::span{v.begin(), v.end()});
 }
 

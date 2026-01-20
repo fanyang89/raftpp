@@ -7,6 +7,7 @@
 
 #include <spdlog/spdlog.h>
 
+#include "raftpp/core/capnp_util.h"
 #include "raftpp/raftor/wal/crc32c.h"
 #include "raftpp/raftor/wal/record.h"
 
@@ -138,8 +139,8 @@ Result<void> MetadataStore::AtomicWrite(const std::vector<uint8_t>& data) {
 
 std::vector<uint8_t> MetadataStore::Serialize(const WALMetadata& meta) const {
     // Serialize Cap'n Proto messages
-    auto hard_state_bytes = meta.hard_state.serializeAsBytes();
-    auto conf_state_bytes = meta.conf_state.serializeAsBytes();
+    auto hard_state_bytes = capnp_util::toBytes(meta.hard_state);
+    auto conf_state_bytes = capnp_util::toBytes(meta.conf_state);
 
     // Calculate total size:
     // MetadataHeader (16) + MetadataContent (24) + hard_state_len (4) + hard_state + conf_state_len (4) + conf_state
@@ -232,7 +233,7 @@ Result<WALMetadata> MetadataStore::Deserialize(const std::vector<uint8_t>& data)
             std::memcpy(aligned_words.begin(), ptr, hs_len);
 
             size_t word_count = hs_len / sizeof(::capnp::word);
-            meta.hard_state = HardState::parseFromWords(
+            meta.hard_state = capnp_util::fromWords<msg::HardState>(
                 kj::ArrayPtr<const ::capnp::word>(aligned_words.begin(), word_count)
             );
         }
@@ -253,7 +254,7 @@ Result<WALMetadata> MetadataStore::Deserialize(const std::vector<uint8_t>& data)
             std::memcpy(aligned_words.begin(), ptr, cs_len);
 
             size_t word_count = cs_len / sizeof(::capnp::word);
-            meta.conf_state = ConfState::parseFromWords(
+            meta.conf_state = capnp_util::fromWords<msg::ConfState>(
                 kj::ArrayPtr<const ::capnp::word>(aligned_words.begin(), word_count)
             );
         }
@@ -261,7 +262,7 @@ Result<WALMetadata> MetadataStore::Deserialize(const std::vector<uint8_t>& data)
         return RaftError(StorageErrorCode::ConfStateParseError);
     }
 
-    auto hs_reader = meta.hard_state.reader();
+    auto hs_reader = capnp_util::reader<msg::HardState>(meta.hard_state);
     SPDLOG_DEBUG(
         "loaded metadata: first_index={}, snapshot_index={}, term={}, vote={}", meta.first_index,
         meta.snapshot_index, hs_reader.getTerm(), hs_reader.getVote()

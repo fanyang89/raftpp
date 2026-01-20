@@ -13,12 +13,14 @@ namespace {
 
 Message MakeProposeMessage() {
     Entry entry = NewEntry(0, 0, "test");
-    return NewMessageWithEntries(1, 1, MessageType::MSG_PROPOSE, std::vector<Entry>{entry});
+    std::vector<Entry> entries;
+    entries.push_back(std::move(entry));
+    return NewMessageWithEntries(1, 1, MessageType::MSG_PROPOSE, std::move(entries));
 }
 
 Message MakeAppendResponse(uint64_t index) {
-    Message m;
-    auto builder = m.builder();
+    Message m = capnp_util::make<msg::Message>();
+    auto builder = capnp_util::builder<msg::Message>(m);
     builder.setMsgType(MessageType::MSG_APPEND_RESPONSE);
     builder.setFrom(2);
     builder.setTo(1);
@@ -27,8 +29,8 @@ Message MakeAppendResponse(uint64_t index) {
 }
 
 Message MakeHeartbeatResponse() {
-    Message m;
-    auto builder = m.builder();
+    Message m = capnp_util::make<msg::Message>();
+    auto builder = capnp_util::builder<msg::Message>(m);
     builder.setMsgType(MessageType::MSG_HEARTBEAT_RESPONSE);
     builder.setFrom(2);
     builder.setTo(1);
@@ -301,7 +303,7 @@ TEST_CASE("disable progress") {
     (void)result;
     msgs = r.ReadMessages();
     CHECK_EQ(msgs.size(), 1);
-    CHECK_EQ(msgs[0].reader().getMsgType(), MessageType::MSG_APPEND);
+    CHECK_EQ(capnp_util::reader<msg::Message>(msgs[0]).getMsgType(), MessageType::MSG_APPEND);
 }
 
 TEST_SUITE_END();

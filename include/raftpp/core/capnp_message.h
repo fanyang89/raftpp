@@ -5,9 +5,12 @@
 #include <string>
 #include <vector>
 
+#include <capnp/any.h>
 #include <capnp/message.h>
 #include <capnp/serialize.h>
 #include <kj/array.h>
+
+#include "capnp_util.h"
 
 namespace raftpp {
 
@@ -102,6 +105,13 @@ class OwnedMessage {
         return OwnedMessage<T>(std::move(builder));
     }
 
+    // Create from a reader (efficient - uses setRoot directly)
+    static OwnedMessage<T> fromReader(typename T::Reader reader) {
+        auto builder = std::make_unique<capnp::MallocMessageBuilder>();
+        builder->setRoot(reader);
+        return OwnedMessage<T>(std::move(builder));
+    }
+
   private:
     std::unique_ptr<capnp::MallocMessageBuilder> message_;
 };
@@ -115,33 +125,16 @@ OwnedMessage<T> makeMessage(Func&& func) {
 }
 
 // Helper function to compare two Cap'n Proto messages for equality
-// Note: This uses canonical comparison which may be slower but handles
-// all cases correctly (including unset fields, different ordering, etc.)
+// Uses AnyStruct::Reader comparison for efficiency
 template <typename T>
 bool messagesEqual(typename T::Reader a, typename T::Reader b) {
-    // Serialize both and compare bytes
-    // This is not the most efficient but is correct and simple
-    capnp::MallocMessageBuilder builderA, builderB;
-    builderA.setRoot(a);
-    builderB.setRoot(b);
-
-    auto wordsA = capnp::messageToFlatArray(builderA);
-    auto wordsB = capnp::messageToFlatArray(builderB);
-
-    if (wordsA.size() != wordsB.size()) {
-        return false;
-    }
-
-    return std::memcmp(wordsA.begin(), wordsB.begin(), wordsA.size() * sizeof(capnp::word)) == 0;
+    return capnp_util::equal<T>(a, b);
 }
 
-// Helper to convert a reader to an owned message
+// Helper to convert a reader to an owned message (efficient - uses setRoot directly)
 template <typename T>
 OwnedMessage<T> copyToOwned(typename T::Reader reader) {
-    capnp::MallocMessageBuilder builder;
-    builder.setRoot(reader);
-    auto words = capnp::messageToFlatArray(builder);
-    return OwnedMessage<T>::parseFromWords(words.asPtr());
+    return OwnedMessage<T>::fromReader(reader);
 }
 
 }  // namespace raftpp

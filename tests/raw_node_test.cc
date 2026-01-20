@@ -19,10 +19,17 @@ std::string DataToString(::capnp::Data::Reader data) {
 }
 
 ConfChangeV2 ParseConfChangeV2FromEntry(const Entry& e) {
-    auto data = e.reader().getData();
-    return ConfChangeV2::parseFromBytes(
+    auto data = capnp_util::reader<msg::Entry>(e).getData();
+    return capnp_util::fromBytes<msg::ConfChangeV2>(
         std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(data.begin()), data.size())
     );
+}
+
+// Helper to create a vector with a single entry (using move semantics)
+std::vector<Entry> MakeEntryVec(Entry&& entry) {
+    std::vector<Entry> v;
+    v.push_back(std::move(entry));
+    return v;
 }
 
 }  // namespace
@@ -60,18 +67,18 @@ TEST_CASE("raw_node: step local message ignored") {
 
     for (const auto msg_t : local_msg_types) {
         auto storage = std::make_unique<MemoryStorage>();
-        HardState hs;
-        auto hs_builder = hs.builder();
+        HardState hs = capnp_util::make<msg::HardState>();
+        auto hs_builder = capnp_util::builder<msg::HardState>(hs);
         hs_builder.setTerm(1);
         hs_builder.setVote(0);
         hs_builder.setCommit(1);
-        storage->SetRaftState(MakeRaftState(hs, ConfState()));
+        storage->SetRaftState(MakeRaftState(hs, capnp_util::make<msg::ConfState>()));
 
-        const auto append_res = storage->Append({NewEntry(1, 1)});
+        const auto append_res = storage->Append(MakeEntryVec(NewEntry(1, 1)));
         REQUIRE(append_res);
 
-        Snapshot snap;
-        auto snap_builder = snap.builder();
+        Snapshot snap = capnp_util::make<msg::Snapshot>();
+        auto snap_builder = capnp_util::builder<msg::Snapshot>(snap);
         auto meta_builder = snap_builder.initMetadata();
         meta_builder.setIndex(1);
         meta_builder.setTerm(1);
@@ -88,14 +95,14 @@ TEST_CASE("raw_node: step local message ignored") {
 
         RawNode raw_node(config, std::move(storage));
 
-        Message m;
-        auto builder = m.builder();
+        Message m = capnp_util::make<msg::Message>();
+        auto builder = capnp_util::builder<msg::Message>(m);
         builder.setTo(0);
         builder.setFrom(0);
         builder.setMsgType(msg_t);
         builder.setTerm(1);
 
-        const auto res = raw_node.Step(m);
+        const auto res = raw_node.Step(std::move(m));
         CHECK_FALSE(res);
         CHECK(res.error().Is(RaftErrorCode::StepLocalMsg));
     }
@@ -109,12 +116,12 @@ TEST_CASE("raw_node: propose data") {
     config.election_tick = 10;
     config.heartbeat_tick = 1;
 
-    ConfState conf_state;
-    auto conf_builder = conf_state.builder();
+    ConfState conf_state = capnp_util::make<msg::ConfState>();
+    auto conf_builder = capnp_util::builder<msg::ConfState>(conf_state);
     auto voters_builder = conf_builder.initVoters(1);
     voters_builder.set(0, 1);
-    HardState hard_state;
-    auto hs_builder = hard_state.builder();
+    HardState hard_state = capnp_util::make<msg::HardState>();
+    auto hs_builder = capnp_util::builder<msg::HardState>(hard_state);
     hs_builder.setCommit(0);
     hs_builder.setTerm(0);
     hs_builder.setVote(0);
@@ -138,7 +145,7 @@ TEST_CASE("raw_node: propose data") {
 
     auto rd = raw_node.GetReady();
     CHECK(rd.entries.size() >= 1);
-    auto entry_reader = rd.entries.back().reader();
+    auto entry_reader = capnp_util::reader<msg::Entry>(rd.entries.back());
     auto data = entry_reader.getData();
     CHECK_EQ(std::string(reinterpret_cast<const char*>(data.begin()), data.size()), "testdata");
     std::ignore = raw_node.Advance(rd);
@@ -152,12 +159,12 @@ TEST_CASE("raw_node: set priority") {
     config.election_tick = 10;
     config.heartbeat_tick = 1;
 
-    ConfState conf_state;
-    auto conf_builder = conf_state.builder();
+    ConfState conf_state = capnp_util::make<msg::ConfState>();
+    auto conf_builder = capnp_util::builder<msg::ConfState>(conf_state);
     auto voters_builder = conf_builder.initVoters(1);
     voters_builder.set(0, 1);
-    HardState hard_state;
-    hard_state.builder().setCommit(0);
+    HardState hard_state = capnp_util::make<msg::HardState>();
+    capnp_util::builder<msg::HardState>(hard_state).setCommit(0);
     storage->SetRaftState(MakeRaftState(hard_state, conf_state));
 
     RawNode raw_node(config, std::move(storage));
@@ -187,11 +194,11 @@ void PrepareAsyncEntries(RawNode& raw_node, const std::shared_ptr<MemoryStorage>
     rd = raw_node.GetReady();
     CHECK_EQ(rd.entries.size(), 10);
     std::ignore = storage->Append(rd.entries);
-    auto msgs = rd.Messages();
+    const auto& msgs = rd.Messages();
     // First append has two entries: the empty entry to confirm the election,
     // and the first proposal (only one proposal gets sent because we're in probe state).
     CHECK_EQ(msgs.size(), 1);
-    auto msg_reader = msgs[0].reader();
+    auto msg_reader = capnp_util::reader<msg::Message>(msgs[0]);
     CHECK_EQ(msg_reader.getMsgType(), MessageType::MSG_APPEND);
     CHECK_EQ(msg_reader.getEntries().size(), 2);
     std::ignore = raw_node.AdvanceAppend(rd);
@@ -201,14 +208,14 @@ void PrepareAsyncEntries(RawNode& raw_node, const std::shared_ptr<MemoryStorage>
 
     // Become replicate state by sending append response
     // The term should match the leader's term (1 after BecomeCandidate+BecomeLeader)
-    Message append_response;
-    auto ar_builder = append_response.builder();
+    Message append_response = capnp_util::make<msg::Message>();
+    auto ar_builder = capnp_util::builder<msg::Message>(append_response);
     ar_builder.setFrom(2);
     ar_builder.setTo(1);
     ar_builder.setMsgType(MessageType::MSG_APPEND_RESPONSE);
     ar_builder.setTerm(1);
     ar_builder.setIndex(2);
-    raw_node.Step(append_response).value();
+    raw_node.Step(std::move(append_response)).value();
 }
 
 // Test entries are handled properly when they are fetched asynchronously
@@ -221,13 +228,13 @@ TEST_CASE("raw_node: async entry fetching") {
     config.heartbeat_tick = 1;
     config.max_size_per_message = 2048;
 
-    ConfState conf_state;
-    auto conf_builder = conf_state.builder();
+    ConfState conf_state = capnp_util::make<msg::ConfState>();
+    auto conf_builder = capnp_util::builder<msg::ConfState>(conf_state);
     auto voters_builder = conf_builder.initVoters(2);
     voters_builder.set(0, 1);
     voters_builder.set(1, 2);
-    HardState hard_state;
-    hard_state.builder().setCommit(0);
+    HardState hard_state = capnp_util::make<msg::HardState>();
+    capnp_util::builder<msg::HardState>(hard_state).setCommit(0);
     storage->SetRaftState(MakeRaftState(hard_state, conf_state));
 
     RawNode raw_node(config, storage);
@@ -237,7 +244,7 @@ TEST_CASE("raw_node: async entry fetching") {
     // No entries are sent because the entries are temporarily unavailable
     auto rd = raw_node.GetReady();
     std::ignore = storage->Append(rd.entries);
-    auto msgs = rd.Messages();
+    const auto& msgs = rd.Messages();
     CHECK_EQ(msgs.size(), 0);
     std::ignore = raw_node.AdvanceAppend(rd);
 
@@ -249,9 +256,9 @@ TEST_CASE("raw_node: async entry fetching") {
 
     rd = raw_node.GetReady();
     std::ignore = storage->Append(rd.entries);
-    msgs = rd.Messages();
-    CHECK(msgs.size() > 0);
-    auto msg_reader = msgs[0].reader();
+    const auto& msgs2 = rd.Messages();
+    CHECK(msgs2.size() > 0);
+    auto msg_reader = capnp_util::reader<msg::Message>(msgs2[0]);
     CHECK_EQ(msg_reader.getMsgType(), MessageType::MSG_APPEND);
     CHECK(msg_reader.getEntries().size() > 0);
     std::ignore = raw_node.AdvanceAppend(rd);
@@ -267,13 +274,13 @@ TEST_CASE("raw_node: async entry fetching to removed node") {
     config.heartbeat_tick = 1;
     config.max_size_per_message = 2048;
 
-    ConfState conf_state;
-    auto conf_builder = conf_state.builder();
+    ConfState conf_state = capnp_util::make<msg::ConfState>();
+    auto conf_builder = capnp_util::builder<msg::ConfState>(conf_state);
     auto voters_builder = conf_builder.initVoters(2);
     voters_builder.set(0, 1);
     voters_builder.set(1, 2);
-    HardState hard_state;
-    hard_state.builder().setCommit(0);
+    HardState hard_state = capnp_util::make<msg::HardState>();
+    capnp_util::builder<msg::HardState>(hard_state).setCommit(0);
     storage->SetRaftState(MakeRaftState(hard_state, conf_state));
 
     RawNode raw_node(config, storage);
@@ -281,8 +288,8 @@ TEST_CASE("raw_node: async entry fetching to removed node") {
     PrepareAsyncEntries(raw_node, storage);
 
     // Remove node 2
-    ConfChangeV2 cc;
-    auto cc_builder = cc.builder();
+    ConfChangeV2 cc = capnp_util::make<msg::ConfChangeV2>();
+    auto cc_builder = capnp_util::builder<msg::ConfChangeV2>(cc);
     auto changes = cc_builder.initChanges(1);
     changes[0].setChangeType(ConfChangeType::REMOVE_NODE);
     changes[0].setNodeId(2);
@@ -296,9 +303,9 @@ TEST_CASE("raw_node: async entry fetching to removed node") {
 
     auto rd = raw_node.GetReady();
     // No messages to removed node
-    auto msgs = rd.Messages();
+    const auto& msgs = rd.Messages();
     for (const auto& msg : msgs) {
-        CHECK_NE(msg.reader().getTo(), 2);
+        CHECK_NE(capnp_util::reader<msg::Message>(msg).getTo(), 2);
     }
     std::ignore = raw_node.AdvanceAppend(rd);
 }
@@ -312,18 +319,18 @@ TEST_CASE("raw_node: step local message ignored") {
 
     for (const auto msg_t : local_msg_types) {
         auto storage = std::make_shared<MemoryStorage>();
-        HardState hs;
-        auto hs_builder = hs.builder();
+        HardState hs = capnp_util::make<msg::HardState>();
+        auto hs_builder = capnp_util::builder<msg::HardState>(hs);
         hs_builder.setTerm(1);
         hs_builder.setVote(0);
         hs_builder.setCommit(1);
-        storage->SetRaftState(MakeRaftState(hs, ConfState()));
+        storage->SetRaftState(MakeRaftState(hs, capnp_util::make<msg::ConfState>()));
 
-        const auto append_res = storage->Append({NewEntry(1, 1)});
+        const auto append_res = storage->Append(MakeEntryVec(NewEntry(1, 1)));
         REQUIRE(append_res);
 
-        Snapshot snap;
-        auto snap_builder = snap.builder();
+        Snapshot snap = capnp_util::make<msg::Snapshot>();
+        auto snap_builder = capnp_util::builder<msg::Snapshot>(snap);
         auto meta_builder = snap_builder.initMetadata();
         meta_builder.setIndex(1);
         meta_builder.setTerm(1);
@@ -340,14 +347,14 @@ TEST_CASE("raw_node: step local message ignored") {
 
         RawNode raw_node(config, storage);
 
-        Message m;
-        auto builder = m.builder();
+        Message m = capnp_util::make<msg::Message>();
+        auto builder = capnp_util::builder<msg::Message>(m);
         builder.setTo(0);
         builder.setFrom(0);
         builder.setMsgType(msg_t);
         builder.setTerm(1);
 
-        const auto res = raw_node.Step(m);
+        const auto res = raw_node.Step(std::move(m));
         CHECK_FALSE(res);
         CHECK(res.error().Is(RaftErrorCode::StepLocalMsg));
     }
@@ -409,13 +416,13 @@ TEST_CASE("raw_node: start") {
     // MakeHardState(term, vote, commit) - raft-rs: hard_state(term=2, commit=1, vote=1)
     MustCmpReady(
         rd2, std::make_optional(MakeSoftState(1, StateRole::Leader)),
-        std::make_optional(MakeHardState(2, 1, 1)), {NewEntry(2, 2)}, {}, std::nullopt, true, true,
-        true
+        std::make_optional(MakeHardState(2, 1, 1)), MakeEntryVec(NewEntry(2, 2)), {}, std::nullopt,
+        true, true, true
     );
     storage->Append(rd2.entries).value();
     auto light_rd = raw_node.Advance(rd2);
     CHECK_EQ(light_rd.commit_index, std::make_optional<uint64_t>(2));
-    CHECK_EQ(light_rd.committed_entries, std::vector<Entry>{NewEntry(2, 2)});
+    CHECK_EQ(light_rd.committed_entries, MakeEntryVec(NewEntry(2, 2)));
     CHECK_FALSE(raw_node.HasReady());
 
     raw_node.Propose("", "somedata").value();
@@ -423,13 +430,13 @@ TEST_CASE("raw_node: start") {
     // NewEntry(index, term, data, context) - raft-rs: new_entry(term=2, index=3, data)
     // context is empty string "" because Propose("", ...) sets it
     MustCmpReady(
-        rd3, std::nullopt, std::nullopt, {NewEntry(3, 2, "somedata", "")}, {}, std::nullopt, true,
-        true, true
+        rd3, std::nullopt, std::nullopt, MakeEntryVec(NewEntry(3, 2, "somedata", "")), {},
+        std::nullopt, true, true, true
     );
     storage->Append(rd3.entries).value();
     auto light_rd2 = raw_node.Advance(rd3);
     CHECK_EQ(light_rd2.commit_index, std::make_optional<uint64_t>(3));
-    CHECK_EQ(light_rd2.committed_entries, std::vector<Entry>{NewEntry(3, 2, "somedata", "")});
+    CHECK_EQ(light_rd2.committed_entries, MakeEntryVec(NewEntry(3, 2, "somedata", "")));
 
     CHECK_FALSE(raw_node.HasReady());
 }
@@ -439,15 +446,17 @@ TEST_CASE("raw_node: start") {
 TEST_CASE("raw_node: restart") {
     // raft-rs: empty_entry(term=1, index=1), new_entry(term=1, index=2)
     // raftpp: EmptyEntry(index, term), NewEntry(index, term)
-    const std::vector<Entry> entries = {EmptyEntry(1, 1), NewEntry(2, 1, "foo")};
+    std::vector<Entry> entries;
+    entries.push_back(EmptyEntry(1, 1));
+    entries.push_back(NewEntry(2, 1, "foo"));
 
     auto storage = std::make_shared<MemoryStorage>();
-    HardState hs;
-    auto hs_builder = hs.builder();
+    HardState hs = capnp_util::make<msg::HardState>();
+    auto hs_builder = capnp_util::builder<msg::HardState>(hs);
     hs_builder.setTerm(1);
     hs_builder.setVote(0);
     hs_builder.setCommit(1);
-    storage->SetRaftState(MakeRaftState(hs, ConfState()));
+    storage->SetRaftState(MakeRaftState(hs, capnp_util::make<msg::ConfState>()));
 
     storage->Append(entries).value();
 
@@ -462,7 +471,8 @@ TEST_CASE("raw_node: restart") {
     auto rd = raw_node.GetReady();
     // After restart, committed entries up to commit index (1) should be returned
     MustCmpReady(
-        rd, std::nullopt, std::nullopt, {}, {EmptyEntry(1, 1)}, std::nullopt, true, true, false
+        rd, std::nullopt, std::nullopt, {}, MakeEntryVec(EmptyEntry(1, 1)), std::nullopt, true,
+        true, false
     );
     std::ignore = raw_node.Advance(rd);
     CHECK_FALSE(raw_node.HasReady());
@@ -476,18 +486,19 @@ TEST_CASE("raw_node: restart from snapshot") {
     auto snap = NewSnapshot(2, 1, {1, 2});
     // raft-rs: new_entry(term=1, index=3, data)
     // raftpp: NewEntry(index, term, data)
-    const std::vector<Entry> entries = {NewEntry(3, 1, "foo")};
+    std::vector<Entry> entries;
+    entries.push_back(NewEntry(3, 1, "foo"));
 
     auto storage = std::make_shared<MemoryStorage>();
     storage->ApplySnapshot(snap).value();
     storage->Append(entries).value();
 
-    HardState hs;
-    auto hs_builder = hs.builder();
+    HardState hs = capnp_util::make<msg::HardState>();
+    auto hs_builder = capnp_util::builder<msg::HardState>(hs);
     hs_builder.setTerm(1);
     hs_builder.setCommit(3);
     hs_builder.setVote(0);
-    storage->SetRaftState(MakeRaftState(hs, ConfState()));
+    storage->SetRaftState(MakeRaftState(hs, capnp_util::make<msg::ConfState>()));
 
     Config config = DefaultConfig();
     config.id = 1;
@@ -518,9 +529,9 @@ TEST_CASE("raw_node: set priority") {
 
 /// Helper function to convert ConfChange to ConfChangeV2
 static ConfChangeV2 ToConfChangeV2(const ConfChange& cc) {
-    ConfChangeV2 cc_v2;
-    auto cc_reader = cc.reader();
-    auto builder = cc_v2.builder();
+    ConfChangeV2 cc_v2 = capnp_util::make<msg::ConfChangeV2>();
+    auto cc_reader = capnp_util::reader<msg::ConfChange>(cc);
+    auto builder = capnp_util::builder<msg::ConfChangeV2>(cc_v2);
     auto changes = builder.initChanges(1);
     changes[0].setChangeType(cc_reader.getChangeType());
     changes[0].setNodeId(cc_reader.getNodeId());
@@ -555,7 +566,8 @@ TEST_CASE("raw_node: propose add duplicate node") {
 
         auto handle_committed_entries = [&](const std::vector<Entry>& committed_entries) {
             for (const auto& e : committed_entries) {
-                if (e.reader().getEntryType() == EntryType::ENTRY_CONF_CHANGE_V2) {
+                if (capnp_util::reader<msg::Entry>(e).getEntryType() ==
+                    EntryType::ENTRY_CONF_CHANGE_V2) {
                     auto parsed_cc = ParseConfChangeV2FromEntry(e);
                     raw_node.ApplyConfChange(parsed_cc).value();
                 }
@@ -569,8 +581,8 @@ TEST_CASE("raw_node: propose add duplicate node") {
         raw_node.AdvanceApply();
     };
 
-    ConfChange cc1;
-    auto cc1_builder = cc1.builder();
+    ConfChange cc1 = capnp_util::make<msg::ConfChange>();
+    auto cc1_builder = capnp_util::builder<msg::ConfChange>(cc1);
     cc1_builder.setChangeType(ConfChangeType::ADD_NODE);
     cc1_builder.setNodeId(1);
     propose_conf_change_and_apply(cc1);
@@ -579,8 +591,8 @@ TEST_CASE("raw_node: propose add duplicate node") {
     propose_conf_change_and_apply(cc1);
 
     // The new node join should be ok
-    ConfChange cc2;
-    auto cc2_builder = cc2.builder();
+    ConfChange cc2 = capnp_util::make<msg::ConfChange>();
+    auto cc2_builder = capnp_util::builder<msg::ConfChange>(cc2);
     cc2_builder.setChangeType(ConfChangeType::ADD_NODE);
     cc2_builder.setNodeId(2);
     propose_conf_change_and_apply(cc2);
@@ -609,8 +621,8 @@ TEST_CASE("raw_node: propose add learner node") {
     }
 
     // Propose add learner node and check apply state
-    ConfChange cc;
-    auto cc_builder = cc.builder();
+    ConfChange cc = capnp_util::make<msg::ConfChange>();
+    auto cc_builder = capnp_util::builder<msg::ConfChange>(cc);
     cc_builder.setChangeType(ConfChangeType::ADD_LEARNER_NODE);
     cc_builder.setNodeId(2);
     ConfChangeV2 cc_v2 = ToConfChangeV2(cc);
@@ -624,12 +636,12 @@ TEST_CASE("raw_node: propose add learner node") {
     CHECK_GE(light_rd.committed_entries.size(), 1);
 
     const auto& e = light_rd.committed_entries[0];
-    CHECK_EQ(e.reader().getEntryType(), EntryType::ENTRY_CONF_CHANGE_V2);
+    CHECK_EQ(capnp_util::reader<msg::Entry>(e).getEntryType(), EntryType::ENTRY_CONF_CHANGE_V2);
 
     auto parsed_cc = ParseConfChangeV2FromEntry(e);
     auto conf_state_result = raw_node.ApplyConfChange(parsed_cc).value();
 
-    auto conf_reader = conf_state_result.reader();
+    auto conf_reader = capnp_util::reader<msg::ConfState>(conf_state_result);
     CHECK_EQ(conf_reader.getVoters().size(), 1);
     CHECK_EQ(conf_reader.getVoters()[0], 1);
     CHECK_EQ(conf_reader.getLearners().size(), 1);
@@ -651,14 +663,14 @@ TEST_CASE("raw_node: read index to old leader") {
     config.heartbeat_tick = 1;
 
     // Create three nodes - set up config state for each
-    ConfState cs;
-    auto cs_builder = cs.builder();
+    ConfState cs = capnp_util::make<msg::ConfState>();
+    auto cs_builder = capnp_util::builder<msg::ConfState>(cs);
     auto voters_builder = cs_builder.initVoters(3);
     voters_builder.set(0, 1);
     voters_builder.set(1, 2);
     voters_builder.set(2, 3);
-    HardState hs;
-    hs.builder().setCommit(0);
+    HardState hs = capnp_util::make<msg::HardState>();
+    capnp_util::builder<msg::HardState>(hs).setCommit(0);
     storage1->SetRaftState(MakeRaftState(hs, cs));
     storage2->SetRaftState(MakeRaftState(hs, cs));
     storage3->SetRaftState(MakeRaftState(hs, cs));
@@ -678,44 +690,48 @@ TEST_CASE("raw_node: read index to old leader") {
     Network network = Network::Create(std::move(ifaces));
 
     // Elect r1 as leader
-    network.Send({NewMessage(1, 1, MessageType::MSG_HUP)});
+    network.Send(MakeEntryVec(NewMessage(1, 1, MessageType::MSG_HUP)));
 
     // Create test entry with request context
-    Entry test_entry;
-    auto entry_builder = test_entry.builder();
+    Entry test_entry = capnp_util::make<msg::Entry>();
+    auto entry_builder = capnp_util::builder<msg::Entry>(test_entry);
     entry_builder.setData(
         kj::arrayPtr(reinterpret_cast<const kj::byte*>(request_ctx.data()), request_ctx.size())
     );
 
     // Send read index request to r2 (follower) using Step directly (not Send)
     // so messages stay in msgs() for inspection
-    auto msg_to_r2 = NewMessageWithEntries(2, 2, MessageType::MSG_READ_INDEX, {test_entry});
+    auto msg_to_r2 = NewMessageWithEntries(
+        2, 2, MessageType::MSG_READ_INDEX, MakeEntryVec(CloneEntry(test_entry))
+    );
     network.GetPeer(2)->Step(msg_to_r2).value();
 
     // Verify r2 forwards to r1 (current leader) with term not set
     CHECK_EQ(network.GetPeer(2)->msgs().size(), 1);
-    auto r2_reader = network.GetPeer(2)->msgs()[0].reader();
+    auto r2_reader = capnp_util::reader<msg::Message>(network.GetPeer(2)->msgs()[0]);
     CHECK_EQ(r2_reader.getMsgType(), MessageType::MSG_READ_INDEX);
     CHECK_EQ(r2_reader.getTo(), 1);
 
     // Save this message for later
-    auto read_index_msg1 = network.GetPeer(2)->msgs()[0].clone();
+    auto read_index_msg1 = CloneMessage(network.GetPeer(2)->msgs()[0]);
 
     // Send read index request to r3 (follower) using Step directly
-    auto msg_to_r3 = NewMessageWithEntries(3, 3, MessageType::MSG_READ_INDEX, {test_entry});
+    auto msg_to_r3 = NewMessageWithEntries(
+        3, 3, MessageType::MSG_READ_INDEX, MakeEntryVec(CloneEntry(test_entry))
+    );
     network.GetPeer(3)->Step(msg_to_r3).value();
 
     // Verify r3 forwards to r1 as well with term not set
     CHECK_EQ(network.GetPeer(3)->msgs().size(), 1);
-    auto r3_reader = network.GetPeer(3)->msgs()[0].reader();
+    auto r3_reader = capnp_util::reader<msg::Message>(network.GetPeer(3)->msgs()[0]);
     CHECK_EQ(r3_reader.getMsgType(), MessageType::MSG_READ_INDEX);
     CHECK_EQ(r3_reader.getTo(), 1);
 
     // Save this message for later
-    auto read_index_msg2 = network.GetPeer(3)->msgs()[0].clone();
+    auto read_index_msg2 = CloneMessage(network.GetPeer(3)->msgs()[0]);
 
     // Now elect r3 as new leader
-    network.Send({NewMessage(3, 3, MessageType::MSG_HUP)});
+    network.Send(MakeEntryVec(NewMessage(3, 3, MessageType::MSG_HUP)));
 
     // Let r1 step the two messages previously from r2, r3
     // r1 is now a follower, so it should forward these to the new leader (r3)
@@ -724,8 +740,8 @@ TEST_CASE("raw_node: read index to old leader") {
 
     // Verify r1 (now follower) forwards these messages again to r3 (new leader)
     CHECK_EQ(network.GetPeer(1)->msgs().size(), 2);
-    auto msg0_reader = network.GetPeer(1)->msgs()[0].reader();
-    auto msg1_reader = network.GetPeer(1)->msgs()[1].reader();
+    auto msg0_reader = capnp_util::reader<msg::Message>(network.GetPeer(1)->msgs()[0]);
+    auto msg1_reader = capnp_util::reader<msg::Message>(network.GetPeer(1)->msgs()[1]);
     CHECK_EQ(msg0_reader.getMsgType(), MessageType::MSG_READ_INDEX);
     CHECK_EQ(msg0_reader.getTo(), 3);
     CHECK_EQ(msg1_reader.getMsgType(), MessageType::MSG_READ_INDEX);
@@ -742,12 +758,12 @@ TEST_CASE("raw_node: propose and conf change - simple add node") {
     raw_node.Campaign().value();
 
     bool proposed = false;
-    ConfChange cc;
-    auto cc_builder = cc.builder();
+    ConfChange cc = capnp_util::make<msg::ConfChange>();
+    auto cc_builder = capnp_util::builder<msg::ConfChange>(cc);
     cc_builder.setChangeType(ConfChangeType::ADD_NODE);
     cc_builder.setNodeId(2);
     ConfChangeV2 cc_v2 = ToConfChangeV2(cc);
-    std::string ccdata = cc_v2.serializeAsString();
+    std::string ccdata = capnp_util::toString(cc_v2);
 
     std::optional<ConfState> cs;
 
@@ -757,7 +773,8 @@ TEST_CASE("raw_node: propose and conf change - simple add node") {
 
         auto handle_committed_entries = [&](const std::vector<Entry>& committed_entries) {
             for (const auto& e : committed_entries) {
-                if (e.reader().getEntryType() == EntryType::ENTRY_CONF_CHANGE_V2) {
+                if (capnp_util::reader<msg::Entry>(e).getEntryType() ==
+                    EntryType::ENTRY_CONF_CHANGE_V2) {
                     auto parsed_cc = ParseConfChangeV2FromEntry(e);
                     cs = raw_node.ApplyConfChange(parsed_cc).value();
                 }
@@ -787,9 +804,11 @@ TEST_CASE("raw_node: propose and conf change - simple add node") {
             ->Entries(last_index - 1, last_index + 1, std::nullopt, GetEntriesContext::Empty(false))
             .value();
     CHECK_EQ(entries.size(), 2);
-    CHECK_EQ(DataToString(entries[0].reader().getData()), "somedata");
-    CHECK_EQ(entries[1].reader().getEntryType(), EntryType::ENTRY_CONF_CHANGE_V2);
-    CHECK_EQ(DataToString(entries[1].reader().getData()), ccdata);
+    CHECK_EQ(DataToString(capnp_util::reader<msg::Entry>(entries[0]).getData()), "somedata");
+    CHECK_EQ(
+        capnp_util::reader<msg::Entry>(entries[1]).getEntryType(), EntryType::ENTRY_CONF_CHANGE_V2
+    );
+    CHECK_EQ(DataToString(capnp_util::reader<msg::Entry>(entries[1]).getData()), ccdata);
     CHECK_EQ(cs.value(), MakeConfState({1, 2}));
 }
 
@@ -808,7 +827,8 @@ TEST_CASE("raw_node: propose and conf change - add learner") {
 
         auto handle_committed_entries = [&](const std::vector<Entry>& committed_entries) {
             for (const auto& e : committed_entries) {
-                if (e.reader().getEntryType() == EntryType::ENTRY_CONF_CHANGE_V2) {
+                if (capnp_util::reader<msg::Entry>(e).getEntryType() ==
+                    EntryType::ENTRY_CONF_CHANGE_V2) {
                     auto parsed_cc = ParseConfChangeV2FromEntry(e);
                     raw_node.ApplyConfChange(parsed_cc).value();
                 }
@@ -826,8 +846,8 @@ TEST_CASE("raw_node: propose and conf change - add learner") {
         // Once we are the leader, propose a command and a ConfChange
         if (is_leader) {
             raw_node.Propose("", "somedata").value();
-            ConfChange cc;
-            auto cc_builder = cc.builder();
+            ConfChange cc = capnp_util::make<msg::ConfChange>();
+            auto cc_builder = capnp_util::builder<msg::ConfChange>(cc);
             cc_builder.setChangeType(ConfChangeType::ADD_LEARNER_NODE);
             cc_builder.setNodeId(2);
             ConfChangeV2 cc_v2 = ToConfChangeV2(cc);
@@ -842,7 +862,8 @@ TEST_CASE("raw_node: propose and conf change - add learner") {
         storage->Append(rd.entries).value();
 
         for (const auto& e : rd.light.committed_entries) {
-            if (e.reader().getEntryType() == EntryType::ENTRY_CONF_CHANGE_V2) {
+            if (capnp_util::reader<msg::Entry>(e).getEntryType() ==
+                EntryType::ENTRY_CONF_CHANGE_V2) {
                 auto parsed_cc = ParseConfChangeV2FromEntry(e);
                 raw_node.ApplyConfChange(parsed_cc).value();
             }
@@ -850,7 +871,8 @@ TEST_CASE("raw_node: propose and conf change - add learner") {
 
         auto light_rd = raw_node.Advance(rd);
         for (const auto& e : light_rd.committed_entries) {
-            if (e.reader().getEntryType() == EntryType::ENTRY_CONF_CHANGE_V2) {
+            if (capnp_util::reader<msg::Entry>(e).getEntryType() ==
+                EntryType::ENTRY_CONF_CHANGE_V2) {
                 auto parsed_cc = ParseConfChangeV2FromEntry(e);
                 raw_node.ApplyConfChange(parsed_cc).value();
             }
@@ -867,13 +889,13 @@ TEST_CASE("raw_node: joint auto leave") {
     RawNode raw_node = NewRawNode(1, {}, 10, 1, storage);
 
     // Create joint configuration with auto leave
-    ConfChangeV2 cc_v2;
-    auto cc_builder = cc_v2.builder();
+    ConfChangeV2 cc_v2 = capnp_util::make<msg::ConfChangeV2>();
+    auto cc_builder = capnp_util::builder<msg::ConfChangeV2>(cc_v2);
     auto changes = cc_builder.initChanges(1);
     changes[0].setChangeType(ConfChangeType::ADD_LEARNER_NODE);
     changes[0].setNodeId(2);
     cc_builder.setTransition(ConfChangeTransition::IMPLICIT);
-    std::string ccdata = cc_v2.serializeAsString();
+    std::string ccdata = capnp_util::toString(cc_v2);
 
     // Campaign to become leader
     raw_node.Campaign().value();
@@ -888,17 +910,20 @@ TEST_CASE("raw_node: joint auto leave") {
 
         auto handle_committed_entries = [&](const std::vector<Entry>& committed_entries) {
             for (const auto& e : committed_entries) {
-                if (e.reader().getEntryType() == EntryType::ENTRY_CONF_CHANGE_V2) {
+                if (capnp_util::reader<msg::Entry>(e).getEntryType() ==
+                    EntryType::ENTRY_CONF_CHANGE_V2) {
                     auto parsed_cc = ParseConfChangeV2FromEntry(e);
 
                     // Force it step down
-                    Message msg;
-                    auto msg_builder = msg.builder();
+                    Message msg = capnp_util::make<msg::Message>();
+                    auto msg_builder = capnp_util::builder<msg::Message>(msg);
                     msg_builder.setTo(1);
                     msg_builder.setFrom(1);
                     msg_builder.setMsgType(MessageType::MSG_HEARTBEAT_RESPONSE);
-                    msg_builder.setTerm(raw_node.GetStatus().hs.reader().getTerm() + 1);
-                    raw_node.Step(msg).value();
+                    msg_builder.setTerm(
+                        capnp_util::reader<msg::HardState>(raw_node.GetStatus().hs).getTerm() + 1
+                    );
+                    raw_node.Step(std::move(msg)).value();
 
                     cs = raw_node.ApplyConfChange(parsed_cc).value();
                 }
@@ -928,9 +953,11 @@ TEST_CASE("raw_node: joint auto leave") {
             ->Entries(last_index - 1, last_index + 1, std::nullopt, GetEntriesContext::Empty(false))
             .value();
     CHECK_EQ(entries.size(), 2);
-    CHECK_EQ(DataToString(entries[0].reader().getData()), "somedata");
-    CHECK_EQ(entries[1].reader().getEntryType(), EntryType::ENTRY_CONF_CHANGE_V2);
-    CHECK_EQ(ccdata, DataToString(entries[1].reader().getData()));
+    CHECK_EQ(DataToString(capnp_util::reader<msg::Entry>(entries[0]).getData()), "somedata");
+    CHECK_EQ(
+        capnp_util::reader<msg::Entry>(entries[1]).getEntryType(), EntryType::ENTRY_CONF_CHANGE_V2
+    );
+    CHECK_EQ(ccdata, DataToString(capnp_util::reader<msg::Entry>(entries[1]).getData()));
 
     // Move RawNode along. It should not leave joint because it's follower.
     auto rd = raw_node.GetReady();
@@ -948,10 +975,13 @@ TEST_CASE("raw_node: joint auto leave") {
 
     // Check that right ConfChange comes out.
     CHECK_EQ(rd3.entries.size(), 1);
-    CHECK_EQ(rd3.entries[0].reader().getEntryType(), EntryType::ENTRY_CONF_CHANGE_V2);
+    CHECK_EQ(
+        capnp_util::reader<msg::Entry>(rd3.entries[0]).getEntryType(),
+        EntryType::ENTRY_CONF_CHANGE_V2
+    );
 
     auto leave_cc = ParseConfChangeV2FromEntry(rd3.entries[0]);
-    CHECK(leave_cc.reader().getContext().size() == 0);
+    CHECK(capnp_util::reader<msg::ConfChangeV2>(leave_cc).getContext().size() == 0);
 
     // Lie and pretend ConfChange applied.
     auto final_cs = raw_node.ApplyConfChange(leave_cc).value();
@@ -980,7 +1010,7 @@ TEST_CASE("raw_node: bounded_uncommitted_entries_growth_with_partition") {
     while (true) {
         auto rd = raw_node.GetReady();
         if (rd.hs.has_value()) {
-            storage->SetRaftState(MakeRaftState(rd.hs.value(), ConfState()));
+            storage->SetRaftState(MakeRaftState(rd.hs.value(), capnp_util::make<msg::ConfState>()));
         }
         storage->Append(rd.entries).value();
         if (rd.ss.has_value() && rd.ss->leader_id == raw_node.GetStatus().id) {
@@ -1041,9 +1071,11 @@ TEST_CASE("raw_node: with async apply") {
         }
 
         auto rd2 = raw_node.GetReady();
-        auto entries = rd2.entries;
-        CHECK_EQ(entries[0].reader().getIndex(), last_index + 1);
-        CHECK_EQ(entries[entries.size() - 1].reader().getIndex(), last_index + cnt);
+        const auto& entries = rd2.entries;
+        CHECK_EQ(capnp_util::reader<msg::Entry>(entries[0]).getIndex(), last_index + 1);
+        CHECK_EQ(
+            capnp_util::reader<msg::Entry>(entries[entries.size() - 1]).getIndex(), last_index + cnt
+        );
         MustCmpReady(rd2, std::nullopt, std::nullopt, entries, {}, std::nullopt, true, true, true);
 
         storage->Append(entries).value();
@@ -1079,61 +1111,84 @@ TEST_CASE("raw_node: entries_after_snapshot") {
         // NewEntry(index, term, data) - raft-rs: new_entry(term=2, index=i)
         entries.push_back(NewEntry(i, 2, "hello"));
     }
-    Message append_msg = NewMessageWithEntries(2, 1, MessageType::MSG_APPEND, entries);
-    auto append_builder = append_msg.builder();
+    Message append_msg = NewMessageWithEntries(2, 1, MessageType::MSG_APPEND, std::move(entries));
+    auto append_builder = capnp_util::builder<msg::Message>(append_msg);
     append_builder.setTerm(2);
     append_builder.setIndex(1);
     append_builder.setLogTerm(1);
     append_builder.setCommit(5);
-    raw_node.Step(append_msg).value();
+    raw_node.Step(std::move(append_msg)).value();
+
+    // Recreate entries for comparison
+    entries.clear();
+    for (int i = 2; i < 20; ++i) {
+        entries.push_back(NewEntry(i, 2, "hello"));
+    }
 
     auto rd = raw_node.GetReady();
     MustCmpReady(
         rd, std::make_optional(MakeSoftState(2, StateRole::Follower)),
         std::make_optional(MakeHardState(2, 0, 5)), entries, {}, std::nullopt, true, false, true
     );
-    storage->SetRaftState(MakeRaftState(rd.hs.value(), ConfState()));
+    storage->SetRaftState(MakeRaftState(rd.hs.value(), capnp_util::make<msg::ConfState>()));
     storage->Append(rd.entries).value();
     auto light_rd = raw_node.Advance(rd);
     CHECK(!light_rd.commit_index.has_value());
-    CHECK_EQ(light_rd.committed_entries, std::vector<Entry>(entries.begin(), entries.begin() + 4));
+    std::vector<Entry> expected_committed;
+    for (int i = 2; i < 6; ++i) {
+        expected_committed.push_back(NewEntry(i, 2, "hello"));
+    }
+    CHECK_EQ(light_rd.committed_entries, expected_committed);
     CHECK(light_rd.messages.empty());
 
     Snapshot snap = NewSnapshot(10, 3, {1, 2});
     Message snapshot_msg = NewMessage(2, 1, MessageType::MSG_SNAPSHOT, 0);
-    auto snapshot_builder = snapshot_msg.builder();
+    auto snapshot_builder = capnp_util::builder<msg::Message>(snapshot_msg);
     snapshot_builder.setTerm(3);
-    snapshot_builder.setSnapshot(snap.reader());
-    raw_node.Step(snapshot_msg).value();
+    snapshot_builder.setSnapshot(capnp_util::reader<msg::Snapshot>(snap));
+    raw_node.Step(std::move(snapshot_msg)).value();
 
     entries.clear();
     for (int i = 11; i < 14; ++i) {
         // NewEntry(index, term, data) - raft-rs: new_entry(term=3, index=i)
         entries.push_back(NewEntry(i, 3, "hello"));
     }
-    append_msg = NewMessageWithEntries(2, 1, MessageType::MSG_APPEND, entries);
-    append_builder = append_msg.builder();
+    append_msg = NewMessageWithEntries(2, 1, MessageType::MSG_APPEND, std::move(entries));
+    append_builder = capnp_util::builder<msg::Message>(append_msg);
     append_builder.setTerm(3);
     append_builder.setIndex(10);
     append_builder.setLogTerm(3);
     append_builder.setCommit(12);
-    raw_node.Step(append_msg).value();
+    raw_node.Step(std::move(append_msg)).value();
+
+    // Recreate entries for comparison
+    entries.clear();
+    for (int i = 11; i < 14; ++i) {
+        entries.push_back(NewEntry(i, 3, "hello"));
+    }
 
     auto rd2 = raw_node.GetReady();
     // If there is a snapshot, the committed entries should be empty.
     MustCmpReady(
         rd2, std::nullopt, std::make_optional(MakeHardState(3, 0, 12)), entries, {},
-        std::make_optional(snap), true, false, true
+        std::make_optional(CloneSnapshot(snap)), true, false, true
     );
     // Should have a MessageType::MSG_APPEND_RESPONSE
-    CHECK_EQ(rd2.light.messages[0].reader().getMsgType(), MessageType::MSG_APPEND_RESPONSE);
-    storage->SetRaftState(MakeRaftState(rd2.hs.value(), ConfState()));
+    CHECK_EQ(
+        capnp_util::reader<msg::Message>(rd2.light.messages[0]).getMsgType(),
+        MessageType::MSG_APPEND_RESPONSE
+    );
+    storage->SetRaftState(MakeRaftState(rd2.hs.value(), capnp_util::make<msg::ConfState>()));
     storage->ApplySnapshot(rd2.snapshot).value();
     storage->Append(rd2.entries).value();
 
     auto light_rd2 = raw_node.Advance(rd2);
     CHECK(!light_rd2.commit_index.has_value());
-    CHECK_EQ(light_rd2.committed_entries, std::vector<Entry>(entries.begin(), entries.begin() + 2));
+    std::vector<Entry> expected_committed2;
+    for (int i = 11; i < 13; ++i) {
+        expected_committed2.push_back(NewEntry(i, 3, "hello"));
+    }
+    CHECK_EQ(light_rd2.committed_entries, expected_committed2);
     CHECK(light_rd2.messages.empty());
 }
 
@@ -1150,18 +1205,23 @@ TEST_CASE("raw_node: overwrite_entries") {
     RawNode raw_node(config, storage);
 
     // NewEntry(index, term, data) - raft-rs: new_entry(term=2, index=2..4)
-    std::vector<Entry> entries = {
-        NewEntry(2, 2, "hello"),
-        NewEntry(3, 2, "hello"),
-        NewEntry(4, 2, "hello"),
-    };
-    Message append_msg = NewMessageWithEntries(2, 1, MessageType::MSG_APPEND, entries);
-    auto append_builder = append_msg.builder();
+    std::vector<Entry> entries;
+    entries.push_back(NewEntry(2, 2, "hello"));
+    entries.push_back(NewEntry(3, 2, "hello"));
+    entries.push_back(NewEntry(4, 2, "hello"));
+    Message append_msg = NewMessageWithEntries(2, 1, MessageType::MSG_APPEND, std::move(entries));
+    auto append_builder = capnp_util::builder<msg::Message>(append_msg);
     append_builder.setTerm(2);
     append_builder.setIndex(1);
     append_builder.setLogTerm(1);
     append_builder.setCommit(1);
-    raw_node.Step(append_msg).value();
+    raw_node.Step(std::move(append_msg)).value();
+
+    // Recreate entries for comparison
+    entries.clear();
+    entries.push_back(NewEntry(2, 2, "hello"));
+    entries.push_back(NewEntry(3, 2, "hello"));
+    entries.push_back(NewEntry(4, 2, "hello"));
 
     auto rd = raw_node.GetReady();
     MustCmpReady(
@@ -1169,8 +1229,11 @@ TEST_CASE("raw_node: overwrite_entries") {
         std::make_optional(MakeHardState(2, 0, 1)), entries, {}, std::nullopt, true, false, true
     );
     // Should have a MessageType::MSG_APPEND_RESPONSE
-    CHECK_EQ(rd.light.messages[0].reader().getMsgType(), MessageType::MSG_APPEND_RESPONSE);
-    storage->SetRaftState(MakeRaftState(rd.hs.value(), ConfState()));
+    CHECK_EQ(
+        capnp_util::reader<msg::Message>(rd.light.messages[0]).getMsgType(),
+        MessageType::MSG_APPEND_RESPONSE
+    );
+    storage->SetRaftState(MakeRaftState(rd.hs.value(), capnp_util::make<msg::ConfState>()));
     storage->Append(rd.entries).value();
 
     auto light_rd = raw_node.Advance(rd);
@@ -1179,35 +1242,49 @@ TEST_CASE("raw_node: overwrite_entries") {
     CHECK(light_rd.messages.empty());
 
     // NewEntry(index, term, data) - raft-rs: new_entry(term=3, index=4..6)
-    std::vector<Entry> entries_2 = {
-        NewEntry(4, 3, "hello"),
-        NewEntry(5, 3, "hello"),
-        NewEntry(6, 3, "hello"),
-    };
-    append_msg = NewMessageWithEntries(3, 1, MessageType::MSG_APPEND, entries_2);
-    append_builder = append_msg.builder();
+    std::vector<Entry> entries_2;
+    entries_2.push_back(NewEntry(4, 3, "hello"));
+    entries_2.push_back(NewEntry(5, 3, "hello"));
+    entries_2.push_back(NewEntry(6, 3, "hello"));
+    append_msg = NewMessageWithEntries(3, 1, MessageType::MSG_APPEND, std::move(entries_2));
+    append_builder = capnp_util::builder<msg::Message>(append_msg);
     append_builder.setTerm(3);
     append_builder.setIndex(3);
     append_builder.setLogTerm(2);
     append_builder.setCommit(5);
-    raw_node.Step(append_msg).value();
+    raw_node.Step(std::move(append_msg)).value();
+
+    // Recreate entries_2 for comparison
+    entries_2.clear();
+    entries_2.push_back(NewEntry(4, 3, "hello"));
+    entries_2.push_back(NewEntry(5, 3, "hello"));
+    entries_2.push_back(NewEntry(6, 3, "hello"));
+
+    // Expected committed entries from original entries (first 2)
+    std::vector<Entry> expected_old_committed;
+    expected_old_committed.push_back(NewEntry(2, 2, "hello"));
+    expected_old_committed.push_back(NewEntry(3, 2, "hello"));
 
     auto rd2 = raw_node.GetReady();
     MustCmpReady(
         rd2, std::make_optional(MakeSoftState(3, StateRole::Follower)),
-        std::make_optional(MakeHardState(3, 0, 5)), entries_2,
-        std::vector<Entry>(entries.begin(), entries.begin() + 2), std::nullopt, true, false, true
+        std::make_optional(MakeHardState(3, 0, 5)), entries_2, expected_old_committed, std::nullopt,
+        true, false, true
     );
     // Should have a MessageType::MSG_APPEND_RESPONSE
-    CHECK_EQ(rd2.light.messages[0].reader().getMsgType(), MessageType::MSG_APPEND_RESPONSE);
-    storage->SetRaftState(MakeRaftState(rd2.hs.value(), ConfState()));
+    CHECK_EQ(
+        capnp_util::reader<msg::Message>(rd2.light.messages[0]).getMsgType(),
+        MessageType::MSG_APPEND_RESPONSE
+    );
+    storage->SetRaftState(MakeRaftState(rd2.hs.value(), capnp_util::make<msg::ConfState>()));
     storage->Append(rd2.entries).value();
 
     auto light_rd2 = raw_node.Advance(rd2);
     CHECK(!light_rd2.commit_index.has_value());
-    CHECK_EQ(
-        light_rd2.committed_entries, std::vector<Entry>(entries_2.begin(), entries_2.begin() + 2)
-    );
+    std::vector<Entry> expected_new_committed;
+    expected_new_committed.push_back(NewEntry(4, 3, "hello"));
+    expected_new_committed.push_back(NewEntry(5, 3, "hello"));
+    CHECK_EQ(light_rd2.committed_entries, expected_new_committed);
     CHECK(light_rd2.messages.empty());
 }
 
@@ -1224,13 +1301,13 @@ TEST_CASE("raw_node: committed_entries_pagination") {
         // EmptyEntry(index, term) - raft-rs: empty_entry(term=1, index=i)
         entries.push_back(EmptyEntry(i, 1));
     }
-    Message msg = NewMessageWithEntries(3, 1, MessageType::MSG_APPEND, entries);
-    auto msg_builder = msg.builder();
+    Message msg = NewMessageWithEntries(3, 1, MessageType::MSG_APPEND, std::move(entries));
+    auto msg_builder = capnp_util::builder<msg::Message>(msg);
     msg_builder.setTerm(1);
     msg_builder.setIndex(1);
     msg_builder.setLogTerm(1);
     msg_builder.setCommit(9);
-    raw_node.Step(msg).value();
+    raw_node.Step(std::move(msg)).value();
 
     // Test unpersisted entries won't be fetched.
     auto rd = raw_node.GetReady();
@@ -1288,7 +1365,7 @@ TEST_CASE("raw_node: disable_proposal_forwarding") {
     Network nt = Network::Create(std::move(peers));
 
     // Node 1 starts campaign to become leader.
-    nt.Send({NewMessage(1, 1, MessageType::MSG_HUP, 0)});
+    nt.Send(MakeEntryVec(NewMessage(1, 1, MessageType::MSG_HUP, 0)));
 
     // Send proposal to n2(follower) where DisableProposalForwarding is false
     auto msg = NewMessage(2, 2, MessageType::MSG_PROPOSE, 1);

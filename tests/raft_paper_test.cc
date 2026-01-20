@@ -18,10 +18,10 @@ constexpr const char* SOME_DATA = "somedata";
 
 // Accept an append message and create a response.
 Message AcceptAndReply(const Message& m) {
-    auto reader = m.reader();
+    auto reader = capnp_util::reader<msg::Message>(m);
     CHECK_EQ(reader.getMsgType(), MessageType::MSG_APPEND);
-    Message reply;
-    auto builder = reply.builder();
+    Message reply = capnp_util::make<msg::Message>();
+    auto builder = capnp_util::builder<msg::Message>(reply);
     builder.setMsgType(MessageType::MSG_APPEND_RESPONSE);
     builder.setFrom(reader.getTo());
     builder.setTo(reader.getFrom());
@@ -38,7 +38,7 @@ void CommitNoopEntry(Interface& r, MemoryStorage& s) {
     // Simulate the response of MsgAppend
     auto msgs = r.ReadMessages();
     for (const auto& m : msgs) {
-        auto reader = m.reader();
+        auto reader = capnp_util::reader<msg::Message>(m);
         CHECK_EQ(reader.getMsgType(), MessageType::MSG_APPEND);
         CHECK_EQ(reader.getEntries().size(), 1);
         CHECK(reader.getEntries()[0].getData().size() == 0);
@@ -77,8 +77,8 @@ void TestUpdateTermFromMessage(StateRole state) {
             break;
     }
 
-    Message m;
-    auto builder = m.builder();
+    Message m = capnp_util::make<msg::Message>();
+    auto builder = capnp_util::builder<msg::Message>(m);
     builder.setMsgType(MessageType::MSG_APPEND);
     builder.setTerm(2);
     r.Step(m);
@@ -116,12 +116,13 @@ void TestNonleaderStartElection(StateRole state) {
 
     auto msgs = r.ReadMessages();
     std::sort(msgs.begin(), msgs.end(), [](const Message& a, const Message& b) {
-        return a.reader().getTo() < b.reader().getTo();
+        return capnp_util::reader<msg::Message>(a).getTo() <
+            capnp_util::reader<msg::Message>(b).getTo();
     });
 
     CHECK_EQ(msgs.size(), 2);
     for (size_t i = 0; i < msgs.size(); ++i) {
-        auto reader = msgs[i].reader();
+        auto reader = capnp_util::reader<msg::Message>(msgs[i]);
         CHECK_EQ(reader.getMsgType(), MessageType::MSG_REQUEST_VOTE);
         CHECK_EQ(reader.getTo(), i + 2);
         CHECK_EQ(reader.getTerm(), 2);
@@ -249,8 +250,9 @@ TEST_CASE("raft paper: leader bcast beat") {
     r->BecomeLeader();
 
     for (size_t i = 0; i < 10; ++i) {
-        std::vector<Entry> entries = {EmptyEntry(i + 1, 0)};
-        std::ignore = r->AppendEntry(entries);
+        std::vector<Entry> entries;
+        entries.push_back(EmptyEntry(i + 1, 0));
+        std::ignore = r->AppendEntry(std::move(entries));
     }
 
     for (size_t i = 0; i < hi; ++i) {
@@ -259,12 +261,13 @@ TEST_CASE("raft paper: leader bcast beat") {
 
     auto msgs = r.ReadMessages();
     std::sort(msgs.begin(), msgs.end(), [](const Message& a, const Message& b) {
-        return a.reader().getTo() < b.reader().getTo();
+        return capnp_util::reader<msg::Message>(a).getTo() <
+            capnp_util::reader<msg::Message>(b).getTo();
     });
 
     CHECK_EQ(msgs.size(), 2);
     for (const auto& m : msgs) {
-        auto reader = m.reader();
+        auto reader = capnp_util::reader<msg::Message>(m);
         CHECK_EQ(reader.getMsgType(), MessageType::MSG_HEARTBEAT);
         CHECK_EQ(reader.getTerm(), 1);
     }
@@ -319,8 +322,8 @@ TEST_CASE("raft paper: leader election in one round rpc") {
         r.Step(hup);
 
         for (const auto& [id, vote] : votes) {
-            Message m;
-            auto builder = m.builder();
+            Message m = capnp_util::make<msg::Message>();
+            auto builder = capnp_util::builder<msg::Message>(m);
             builder.setMsgType(MessageType::MSG_REQUEST_VOTE_RESPONSE);
             builder.setFrom(id);
             builder.setTo(1);
@@ -353,8 +356,8 @@ TEST_CASE("raft paper: follower vote") {
         auto r = NewTestRaft(1, {1, 2, 3}, 10, 1, storage);
         r->LoadState(MakeHardState(1, vote, 0));
 
-        Message m;
-        auto builder = m.builder();
+        Message m = capnp_util::make<msg::Message>();
+        auto builder = capnp_util::builder<msg::Message>(m);
         builder.setMsgType(MessageType::MSG_REQUEST_VOTE);
         builder.setFrom(nvote);
         builder.setTo(1);
@@ -363,7 +366,7 @@ TEST_CASE("raft paper: follower vote") {
 
         auto msgs = r.ReadMessages();
         CHECK_EQ(msgs.size(), 1);
-        auto reader = msgs[0].reader();
+        auto reader = capnp_util::reader<msg::Message>(msgs[0]);
         CHECK_EQ(reader.getMsgType(), MessageType::MSG_REQUEST_VOTE_RESPONSE);
         CHECK_EQ(reader.getReject(), wreject);
     }
@@ -377,8 +380,8 @@ TEST_CASE("raft paper: candidate fallback") {
     r1.Step(hup);
     CHECK_EQ(r1->state(), StateRole::Candidate);
 
-    Message m1;
-    auto m1_builder = m1.builder();
+    Message m1 = capnp_util::make<msg::Message>();
+    auto m1_builder = capnp_util::builder<msg::Message>(m1);
     m1_builder.setMsgType(MessageType::MSG_APPEND);
     m1_builder.setFrom(2);
     m1_builder.setTo(1);
@@ -392,8 +395,8 @@ TEST_CASE("raft paper: candidate fallback") {
     r2.Step(hup);
     CHECK_EQ(r2->state(), StateRole::Candidate);
 
-    Message m2;
-    auto m2_builder = m2.builder();
+    Message m2 = capnp_util::make<msg::Message>();
+    auto m2_builder = capnp_util::builder<msg::Message>(m2);
     m2_builder.setMsgType(MessageType::MSG_APPEND);
     m2_builder.setFrom(2);
     m2_builder.setTo(1);
@@ -431,8 +434,10 @@ TEST_CASE("raft paper: leader start replication") {
     uint64_t li = r->raft_log().LastIndex();
 
     Entry entry = NewEntry(0, 0, SOME_DATA);
+    std::vector<Entry> prop_entries;
+    prop_entries.push_back(std::move(entry));
     Message propose =
-        NewMessageWithEntries(1, 1, MessageType::MSG_PROPOSE, std::vector<Entry>{entry});
+        NewMessageWithEntries(1, 1, MessageType::MSG_PROPOSE, std::move(prop_entries));
     r.Step(propose);
 
     CHECK_EQ(r->raft_log().LastIndex(), li + 1);
@@ -440,12 +445,13 @@ TEST_CASE("raft paper: leader start replication") {
 
     auto msgs = r.ReadMessages();
     std::sort(msgs.begin(), msgs.end(), [](const Message& a, const Message& b) {
-        return a.reader().getTo() < b.reader().getTo();
+        return capnp_util::reader<msg::Message>(a).getTo() <
+            capnp_util::reader<msg::Message>(b).getTo();
     });
 
     CHECK_EQ(msgs.size(), 2);
     for (const auto& m : msgs) {
-        auto reader = m.reader();
+        auto reader = capnp_util::reader<msg::Message>(m);
         CHECK_EQ(reader.getMsgType(), MessageType::MSG_APPEND);
         CHECK_EQ(reader.getIndex(), li);
         CHECK_EQ(reader.getLogTerm(), 1);
@@ -465,8 +471,10 @@ TEST_CASE("raft paper: leader commit entry") {
     uint64_t li = r->raft_log().LastIndex();
 
     Entry entry = NewEntry(0, 0, SOME_DATA);
+    std::vector<Entry> prop_entries;
+    prop_entries.push_back(std::move(entry));
     Message propose =
-        NewMessageWithEntries(1, 1, MessageType::MSG_PROPOSE, std::vector<Entry>{entry});
+        NewMessageWithEntries(1, 1, MessageType::MSG_PROPOSE, std::move(prop_entries));
     r.Step(propose);
     r.Persist();
 
@@ -514,13 +522,15 @@ TEST_CASE("raft paper: leader acknowledge commit") {
         uint64_t li = r->raft_log().LastIndex();
 
         Entry entry = NewEntry(0, 0, SOME_DATA);
+        std::vector<Entry> prop_entries;
+        prop_entries.push_back(std::move(entry));
         Message propose =
-            NewMessageWithEntries(1, 1, MessageType::MSG_PROPOSE, std::vector<Entry>{entry});
+            NewMessageWithEntries(1, 1, MessageType::MSG_PROPOSE, std::move(prop_entries));
         r.Step(propose);
         r.Persist();
 
         for (const auto& m : r.ReadMessages()) {
-            auto reader = m.reader();
+            auto reader = capnp_util::reader<msg::Message>(m);
             if (acceptors.count(reader.getTo()) && acceptors.at(reader.getTo())) {
                 auto reply = AcceptAndReply(m);
                 r.Step(reply);
@@ -535,24 +545,27 @@ TEST_CASE("raft paper: leader acknowledge commit") {
 // Section 5.4 - Safety
 
 TEST_CASE("raft paper: vote request") {
-    struct TestCase {
+    // Test cases: (wterm) with entries
+    std::vector<uint64_t> wterms = {2, 3};
+    std::vector<std::vector<std::pair<uint64_t, uint64_t>>> ents_specs = {
+        {{1, 1}},
+        {{1, 1}, {2, 2}},
+    };
+
+    for (size_t j = 0; j < wterms.size(); ++j) {
+        uint64_t wterm = wterms[j];
+        const auto& ent_spec = ents_specs[j];
+
         std::vector<Entry> ents;
-        uint64_t wterm;
-    };
-
-    std::vector<TestCase> tests = {
-        {{EmptyEntry(1, 1)}, 2},
-        {{EmptyEntry(1, 1), EmptyEntry(2, 2)}, 3},
-    };
-
-    for (size_t j = 0; j < tests.size(); ++j) {
-        const auto& [ents, wterm] = tests[j];
+        for (const auto& [index, term] : ent_spec) {
+            ents.push_back(EmptyEntry(index, term));
+        }
 
         auto storage = std::make_shared<MemoryStorage>();
         auto r = NewTestRaft(1, {1, 2, 3}, 10, 1, storage);
 
-        Message m;
-        auto builder = m.builder();
+        Message m = capnp_util::make<msg::Message>();
+        auto builder = capnp_util::builder<msg::Message>(m);
         builder.setMsgType(MessageType::MSG_APPEND);
         builder.setFrom(2);
         builder.setTo(1);
@@ -561,7 +574,7 @@ TEST_CASE("raft paper: vote request") {
         builder.setIndex(0);
         auto entries_builder = builder.initEntries(ents.size());
         for (size_t i = 0; i < ents.size(); ++i) {
-            entries_builder.setWithCaveats(i, ents[i].reader());
+            entries_builder.setWithCaveats(i, capnp_util::reader<msg::Entry>(ents[i]));
         }
         r.Step(m);
         r.ReadMessages();
@@ -573,16 +586,17 @@ TEST_CASE("raft paper: vote request") {
 
         auto msgs = r.ReadMessages();
         std::sort(msgs.begin(), msgs.end(), [](const Message& a, const Message& b) {
-            return a.reader().getTo() < b.reader().getTo();
+            return capnp_util::reader<msg::Message>(a).getTo() <
+                capnp_util::reader<msg::Message>(b).getTo();
         });
 
         CHECK_EQ(msgs.size(), 2);
         for (size_t i = 0; i < msgs.size(); ++i) {
-            auto reader = msgs[i].reader();
+            auto reader = capnp_util::reader<msg::Message>(msgs[i]);
             CHECK_EQ(reader.getMsgType(), MessageType::MSG_REQUEST_VOTE);
             CHECK_EQ(reader.getTo(), i + 2);
             CHECK_EQ(reader.getTerm(), wterm);
-            auto last_reader = ents.back().reader();
+            auto last_reader = capnp_util::reader<msg::Entry>(ents.back());
             CHECK_EQ(reader.getIndex(), last_reader.getIndex());
             CHECK_EQ(reader.getLogTerm(), last_reader.getTerm());
         }
@@ -590,36 +604,42 @@ TEST_CASE("raft paper: vote request") {
 }
 
 TEST_CASE("raft paper: voter") {
-    struct TestCase {
-        std::vector<Entry> ents;
+    // Test cases: ents spec, log_term, index, wreject
+    struct TestData {
+        std::vector<std::pair<uint64_t, uint64_t>> ents_spec;
         uint64_t log_term;
         uint64_t index;
         bool wreject;
     };
 
-    std::vector<TestCase> tests = {
+    std::vector<TestData> tests = {
         // Same logterm
-        {{EmptyEntry(1, 1)}, 1, 1, false},
-        {{EmptyEntry(1, 1)}, 1, 2, false},
-        {{EmptyEntry(1, 1), EmptyEntry(2, 1)}, 1, 1, true},
+        {{{1, 1}}, 1, 1, false},
+        {{{1, 1}}, 1, 2, false},
+        {{{1, 1}, {2, 1}}, 1, 1, true},
         // Candidate higher logterm
-        {{EmptyEntry(1, 1)}, 2, 1, false},
-        {{EmptyEntry(1, 1)}, 2, 2, false},
-        {{EmptyEntry(1, 1), EmptyEntry(2, 1)}, 2, 1, false},
+        {{{1, 1}}, 2, 1, false},
+        {{{1, 1}}, 2, 2, false},
+        {{{1, 1}, {2, 1}}, 2, 1, false},
         // Voter higher logterm
-        {{EmptyEntry(1, 2)}, 1, 1, true},
-        {{EmptyEntry(1, 2)}, 1, 2, true},
-        {{EmptyEntry(1, 2), EmptyEntry(2, 1)}, 1, 1, true},
+        {{{1, 2}}, 1, 1, true},
+        {{{1, 2}}, 1, 2, true},
+        {{{1, 2}, {2, 1}}, 1, 1, true},
     };
 
     for (size_t i = 0; i < tests.size(); ++i) {
-        const auto& [ents, log_term, index, wreject] = tests[i];
+        const auto& test = tests[i];
+
+        std::vector<Entry> ents;
+        for (const auto& [idx, term] : test.ents_spec) {
+            ents.push_back(EmptyEntry(idx, term));
+        }
 
         auto storage = std::make_shared<MemoryStorage>();
         // Set conf_state directly instead of using ApplySnapshot
         // (ApplySnapshot would fail because first_index > snap.index)
-        ConfState conf_state;
-        auto conf_builder = conf_state.builder();
+        ConfState conf_state = capnp_util::make<msg::ConfState>();
+        auto conf_builder = capnp_util::builder<msg::ConfState>(conf_state);
         auto voters = conf_builder.initVoters(2);
         voters.set(0, 1);
         voters.set(1, 2);
@@ -628,27 +648,25 @@ TEST_CASE("raft paper: voter") {
 
         auto r = NewTestRaftWithConfig(NewTestConfig(1, 10, 1), storage);
 
-        Message m;
-        auto builder = m.builder();
+        Message m = capnp_util::make<msg::Message>();
+        auto builder = capnp_util::builder<msg::Message>(m);
         builder.setMsgType(MessageType::MSG_REQUEST_VOTE);
         builder.setFrom(2);
         builder.setTo(1);
         builder.setTerm(3);
-        builder.setLogTerm(log_term);
-        builder.setIndex(index);
+        builder.setLogTerm(test.log_term);
+        builder.setIndex(test.index);
         r.Step(m);
 
         auto msgs = r.ReadMessages();
         CHECK_EQ(msgs.size(), 1);
-        auto reader = msgs[0].reader();
+        auto reader = capnp_util::reader<msg::Message>(msgs[0]);
         CHECK_EQ(reader.getMsgType(), MessageType::MSG_REQUEST_VOTE_RESPONSE);
-        CHECK_EQ(reader.getReject(), wreject);
+        CHECK_EQ(reader.getReject(), test.wreject);
     }
 }
 
 TEST_CASE("raft paper: leader only commits log from current term") {
-    std::vector<Entry> ents = {EmptyEntry(1, 1), EmptyEntry(2, 2)};
-
     struct TestCase {
         uint64_t index;
         uint64_t wcommit;
@@ -665,11 +683,16 @@ TEST_CASE("raft paper: leader only commits log from current term") {
     for (size_t i = 0; i < tests.size(); ++i) {
         const auto& [index, wcommit] = tests[i];
 
+        // Create entries for each iteration (since they can't be copied)
+        std::vector<Entry> ents;
+        ents.push_back(EmptyEntry(1, 1));
+        ents.push_back(EmptyEntry(2, 2));
+
         auto storage = std::make_shared<MemoryStorage>();
         // Set conf_state directly instead of using ApplySnapshot
         // (ApplySnapshot would fail because first_index > snap.index)
-        ConfState conf_state;
-        auto conf_builder = conf_state.builder();
+        ConfState conf_state = capnp_util::make<msg::ConfState>();
+        auto conf_builder = capnp_util::builder<msg::ConfState>(conf_state);
         auto voters = conf_builder.initVoters(2);
         voters.set(0, 1);
         voters.set(1, 2);
@@ -686,13 +709,15 @@ TEST_CASE("raft paper: leader only commits log from current term") {
 
         // Propose an entry to current term
         Entry entry = NewEntry(0, 0, SOME_DATA);
+        std::vector<Entry> prop_entries;
+        prop_entries.push_back(std::move(entry));
         Message propose =
-            NewMessageWithEntries(1, 1, MessageType::MSG_PROPOSE, std::vector<Entry>{entry});
+            NewMessageWithEntries(1, 1, MessageType::MSG_PROPOSE, std::move(prop_entries));
         r.Step(propose);
         r.Persist();
 
-        Message resp;
-        auto resp_builder = resp.builder();
+        Message resp = capnp_util::make<msg::Message>();
+        auto resp_builder = capnp_util::builder<msg::Message>(resp);
         resp_builder.setMsgType(MessageType::MSG_APPEND_RESPONSE);
         resp_builder.setFrom(2);
         resp_builder.setTo(1);

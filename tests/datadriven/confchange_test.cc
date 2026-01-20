@@ -4,6 +4,7 @@
 #include <doctest/doctest.h>
 
 #include "datadriven.h"
+#include "raftpp/core/capnp_util.h"
 #include "raftpp/core/conf_changer.h"
 #include "raftpp/core/progress_tracker.h"
 
@@ -35,8 +36,8 @@ static std::vector<ConfChangeSingle> ParseConfChange(const std::string& input) {
             throw std::runtime_error("unknown token " + token);
         }
 
-        ConfChangeSingle cc;
-        auto builder = cc.builder();
+        ConfChangeSingle cc = capnp_util::make<msg::ConfChangeSingle>();
+        auto builder = capnp_util::builder<msg::ConfChangeSingle>(cc);
         char op = token[0];
         std::string id_str = token.substr(1);
 
@@ -55,7 +56,7 @@ static std::vector<ConfChangeSingle> ParseConfChange(const std::string& input) {
         }
 
         builder.setNodeId(std::stoull(id_str));
-        result.push_back(cc);
+        result.push_back(std::move(cc));
     }
 
     return result;

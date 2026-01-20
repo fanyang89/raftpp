@@ -57,16 +57,16 @@ Result<void> RawNode::RequestSnapshot() {
 }
 
 void RawNode::TransferLeader(const uint64_t transferee) {
-    Message m;
-    auto builder = m.builder();
+    Message m = capnp_util::make<msg::Message>();
+    auto builder = capnp_util::builder<msg::Message>(m);
     builder.setMsgType(MessageType::MSG_TRANSFER_LEADER);
     builder.setFrom(transferee);
     std::ignore = raft_.Step(m);
 }
 
 void RawNode::ReadIndex(const std::string& ctx) {
-    Message m;
-    auto builder = m.builder();
+    Message m = capnp_util::make<msg::Message>();
+    auto builder = capnp_util::builder<msg::Message>(m);
     builder.setMsgType(MessageType::MSG_READ_INDEX);
 
     auto entries = builder.initEntries(1);
@@ -88,8 +88,8 @@ Status RawNode::GetStatus() {
 }
 
 void RawNode::ReportUnreachable(uint64_t id) {
-    Message m;
-    auto builder = m.builder();
+    Message m = capnp_util::make<msg::Message>();
+    auto builder = capnp_util::builder<msg::Message>(m);
     builder.setMsgType(MessageType::MSG_UNREACHABLE);
     builder.setFrom(id);
     std::ignore = raft_.Step(m);
@@ -97,8 +97,8 @@ void RawNode::ReportUnreachable(uint64_t id) {
 
 void RawNode::ReportSnapshot(const uint64_t id, const SnapshotStatus status) {
     const auto reject = status == SnapshotStatus::Failure;
-    Message m;
-    auto builder = m.builder();
+    Message m = capnp_util::make<msg::Message>();
+    auto builder = capnp_util::builder<msg::Message>(m);
     builder.setMsgType(MessageType::MSG_SNAP_STATUS);
     builder.setFrom(id);
     builder.setReject(reject);
@@ -129,14 +129,16 @@ Ready RawNode::GetReady() {
     }
 
     const auto& hs = raft_.hard_state();
-    if (!messagesEqual<raftpp::capnp::HardState>(hs.reader(), prev_hs_.reader())) {
-        auto hs_reader = hs.reader();
-        auto prev_reader = prev_hs_.reader();
+    if (!capnp_util::equal<msg::HardState>(
+            capnp_util::reader<msg::HardState>(hs), capnp_util::reader<msg::HardState>(prev_hs_)
+        )) {
+        auto hs_reader = capnp_util::reader<msg::HardState>(hs);
+        auto prev_reader = capnp_util::reader<msg::HardState>(prev_hs_);
         if (hs_reader.getVote() != prev_reader.getVote() ||
             hs_reader.getTerm() != prev_reader.getTerm()) {
             rd.must_sync = true;
         }
-        rd.hs = hs.clone();
+        rd.hs = CloneHardState(hs);
     }
 
     if (!raft_.read_states().empty()) {
@@ -145,8 +147,8 @@ Ready RawNode::GetReady() {
     }
 
     if (const auto snapshot = raft_.raft_log().unstable().snapshot()) {
-        rd.snapshot = snapshot->get().clone();
-        auto snap_meta = rd.snapshot.reader().getMetadata();
+        rd.snapshot = CloneSnapshot(snapshot->get());
+        auto snap_meta = capnp_util::reader<msg::Snapshot>(rd.snapshot).getMetadata();
         ASSERT(commit_since_index_ <= snap_meta.getIndex());
         commit_since_index_ = snap_meta.getIndex();
         ASSERT(
@@ -160,12 +162,12 @@ Ready RawNode::GetReady() {
     const auto& unstable_entries = raft_.raft_log().unstable().entries();
     rd.entries.reserve(unstable_entries.size());
     for (const auto& entry : unstable_entries) {
-        rd.entries.push_back(entry.clone());
+        rd.entries.push_back(CloneEntry(entry));
     }
     if (!rd.entries.empty()) {
         rd.must_sync = true;
         const auto& last = rd.entries.back();
-        auto last_reader = last.reader();
+        auto last_reader = capnp_util::reader<msg::Entry>(last);
         rd_record.last_entry = {last_reader.getIndex(), last_reader.getTerm()};
     }
 
@@ -184,7 +186,10 @@ bool RawNode::HasReady() const {
         return true;
     }
 
-    if (!messagesEqual<raftpp::capnp::HardState>(raft_.hard_state().reader(), prev_hs_.reader())) {
+    if (!capnp_util::equal<msg::HardState>(
+            capnp_util::reader<msg::HardState>(raft_.hard_state()),
+            capnp_util::reader<msg::HardState>(prev_hs_)
+        )) {
         return true;
     }
 
@@ -197,7 +202,7 @@ bool RawNode::HasReady() const {
     }
 
     if (const auto& snapshot = raft_.snapshot()) {
-        auto meta = snapshot->reader().getMetadata();
+        auto meta = capnp_util::reader<msg::Snapshot>(*snapshot).getMetadata();
         if (meta.getIndex() > 0) {
             return true;
         }
@@ -254,19 +259,22 @@ LightReady RawNode::AdvanceAppend(const Ready& rd) {
     }
 
     const auto& hard_state = raft_.hard_state();
-    auto hs_reader = hard_state.reader();
-    auto prev_reader = prev_hs_.reader();
+    auto hs_reader = capnp_util::reader<msg::HardState>(hard_state);
+    auto prev_reader = capnp_util::reader<msg::HardState>(prev_hs_);
 
     if (hs_reader.getCommit() > prev_reader.getCommit()) {
         light_rd.commit_index = hs_reader.getCommit();
-        prev_hs_.builder().setCommit(hs_reader.getCommit());
+        capnp_util::builder<msg::HardState>(prev_hs_).setCommit(hs_reader.getCommit());
     } else {
         ASSERT(hs_reader.getCommit() == prev_reader.getCommit());
         light_rd.commit_index = {};
     }
 
     ASSERT(
-        messagesEqual<raftpp::capnp::HardState>(hard_state.reader(), prev_hs_.reader()),
+        capnp_util::equal<msg::HardState>(
+            capnp_util::reader<msg::HardState>(hard_state),
+            capnp_util::reader<msg::HardState>(prev_hs_)
+        ),
         "hard state != prev_hs"
     );
     return light_rd;
@@ -286,7 +294,7 @@ void RawNode::CommitReady(const Ready& rd) {
     }
 
     if (const auto& hs = rd.hs) {
-        prev_hs_ = hs->clone();
+        prev_hs_ = CloneHardState(*hs);
     }
 
     const auto rd_record = records_.back();
@@ -328,8 +336,8 @@ LightReady RawNode::GetLightReady() {
 
     if (!rd.committed_entries.empty()) {
         const auto& e = rd.committed_entries.back();
-        ASSERT(commit_since_index_ < e.reader().getIndex());
-        commit_since_index_ = e.reader().getIndex();
+        ASSERT(commit_since_index_ < capnp_util::reader<msg::Entry>(e).getIndex());
+        commit_since_index_ = capnp_util::reader<msg::Entry>(e).getIndex();
     }
 
     if (!raft_.messages().empty()) {
@@ -345,15 +353,15 @@ bool RawNode::Tick() {
 }
 
 Result<void> RawNode::Campaign() {
-    Message m;
-    auto builder = m.builder();
+    Message m = capnp_util::make<msg::Message>();
+    auto builder = capnp_util::builder<msg::Message>(m);
     builder.setMsgType(MessageType::MSG_HUP);
     return raft_.Step(m);
 }
 
 Result<void> RawNode::Propose(const std::string& ctx, const std::string& data) {
-    Message m;
-    auto m_builder = m.builder();
+    Message m = capnp_util::make<msg::Message>();
+    auto m_builder = capnp_util::builder<msg::Message>(m);
     m_builder.setMsgType(MessageType::MSG_PROPOSE);
     m_builder.setFrom(raft_.id());
 
@@ -374,15 +382,15 @@ void RawNode::Ping() {
 }
 
 Result<void> RawNode::ProposeConfChange(const std::string& ctx, const ConfChangeV2& cc) {
-    Message m;
-    auto m_builder = m.builder();
+    Message m = capnp_util::make<msg::Message>();
+    auto m_builder = capnp_util::builder<msg::Message>(m);
     m_builder.setMsgType(MessageType::MSG_PROPOSE);
 
     auto entries = m_builder.initEntries(1);
     auto entry_builder = entries[0];
     entry_builder.setEntryType(EntryType::ENTRY_CONF_CHANGE_V2);
 
-    const std::string serialized = cc.serializeAsString();
+    const std::string serialized = capnp_util::toString(cc);
     entry_builder.setData(
         kj::arrayPtr(reinterpret_cast<const kj::byte*>(serialized.data()), serialized.size())
     );
@@ -398,7 +406,7 @@ Result<ConfState> RawNode::ApplyConfChange(const ConfChangeV2& cc) {
 }
 
 Result<void> RawNode::Step(Message m) {
-    auto reader = m.reader();
+    auto reader = capnp_util::reader<msg::Message>(m);
     if (IsLocalMessage(reader.getMsgType())) {
         return RaftError(RaftErrorCode::StepLocalMsg);
     }

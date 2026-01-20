@@ -36,9 +36,6 @@ namespace raftpp {
 
 Snapshot NewSnapshot(uint64_t index, uint64_t term);
 
-bool operator==(const Entry& e1, const Entry& e2);
-bool operator==(const HardState& e1, const HardState& e2);
-
 doctest::String toString(const std::vector<Entry>& entries);
 doctest::String toString(const std::optional<std::vector<Entry>>& entries);
 doctest::String toString(const RaftError& error);

@@ -2,6 +2,7 @@
 
 #include <spdlog/spdlog.h>
 
+#include "raftpp/core/capnp_util.h"
 #include "raftpp/raftor/wal/record.h"
 
 namespace raftpp::raftor::wal {
@@ -51,8 +52,9 @@ Result<void> WAL::Initialize(const WALConfig& config) {
 
     SPDLOG_INFO(
         "WAL opened at {}: first_index={}, last_index={}, term={}, vote={}", config_.dir.string(),
-        first_index_, LastIndexUnlocked(), hard_state_.reader().getTerm(),
-        hard_state_.reader().getVote()
+        first_index_, LastIndexUnlocked(),
+        capnp_util::reader<msg::HardState>(hard_state_).getTerm(),
+        capnp_util::reader<msg::HardState>(hard_state_).getVote()
     );
 
     return {};
@@ -91,7 +93,7 @@ Result<void> WAL::Recover() {
 
     // Verify consistency
     uint64_t last_idx = LastIndexUnlocked();
-    auto hs_reader = hard_state_.reader();
+    auto hs_reader = capnp_util::reader<msg::HardState>(hard_state_);
     if (last_idx < hs_reader.getCommit()) {
         return RaftError(
             FatalError{fmt::format(
@@ -180,14 +182,15 @@ Result<void> WAL::ReplaySegment(Segment* segment) {
                     const ::capnp::word* words =
                         reinterpret_cast<const ::capnp::word*>(payload.data());
                     size_t word_count = payload.size() / sizeof(::capnp::word);
-                    entry =
-                        Entry::parseFromWords(kj::ArrayPtr<const ::capnp::word>(words, word_count));
+                    entry = capnp_util::fromWords<msg::Entry>(
+                        kj::ArrayPtr<const ::capnp::word>(words, word_count)
+                    );
                 } catch (...) {
                     SPDLOG_WARN("failed to parse entry at offset {}", offset);
                     break;
                 }
 
-                auto entry_reader = entry.reader();
+                auto entry_reader = capnp_util::reader<msg::Entry>(entry);
                 // Only add entries >= first_index (entries before may have been compacted)
                 if (entry_reader.getIndex() >= first_index_) {
                     index_.Insert(
@@ -217,11 +220,11 @@ Result<void> WAL::ReplaySegment(Segment* segment) {
                         const ::capnp::word* words =
                             reinterpret_cast<const ::capnp::word*>(payload.data() + pos);
                         size_t word_count = entry_len / sizeof(::capnp::word);
-                        entry = Entry::parseFromWords(
+                        entry = capnp_util::fromWords<msg::Entry>(
                             kj::ArrayPtr<const ::capnp::word>(words, word_count)
                         );
 
-                        auto entry_reader = entry.reader();
+                        auto entry_reader = capnp_util::reader<msg::Entry>(entry);
                         if (entry_reader.getIndex() >= first_index_) {
                             // For batch, we store the batch offset but track individual entries
                             index_.Insert(
@@ -243,12 +246,13 @@ Result<void> WAL::ReplaySegment(Segment* segment) {
                     const ::capnp::word* words =
                         reinterpret_cast<const ::capnp::word*>(payload.data());
                     size_t word_count = payload.size() / sizeof(::capnp::word);
-                    hs = HardState::parseFromWords(
+                    hs = capnp_util::fromWords<msg::HardState>(
                         kj::ArrayPtr<const ::capnp::word>(words, word_count)
                     );
 
                     // Only update if this is newer
-                    if (hs.reader().getTerm() >= hard_state_.reader().getTerm()) {
+                    if (capnp_util::reader<msg::HardState>(hs).getTerm() >=
+                        capnp_util::reader<msg::HardState>(hard_state_).getTerm()) {
                         hard_state_ = std::move(hs);
                     }
                 } catch (...) {
@@ -273,7 +277,7 @@ Result<void> WAL::Append(std::span<const Entry> entries) {
 
     // Verify entries are continuous
     uint64_t expected_index = LastIndexUnlocked() + 1;
-    auto first_entry_reader = entries.front().reader();
+    auto first_entry_reader = capnp_util::reader<msg::Entry>(entries.front());
     if (first_entry_reader.getIndex() != expected_index) {
         // Handle truncation case - entries may be replacing existing ones
         if (first_entry_reader.getIndex() < expected_index &&
@@ -298,7 +302,7 @@ Result<void> WAL::Append(std::span<const Entry> entries) {
 
     // Write entries
     for (const auto& entry : entries) {
-        auto serialized = entry.serializeAsBytes();
+        auto serialized = capnp_util::toBytes(entry);
 
         RecordBuilder builder;
         builder.SetType(RecordType::Entry);
@@ -307,7 +311,7 @@ Result<void> WAL::Append(std::span<const Entry> entries) {
         );
         auto record = builder.Build();
 
-        auto entry_reader = entry.reader();
+        auto entry_reader = capnp_util::reader<msg::Entry>(entry);
 
         // Check if we need to roll segment
         auto* segment = *segment_result;
@@ -352,10 +356,10 @@ Result<void> WAL::Append(std::span<const Entry> entries) {
 Result<void> WAL::SaveHardState(const HardState& hs) {
     std::unique_lock lock(mutex_);
 
-    hard_state_ = hs.clone();
+    hard_state_ = CloneHardState(hs);
 
     // Write hard state record to WAL
-    auto serialized = hs.serializeAsBytes();
+    auto serialized = capnp_util::toBytes(hs);
     RecordBuilder builder;
     builder.SetType(RecordType::HardState);
     builder.SetPayload(
@@ -375,8 +379,8 @@ Result<void> WAL::SaveHardState(const HardState& hs) {
 
     // Also save to metadata file for durability
     WALMetadata meta;
-    meta.hard_state = hard_state_.clone();
-    meta.conf_state = conf_state_.clone();
+    meta.hard_state = CloneHardState(hard_state_);
+    meta.conf_state = CloneConfState(conf_state_);
     meta.first_index = first_index_;
     meta.snapshot_index = snapshot_index_;
     meta.snapshot_term = snapshot_term_;
@@ -447,7 +451,9 @@ Result<std::vector<Entry>> WAL::ReadEntries(
             auto payload = parser.Payload();
             const ::capnp::word* words = reinterpret_cast<const ::capnp::word*>(payload.data());
             size_t word_count = payload.size() / sizeof(::capnp::word);
-            entry = Entry::parseFromWords(kj::ArrayPtr<const ::capnp::word>(words, word_count));
+            entry = capnp_util::fromWords<msg::Entry>(
+                kj::ArrayPtr<const ::capnp::word>(words, word_count)
+            );
         } catch (...) {
             return RaftError(StorageErrorCode::EntryParseError);
         }
@@ -559,8 +565,8 @@ Result<void> WAL::Compact(uint64_t compact_index) {
 
     // Save metadata first (for crash safety)
     WALMetadata meta;
-    meta.hard_state = hard_state_.clone();
-    meta.conf_state = conf_state_.clone();
+    meta.hard_state = CloneHardState(hard_state_);
+    meta.conf_state = CloneConfState(conf_state_);
     meta.first_index = first_index_;
     meta.snapshot_index = snapshot_index_;
     meta.snapshot_term = snapshot_term_;
@@ -588,7 +594,7 @@ Result<void> WAL::Compact(uint64_t compact_index) {
 Result<void> WAL::ApplySnapshot(const Snapshot& snapshot) {
     std::unique_lock lock(mutex_);
 
-    auto snap_reader = snapshot.reader();
+    auto snap_reader = capnp_util::reader<msg::Snapshot>(snapshot);
     const auto& meta = snap_reader.getMetadata();
 
     if (meta.getIndex() <= snapshot_index_) {
@@ -601,7 +607,7 @@ Result<void> WAL::ApplySnapshot(const Snapshot& snapshot) {
 
     // Copy ConfState from snapshot metadata
     auto conf_src = meta.getConfState();
-    auto conf_builder = conf_state_.builder();
+    auto conf_builder = capnp_util::builder<msg::ConfState>(conf_state_);
 
     auto voters_src = conf_src.getVoters();
     auto voters_dst = conf_builder.initVoters(voters_src.size());
@@ -636,8 +642,8 @@ Result<void> WAL::ApplySnapshot(const Snapshot& snapshot) {
 
     // Save metadata
     WALMetadata wal_meta;
-    wal_meta.hard_state = hard_state_.clone();
-    wal_meta.conf_state = conf_state_.clone();
+    wal_meta.hard_state = CloneHardState(hard_state_);
+    wal_meta.conf_state = CloneConfState(conf_state_);
     wal_meta.first_index = first_index_;
     wal_meta.snapshot_index = snapshot_index_;
     wal_meta.snapshot_term = snapshot_term_;

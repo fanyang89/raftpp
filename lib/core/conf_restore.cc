@@ -10,43 +10,43 @@ std::pair<std::vector<ConfChangeSingle>, std::vector<ConfChangeSingle>> ToConfCh
     std::vector<ConfChangeSingle> outgoing;
     std::vector<ConfChangeSingle> incoming;
 
-    auto cs_reader = cs.reader();
+    auto cs_reader = capnp_util::reader<msg::ConfState>(cs);
 
     for (const uint64_t id : cs_reader.getVotersOutgoing()) {
-        ConfChangeSingle s;
-        auto builder = s.builder();
+        ConfChangeSingle s = capnp_util::make<msg::ConfChangeSingle>();
+        auto builder = capnp_util::builder<msg::ConfChangeSingle>(s);
         builder.setNodeId(id);
         builder.setChangeType(ConfChangeType::ADD_NODE);
         outgoing.emplace_back(std::move(s));
     }
 
     for (const uint64_t id : cs_reader.getVotersOutgoing()) {
-        ConfChangeSingle s;
-        auto builder = s.builder();
+        ConfChangeSingle s = capnp_util::make<msg::ConfChangeSingle>();
+        auto builder = capnp_util::builder<msg::ConfChangeSingle>(s);
         builder.setNodeId(id);
         builder.setChangeType(ConfChangeType::REMOVE_NODE);
         incoming.emplace_back(std::move(s));
     }
 
     for (const uint64_t id : cs_reader.getVoters()) {
-        ConfChangeSingle s;
-        auto builder = s.builder();
+        ConfChangeSingle s = capnp_util::make<msg::ConfChangeSingle>();
+        auto builder = capnp_util::builder<msg::ConfChangeSingle>(s);
         builder.setNodeId(id);
         builder.setChangeType(ConfChangeType::ADD_NODE);
         incoming.emplace_back(std::move(s));
     }
 
     for (const uint64_t id : cs_reader.getLearners()) {
-        ConfChangeSingle s;
-        auto builder = s.builder();
+        ConfChangeSingle s = capnp_util::make<msg::ConfChangeSingle>();
+        auto builder = capnp_util::builder<msg::ConfChangeSingle>(s);
         builder.setNodeId(id);
         builder.setChangeType(ConfChangeType::ADD_LEARNER_NODE);
         incoming.emplace_back(std::move(s));
     }
 
     for (const uint64_t id : cs_reader.getLearnersNext()) {
-        ConfChangeSingle s;
-        auto builder = s.builder();
+        ConfChangeSingle s = capnp_util::make<msg::ConfChangeSingle>();
+        auto builder = capnp_util::builder<msg::ConfChangeSingle>(s);
         builder.setNodeId(id);
         builder.setChangeType(ConfChangeType::ADD_LEARNER_NODE);
         incoming.emplace_back(std::move(s));
@@ -103,7 +103,9 @@ Result<void> Restore(ProgressTracker& tracker, uint64_t next_idx, const ConfStat
             }
         }
 
-        if (const auto r = ConfChanger(tracker).EnterJoint(cs.reader().getAutoLeave(), incoming)) {
+        if (const auto r = ConfChanger(tracker).EnterJoint(
+                capnp_util::reader<msg::ConfState>(cs).getAutoLeave(), incoming
+            )) {
             const TrackerConfiguration& cfg = r->first;
             const MapChange& changes = r->second;
             tracker.ApplyConf(cfg, changes, next_idx);

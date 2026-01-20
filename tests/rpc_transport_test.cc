@@ -8,6 +8,7 @@
 #include <kj/array.h>
 #include <spdlog/fmt/fmt.h>
 
+#include "raftpp/core/capnp_util.h"
 #include "raftpp/raftor/rpc/capnp_transport.h"
 
 using namespace raftpp;
@@ -42,9 +43,16 @@ class MessageCollector {
         return messages_.size();
     }
 
-    std::vector<Message> GetMessages() {
+    // Access first message for reading
+    Message& First() {
         std::lock_guard lock(mutex_);
-        return messages_;
+        return messages_[0];
+    }
+
+    // Access message at index
+    Message& At(size_t idx) {
+        std::lock_guard lock(mutex_);
+        return messages_[idx];
     }
 
     void Clear() {
@@ -162,8 +170,8 @@ bool WaitForAll(
 
 // Create a simple test message
 Message MakeMessage(uint64_t from, uint64_t to, MessageType type = MessageType::MSG_APPEND) {
-    Message msg;
-    auto builder = msg.builder();
+    Message msg = capnp_util::make<msg::Message>();
+    auto builder = capnp_util::builder<msg::Message>(msg);
     builder.setFrom(from);
     builder.setTo(to);
     builder.setMsgType(type);
@@ -293,9 +301,8 @@ TEST_SUITE("rpc::capnp") {
         CHECK(received);
 
         if (received) {
-            auto messages = collector2.GetMessages();
-            CHECK(messages.size() == 1);
-            auto reader = messages[0].reader();
+            CHECK(collector2.Count() == 1);
+            auto reader = capnp_util::reader<msg::Message>(collector2.First());
             CHECK(reader.getFrom() == 1);
             CHECK(reader.getTo() == 2);
         }
@@ -510,8 +517,8 @@ TEST_SUITE("rpc::capnp") {
         PollBoth(t1, t2, 500ms);
 
         // Create large message with entries
-        Message msg;
-        auto builder = msg.builder();
+        Message msg = capnp_util::make<msg::Message>();
+        auto builder = capnp_util::builder<msg::Message>(msg);
         builder.setFrom(1);
         builder.setTo(2);
         builder.setMsgType(MessageType::MSG_APPEND);
@@ -536,8 +543,7 @@ TEST_SUITE("rpc::capnp") {
         CHECK(received);
 
         if (received) {
-            auto messages = collector.GetMessages();
-            auto reader = messages[0].reader();
+            auto reader = capnp_util::reader<msg::Message>(collector.First());
             CHECK(reader.getEntries().size() == 100);
         }
 
@@ -567,8 +573,8 @@ TEST_SUITE("rpc::capnp") {
         PollBoth(t1, t2, 500ms);
 
         // Create message with entries
-        Message msg;
-        auto builder = msg.builder();
+        Message msg = capnp_util::make<msg::Message>();
+        auto builder = capnp_util::builder<msg::Message>(msg);
         builder.setFrom(1);
         builder.setTo(2);
         builder.setMsgType(MessageType::MSG_APPEND);
@@ -591,9 +597,8 @@ TEST_SUITE("rpc::capnp") {
         bool received = WaitForBoth(t1, t2, [&] { return collector.Count() >= 1; }, 2s);
         REQUIRE(received);
 
-        auto messages = collector.GetMessages();
-        REQUIRE(messages.size() >= 1);
-        auto reader = messages[0].reader();
+        REQUIRE(collector.Count() >= 1);
+        auto reader = capnp_util::reader<msg::Message>(collector.First());
         CHECK(reader.getTerm() == 5);
         CHECK(reader.getEntries().size() == 5);
         CHECK(DataToString(reader.getEntries()[2].getData()) == "entry_2");
