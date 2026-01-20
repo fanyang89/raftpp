@@ -19,15 +19,15 @@ using OwnedBuilder = std::unique_ptr<::capnp::MallocMessageBuilder>;
 
 // Namespace for Cap'n Proto message types
 namespace msg {
-using Entry = raftpp::capnp::Entry;
-using Snapshot = raftpp::capnp::Snapshot;
-using SnapshotMetadata = raftpp::capnp::SnapshotMetadata;
-using Message = raftpp::capnp::Message;
-using HardState = raftpp::capnp::HardState;
-using ConfState = raftpp::capnp::ConfState;
-using ConfChange = raftpp::capnp::ConfChange;
-using ConfChangeSingle = raftpp::capnp::ConfChangeSingle;
-using ConfChangeV2 = raftpp::capnp::ConfChangeV2;
+using Entry = capnp::Entry;
+using Snapshot = capnp::Snapshot;
+using SnapshotMetadata = capnp::SnapshotMetadata;
+using Message = capnp::Message;
+using HardState = capnp::HardState;
+using ConfState = capnp::ConfState;
+using ConfChange = capnp::ConfChange;
+using ConfChangeSingle = capnp::ConfChangeSingle;
+using ConfChangeV2 = capnp::ConfChangeV2;
 }  // namespace msg
 
 // Main type aliases - use unique_ptr for direct ownership
@@ -42,10 +42,10 @@ using ConfChangeSingle = OwnedBuilder<msg::ConfChangeSingle>;
 using ConfChangeV2 = OwnedBuilder<msg::ConfChangeV2>;
 
 // Enum type aliases (these are directly usable from Cap'n Proto)
-using EntryType = raftpp::capnp::EntryType;
-using MessageType = raftpp::capnp::MessageType;
-using ConfChangeType = raftpp::capnp::ConfChangeType;
-using ConfChangeTransition = raftpp::capnp::ConfChangeTransition;
+using EntryType = capnp::EntryType;
+using MessageType = capnp::MessageType;
+using ConfChangeType = capnp::ConfChangeType;
+using ConfChangeTransition = capnp::ConfChangeTransition;
 
 // Helper functions for common operations
 

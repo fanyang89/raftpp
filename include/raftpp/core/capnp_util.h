@@ -143,4 +143,20 @@ std::unique_ptr<capnp::MallocMessageBuilder> fromString(std::string_view str) {
     );
 }
 
+template <typename T>
+bool EqualMessages(
+    const std::vector<std::unique_ptr<capnp::MallocMessageBuilder>>& a,
+    const std::vector<std::unique_ptr<capnp::MallocMessageBuilder>>& b
+) {
+    if (a.size() != b.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < a.size(); ++i) {
+        if (!capnp_util::equal<T>(capnp_util::reader<T>(a[i]), capnp_util::reader<T>(b[i]))) {
+            return false;
+        }
+    }
+    return true;
+}
+
 }  // namespace raftpp::capnp_util

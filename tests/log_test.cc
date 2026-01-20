@@ -1,5 +1,6 @@
 #include <doctest/doctest.h>
 
+#include "harness/test_util.h"
 #include "raftpp/core/memory_storage.h"
 #include "raftpp/core/raft_log.h"
 #include "raftpp/core/types.h"
@@ -102,7 +103,16 @@ TEST_CASE("raft_log: append") {
 
         if (const auto ents =
                 raft_log.GetEntries(1, std::nullopt, GetEntriesContext::Empty(false))) {
-            CHECK_EQ(ents, w_entries);
+            REQUIRE(ents);
+            REQUIRE_EQ(ents->size(), w_entries.size());
+            for (size_t i = 0; i < ents->size(); ++i) {
+                CHECK(
+                    capnp_util::equal<msg::Entry>(
+                        capnp_util::reader<msg::Entry>(ents->at(i)),
+                        capnp_util::reader<msg::Entry>(w_entries.at(i))
+                    )
+                );
+            }
         } else {
             FAIL("GetEntries()");
         }
@@ -252,7 +262,7 @@ TEST_CASE("raft_log: log restore") {
     REQUIRE(store->MayAppend(entries));
     RaftLog raft_log(DefaultConfig(), std::move(store));
 
-    CHECK_EQ(raft_log.AllEntries(), entries);
+    CHECK(raftpp::operator==(raft_log.AllEntries(), entries));
     CHECK_EQ(index + 1, raft_log.FirstIndex());
     CHECK_EQ(index, raft_log.committed());
     CHECK_EQ(index + 2, raft_log.persisted());
@@ -359,8 +369,7 @@ TEST_CASE("raft_log: unstable entries") {
             auto reader = EntryReader(e);
             raft_log.StableEntries(reader.getIndex(), reader.getTerm());
         }
-        CHECK_EQ(ents, previous_ents);
-
+        CHECK(raftpp::operator==(ents, previous_ents));
         CHECK_EQ(3, raft_log.unstable().offset());
     }
 }
