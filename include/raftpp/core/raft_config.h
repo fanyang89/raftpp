@@ -5,12 +5,12 @@
 
 namespace raftpp {
 
-constexpr size_t HEARTBEAT_TICK = 2;
+constexpr size_t kHeartbeatTick = 2;
 
 struct Config {
     uint64_t id = 0;
-    size_t election_tick = HEARTBEAT_TICK * 10;
-    size_t heartbeat_tick = HEARTBEAT_TICK;
+    size_t election_tick = kHeartbeatTick * 10;
+    size_t heartbeat_tick = kHeartbeatTick;
     uint64_t applied = 0;
     uint64_t max_size_per_message = 0;
     size_t max_inflight_messages = 256;

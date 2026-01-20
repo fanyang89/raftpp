@@ -228,7 +228,7 @@ TEST_CASE("request snapshot") {
     uint64_t request_snapshot_idx = r->raft_log().committed();
     builder.setIndex(11);
     builder.setReject(true);
-    builder.setRejectHint(INVALID_INDEX);
+    builder.setRejectHint(kInvalidIndex);
     builder.setRequestSnapshot(request_snapshot_idx);
 
     // Ignore out of order request snapshot messages.

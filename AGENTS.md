@@ -8,7 +8,11 @@ raftpp is a C++ implementation of the RAFT consensus algorithm. It requires C++2
 
 ## Coding Style
 
-This project follows the [Google C++ Style Guide](https://google.github.io/styleguide/cppguide.html). All code contributions must adhere to this style.
+This project follows the [Google C++ Style Guide](https://google.github.io/styleguide/cppguide.html) with the following intentional deviation:
+
+**Accessor Methods**: Simple getter methods that return member references use `snake_case` matching their member variable names (e.g., `raft_log()` for `raft_log_`). All other functions use `CamelCase` per Google style.
+
+All code contributions must adhere to this style.
 
 ## Build Commands
 

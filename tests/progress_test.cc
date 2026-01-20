@@ -33,7 +33,7 @@ TEST_SUITE_BEGIN("progress");
 TEST_CASE("progress: resume") {
     ProgressDebug p(2);
     p.paused() = true;
-    std::ignore = p.MaybeDecTo(1, 1, INVALID_INDEX);
+    std::ignore = p.MaybeDecTo(1, 1, kInvalidIndex);
     CHECK_FALSE(p.paused());
 
     p.paused() = true;
@@ -193,7 +193,7 @@ TEST_CASE("progress: maybe decr") {
             p.state() = test.state;
             p.matched() = test.matched;
 
-            const bool changed = p.MaybeDecTo(test.rejected, test.last, INVALID_INDEX);
+            const bool changed = p.MaybeDecTo(test.rejected, test.last, kInvalidIndex);
 
             CHECK_EQ(changed, test.expected_changed);
             CHECK_EQ(p.matched(), test.matched);

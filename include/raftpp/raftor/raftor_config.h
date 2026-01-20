@@ -6,8 +6,8 @@
 #include <string>
 #include <vector>
 
-#include "../core/error.h"
-#include "../core/raft_config.h"
+#include "raftpp/core/error.h"
+#include "raftpp/core/raft_config.h"
 
 namespace raftpp::raftor {
 
