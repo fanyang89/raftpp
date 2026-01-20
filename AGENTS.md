@@ -6,6 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 raftpp is a C++ implementation of the RAFT consensus algorithm. It requires C++23 and uses CMake with Ninja as the build system.
 
+## Coding Style
+
+This project follows the [Google C++ Style Guide](https://google.github.io/styleguide/cppguide.html). All code contributions must adhere to this style.
+
 ## Build Commands
 
 ```bash
