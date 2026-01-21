@@ -35,6 +35,9 @@ class WAL {
     // Save hard state
     [[nodiscard]] Result<void> SaveHardState(const HardState& hs);
 
+    // Save conf state
+    [[nodiscard]] Result<void> SaveConfState(const ConfState& cs);
+
     // Read entries in the range [low, high)
     // If max_size is specified, returns at most that many bytes (but at least one entry)
     [[nodiscard]] Result<std::vector<Entry>> ReadEntries(

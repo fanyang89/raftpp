@@ -400,6 +400,27 @@ Result<void> WAL::SaveHardState(const HardState& hs) {
     return {};
 }
 
+Result<void> WAL::SaveConfState(const ConfState& cs) {
+    std::unique_lock lock(mutex_);
+
+    conf_state_ = CloneConfState(cs);
+
+    // Save to metadata file for durability
+    WALMetadata meta;
+    meta.hard_state = CloneHardState(hard_state_);
+    meta.conf_state = CloneConfState(conf_state_);
+    meta.first_index = first_index_;
+    meta.snapshot_index = snapshot_index_;
+    meta.snapshot_term = snapshot_term_;
+
+    auto save_result = metadata_store_->Save(meta);
+    if (!save_result) {
+        return save_result;
+    }
+
+    return {};
+}
+
 Result<std::vector<Entry>> WAL::ReadEntries(
     uint64_t low, uint64_t high, std::optional<uint64_t> max_size
 ) const {

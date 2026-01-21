@@ -846,6 +846,255 @@ TEST_CASE("error_preservation: config validation returns specific errors") {
     }
 }
 
+// =============================================================================
+// Raftor Single Node Integration Tests
+// =============================================================================
+
+TEST_CASE("raftor: single node propose entry") {
+    auto temp_dir = std::filesystem::temp_directory_path() / "raftpp_test_single_node";
+    std::filesystem::remove_all(temp_dir);
+    std::filesystem::create_directories(temp_dir);
+
+    RaftorConfig config;
+    config.node_id = 1;
+    config.listen_addr = "127.0.0.1:19991";
+    config.data_dir = temp_dir;
+    config.election_tick = 10;
+    config.heartbeat_tick = 2;
+
+    wal::WALConfig wal_config;
+    wal_config.dir = temp_dir / "wal";
+
+    auto storage_result = wal::WALStorage::Open(wal_config);
+    REQUIRE(storage_result.has_value());
+    auto storage = std::move(*storage_result);
+
+    ConfState conf_state = capnp_util::make<msg::ConfState>();
+    auto conf_builder = capnp_util::builder<msg::ConfState>(conf_state);
+    auto voters = conf_builder.initVoters(1);
+    voters.set(0, 1);
+
+    storage->SetConfState(conf_state);
+
+    HardState hard_state = capnp_util::make<msg::HardState>();
+    auto hs_builder = capnp_util::builder<msg::HardState>(hard_state);
+    hs_builder.setCommit(0);
+    hs_builder.setTerm(0);
+    hs_builder.setVote(0);
+
+    storage->SetHardState(std::move(hard_state));
+
+    auto sm = std::make_unique<MockStateMachine>();
+    auto transport = std::make_unique<MockTransport>();
+
+    auto create_result = Raftor::Create(config, std::move(sm), storage, std::move(transport));
+    REQUIRE(create_result.has_value());
+    auto& raftor = **create_result;
+
+    auto result = raftor.Start();
+    REQUIRE(result.has_value());
+
+    CHECK_FALSE(raftor.IsLeader());
+
+    for (int i = 0; i < 25; i++) {
+        raftor.Tick();
+    }
+
+    CHECK(raftor.IsLeader());
+
+    auto status = raftor.GetStatus();
+    CHECK(status.id == 1);
+    CHECK(status.role == StateRole::Leader);
+    CHECK(status.term == 1);
+
+    std::atomic<bool> async_callback_called{false};
+    Result<std::string> async_result;
+
+    raftor.Propose("async_data", [&](Result<std::string> result) {
+        async_callback_called = true;
+        async_result = std::move(result);
+    });
+
+    for (int i = 0; i < 20; i++) {
+        raftor.Tick();
+    }
+
+    CHECK(async_callback_called);
+    REQUIRE(async_result.has_value());
+    CHECK(async_result->find("async_data") != std::string::npos);
+
+    {
+        std::atomic<bool> sync_callback_called{false};
+        Result<std::string> sync_result;
+        raftor.Propose("sync_data", [&](Result<std::string> result) {
+            sync_callback_called = true;
+            sync_result = std::move(result);
+        });
+
+        for (int i = 0; i < 20; i++) {
+            raftor.Tick();
+        }
+
+        CHECK(sync_callback_called);
+        REQUIRE(sync_result.has_value());
+        CHECK(sync_result->find("sync_data") != std::string::npos);
+    }
+
+    for (int i = 0; i < 20; i++) {
+        raftor.Tick();
+    }
+
+    raftor.Stop();
+
+    std::filesystem::remove_all(temp_dir);
+}
+
+TEST_CASE("raftor: single node propose multiple entries") {
+    auto temp_dir = std::filesystem::temp_directory_path() / "raftpp_test_multi_entries";
+    std::filesystem::remove_all(temp_dir);
+    std::filesystem::create_directories(temp_dir);
+
+    RaftorConfig config;
+    config.node_id = 1;
+    config.listen_addr = "127.0.0.1:19992";
+    config.data_dir = temp_dir;
+    config.election_tick = 10;
+    config.heartbeat_tick = 2;
+
+    wal::WALConfig wal_config;
+    wal_config.dir = temp_dir / "wal";
+
+    auto storage_result = wal::WALStorage::Open(wal_config);
+    REQUIRE(storage_result.has_value());
+    auto storage = std::move(*storage_result);
+
+    ConfState conf_state = capnp_util::make<msg::ConfState>();
+    auto conf_builder = capnp_util::builder<msg::ConfState>(conf_state);
+    auto voters = conf_builder.initVoters(1);
+    voters.set(0, 1);
+
+    storage->SetConfState(conf_state);
+
+    HardState hard_state = capnp_util::make<msg::HardState>();
+    auto hs_builder = capnp_util::builder<msg::HardState>(hard_state);
+    hs_builder.setCommit(0);
+    hs_builder.setTerm(0);
+    hs_builder.setVote(0);
+
+    storage->SetHardState(std::move(hard_state));
+
+    auto sm = std::make_unique<MockStateMachine>();
+    auto transport = std::make_unique<MockTransport>();
+
+    auto create_result = Raftor::Create(config, std::move(sm), storage, std::move(transport));
+    REQUIRE(create_result.has_value());
+    auto& raftor = **create_result;
+
+    auto result = raftor.Start();
+    REQUIRE(result.has_value());
+
+    for (int i = 0; i < 25; i++) {
+        raftor.Tick();
+    }
+
+    REQUIRE(raftor.IsLeader());
+
+    constexpr int num_entries = 5;
+    std::vector<Result<std::string>> results;
+    std::atomic<int> callback_count{0};
+
+    for (int i = 0; i < num_entries; i++) {
+        const auto idx = i;
+        raftor.Propose("entry_" + std::to_string(i), [&](Result<std::string> result) {
+            results.push_back(std::move(result));
+            callback_count++;
+        });
+    }
+
+    for (int i = 0; i < 30; i++) {
+        raftor.Tick();
+    }
+
+    CHECK(callback_count == num_entries);
+    for (int i = 0; i < num_entries; i++) {
+        REQUIRE(results[i].has_value());
+    }
+
+    raftor.Stop();
+
+    std::filesystem::remove_all(temp_dir);
+}
+
+TEST_CASE("raftor: single node read index") {
+    auto temp_dir = std::filesystem::temp_directory_path() / "raftpp_test_read_index";
+    std::filesystem::remove_all(temp_dir);
+    std::filesystem::create_directories(temp_dir);
+
+    RaftorConfig config;
+    config.node_id = 1;
+    config.listen_addr = "127.0.0.1:19993";
+    config.data_dir = temp_dir;
+    config.election_tick = 10;
+    config.heartbeat_tick = 2;
+
+    wal::WALConfig wal_config;
+    wal_config.dir = temp_dir / "wal";
+
+    auto storage_result = wal::WALStorage::Open(wal_config);
+    REQUIRE(storage_result.has_value());
+    auto storage = std::move(*storage_result);
+
+    ConfState conf_state = capnp_util::make<msg::ConfState>();
+    auto conf_builder = capnp_util::builder<msg::ConfState>(conf_state);
+    auto voters = conf_builder.initVoters(1);
+    voters.set(0, 1);
+
+    storage->SetConfState(conf_state);
+
+    HardState hard_state = capnp_util::make<msg::HardState>();
+    auto hs_builder = capnp_util::builder<msg::HardState>(hard_state);
+    hs_builder.setCommit(0);
+    hs_builder.setTerm(0);
+    hs_builder.setVote(0);
+
+    storage->SetHardState(std::move(hard_state));
+
+    auto sm = std::make_unique<MockStateMachine>();
+    auto transport = std::make_unique<MockTransport>();
+
+    auto create_result = Raftor::Create(config, std::move(sm), storage, std::move(transport));
+    REQUIRE(create_result.has_value());
+    auto& raftor = **create_result;
+
+    auto result = raftor.Start();
+    REQUIRE(result.has_value());
+
+    for (int i = 0; i < 25; i++) {
+        raftor.Tick();
+    }
+
+    REQUIRE(raftor.IsLeader());
+
+    std::atomic<bool> read_callback_called{false};
+    Result<void> read_result;
+
+    raftor.ReadIndex("read_ctx", [&](Result<void> result) {
+        read_callback_called = true;
+        read_result = std::move(result);
+    });
+
+    for (int i = 0; i < 20; i++) {
+        raftor.Tick();
+    }
+
+    CHECK(read_callback_called);
+    CHECK(read_result.has_value());
+
+    raftor.Stop();
+
+    std::filesystem::remove_all(temp_dir);
+}
+
 // Note: This test is disabled because it requires proper WAL initialization
 // The error preservation for AlreadyStarted is already tested indirectly
 // TEST_CASE("error_preservation: Start returns AlreadyStarted when called twice") {

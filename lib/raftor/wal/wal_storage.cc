@@ -109,9 +109,7 @@ Result<void> WALStorage::ApplySnapshot(const Snapshot& snapshot) {
 void WALStorage::SetConfState(const ConfState& conf_state) {
     std::lock_guard lock(mutex_);
 
-    // Update the conf state in the hard state
-    HardState hs = CloneHardState(wal_->GetHardState());
-    auto result = wal_->SaveHardState(hs);
+    auto result = wal_->SaveConfState(conf_state);
     if (!result) {
         SPDLOG_ERROR("failed to save conf state: {}", result.error().ToString());
     }
