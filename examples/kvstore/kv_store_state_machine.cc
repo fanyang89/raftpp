@@ -47,7 +47,7 @@ std::optional<Command> parseFromJson(const std::string& json_str) {
             cmd.value = j.at("value").get<std::string>();
         }
         return std::make_optional(cmd);
-    } catch (...) {
+    } catch (const nlohmann::json::exception& e) {
         return std::nullopt;
     }
 }
