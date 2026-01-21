@@ -26,7 +26,7 @@ uint64_t RaftLog::LastTerm() const {
         return r.value();
     } else {
         const auto err = r.error();
-        if (err.Is(StorageErrorCode::Compacted) || err.Is(StorageErrorCode::Unavailable)) {
+        if (err.Is(StorageErrorCode::Compacted)) {
             return 0;
         }
         PANIC("unexpected error when getting the last term: {}", r.error());
