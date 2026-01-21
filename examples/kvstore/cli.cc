@@ -96,18 +96,6 @@ std::string dispatchRequest(
     }
 }
 
-void printResponse(
-    const std::string& response, bool json_output,
-    std::function<void(const nlohmann::json&)> pretty_print
-) {
-    auto j = nlohmann::json::parse(response);
-    if (json_output) {
-        std::cout << j.dump(2) << std::endl;
-    } else {
-        pretty_print(j);
-    }
-}
-
 void printKvResponse(
     const std::string& response, bool json_output, const std::string& success_msg
 ) {
