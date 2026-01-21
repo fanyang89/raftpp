@@ -378,13 +378,7 @@ Result<void> WAL::SaveHardState(const HardState& hs) {
     }
 
     // Also save to metadata file for durability
-    WALMetadata meta;
-    meta.hard_state = CloneHardState(hard_state_);
-    meta.conf_state = CloneConfState(conf_state_);
-    meta.first_index = first_index_;
-    meta.snapshot_index = snapshot_index_;
-    meta.snapshot_term = snapshot_term_;
-
+    auto meta = CreateMetadata();
     auto save_result = metadata_store_->Save(meta);
     if (!save_result) {
         return save_result;
@@ -406,13 +400,7 @@ Result<void> WAL::SaveConfState(const ConfState& cs) {
     conf_state_ = CloneConfState(cs);
 
     // Save to metadata file for durability
-    WALMetadata meta;
-    meta.hard_state = CloneHardState(hard_state_);
-    meta.conf_state = CloneConfState(conf_state_);
-    meta.first_index = first_index_;
-    meta.snapshot_index = snapshot_index_;
-    meta.snapshot_term = snapshot_term_;
-
+    auto meta = CreateMetadata();
     auto save_result = metadata_store_->Save(meta);
     if (!save_result) {
         return save_result;
@@ -585,13 +573,7 @@ Result<void> WAL::Compact(uint64_t compact_index) {
     }
 
     // Save metadata first (for crash safety)
-    WALMetadata meta;
-    meta.hard_state = CloneHardState(hard_state_);
-    meta.conf_state = CloneConfState(conf_state_);
-    meta.first_index = first_index_;
-    meta.snapshot_index = snapshot_index_;
-    meta.snapshot_term = snapshot_term_;
-
+    auto meta = CreateMetadata();
     auto save_result = metadata_store_->Save(meta);
     if (!save_result) {
         return save_result;
@@ -662,13 +644,7 @@ Result<void> WAL::ApplySnapshot(const Snapshot& snapshot) {
     index_.SetFirstIndex(first_index_);
 
     // Save metadata
-    WALMetadata wal_meta;
-    wal_meta.hard_state = CloneHardState(hard_state_);
-    wal_meta.conf_state = CloneConfState(conf_state_);
-    wal_meta.first_index = first_index_;
-    wal_meta.snapshot_index = snapshot_index_;
-    wal_meta.snapshot_term = snapshot_term_;
-
+    auto wal_meta = CreateMetadata();
     auto save_result = metadata_store_->Save(wal_meta);
     if (!save_result) {
         return save_result;

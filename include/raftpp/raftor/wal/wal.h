@@ -83,6 +83,17 @@ class WAL {
     // Replay entries from a segment during recovery
     [[nodiscard]] Result<void> ReplaySegment(Segment* segment);
 
+    // Create WALMetadata from current state (no locking, caller must hold lock)
+    WALMetadata CreateMetadata() const {
+        WALMetadata meta;
+        meta.hard_state = CloneHardState(hard_state_);
+        meta.conf_state = CloneConfState(conf_state_);
+        meta.first_index = first_index_;
+        meta.snapshot_index = snapshot_index_;
+        meta.snapshot_term = snapshot_term_;
+        return meta;
+    }
+
     // Write a record to the current segment
     [[nodiscard]] Result<void> WriteRecord(RecordType type, std::span<const uint8_t> data);
 
