@@ -85,100 +85,101 @@ std::string makeRequestToNode(
     return res->body;
 }
 
+std::string dispatchRequest(
+    const kvstore::cli::Options& opts, const std::string& method, const std::string& path,
+    const std::string& body
+) {
+    if (!opts.node.empty()) {
+        return makeRequestToNode(opts.node, method, path, body);
+    } else {
+        return makeRequest(method, path, body, opts.peers);
+    }
+}
+
+void printResponse(
+    const std::string& response, bool json_output,
+    std::function<void(const nlohmann::json&)> pretty_print
+) {
+    auto j = nlohmann::json::parse(response);
+    if (json_output) {
+        std::cout << j.dump(2) << std::endl;
+    } else {
+        pretty_print(j);
+    }
+}
+
+void printKvResponse(
+    const std::string& response, bool json_output, const std::string& success_msg
+) {
+    auto j = nlohmann::json::parse(response);
+    if (json_output) {
+        std::cout << j.dump(2) << std::endl;
+    } else if (j.value("success", false)) {
+        std::cout << success_msg << std::endl;
+    } else {
+        std::cerr << "Error: " << j.value("error", "unknown error") << std::endl;
+        std::exit(1);
+    }
+}
+
+void printInfoResponse(
+    const std::string& response, bool json_output,
+    std::function<void(const nlohmann::json&)> printer
+) {
+    auto j = nlohmann::json::parse(response);
+    if (json_output) {
+        std::cout << j.dump(2) << std::endl;
+    } else {
+        printer(j);
+    }
+}
+
+void printGetResponse(const std::string& response, bool json_output) {
+    auto j = nlohmann::json::parse(response);
+    if (json_output) {
+        std::cout << j.dump(2) << std::endl;
+    } else if (j.value("success", false)) {
+        std::cout << j["value"].get<std::string>() << std::endl;
+    } else {
+        std::cerr << "Error: " << j.value("error", "unknown error") << std::endl;
+        std::exit(1);
+    }
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
     auto opts = kvstore::cli::parseArgs(argc, argv);
-
-    std::string response;
 
     try {
         if (opts.command == "put") {
             nlohmann::json body;
             body["key"] = opts.key;
             body["value"] = opts.value;
-
-            if (!opts.node.empty()) {
-                response = makeRequestToNode(opts.node, "PUT", "/kv", body.dump());
-            } else {
-                response = makeRequest("PUT", "/kv", body.dump(), opts.peers);
-            }
-
-            auto j = nlohmann::json::parse(response);
-            if (opts.json_output) {
-                std::cout << j.dump(2) << std::endl;
-            } else if (j["success"] == true) {
-                std::cout << "OK" << std::endl;
-            } else {
-                std::cerr << "Error: " << j["error"] << std::endl;
-                return 1;
-            }
+            auto response = dispatchRequest(opts, "PUT", "/kv", body.dump());
+            printKvResponse(response, opts.json_output, "OK");
         } else if (opts.command == "get") {
             std::string path = "/kv/" + opts.key;
-
-            if (!opts.node.empty()) {
-                response = makeRequestToNode(opts.node, "GET", path, "");
-            } else {
-                response = makeRequest("GET", path, "", opts.peers);
-            }
-
-            auto j = nlohmann::json::parse(response);
-            if (opts.json_output) {
-                std::cout << j.dump(2) << std::endl;
-            } else if (j["success"] == true) {
-                std::cout << j["value"] << std::endl;
-            } else {
-                std::cerr << "Error: " << j["error"] << std::endl;
-                return 1;
-            }
+            auto response = dispatchRequest(opts, "GET", path, "");
+            printGetResponse(response, opts.json_output);
         } else if (opts.command == "del") {
             std::string path = "/kv/" + opts.key;
-
-            if (!opts.node.empty()) {
-                response = makeRequestToNode(opts.node, "DELETE", path, "");
-            } else {
-                response = makeRequest("DELETE", path, "", opts.peers);
-            }
-
-            auto j = nlohmann::json::parse(response);
-            if (opts.json_output) {
-                std::cout << j.dump(2) << std::endl;
-            } else if (j["success"] == true) {
-                std::cout << "OK" << std::endl;
-            } else {
-                std::cerr << "Error: " << j["error"] << std::endl;
-                return 1;
-            }
+            auto response = dispatchRequest(opts, "DELETE", path, "");
+            printKvResponse(response, opts.json_output, "OK");
         } else if (opts.command == "leader") {
-            if (!opts.node.empty()) {
-                response = makeRequestToNode(opts.node, "GET", "/leader", "");
-            } else {
-                response = makeRequest("GET", "/leader", "", opts.peers);
-            }
-
-            auto j = nlohmann::json::parse(response);
-            if (opts.json_output) {
-                std::cout << j.dump(2) << std::endl;
-            } else {
+            auto response = dispatchRequest(opts, "GET", "/leader", "");
+            printInfoResponse(response, opts.json_output, [](const nlohmann::json& j) {
                 std::cout << "Leader ID: " << j["leader_id"] << std::endl;
                 std::cout << "Is Leader: " << (j["is_leader"] ? "yes" : "no") << std::endl;
-            }
+            });
         } else if (opts.command == "health") {
-            if (!opts.node.empty()) {
-                response = makeRequestToNode(opts.node, "GET", "/health", "");
-            } else {
-                response = makeRequest("GET", "/health", "", opts.peers);
-            }
-
-            auto j = nlohmann::json::parse(response);
-            if (opts.json_output) {
-                std::cout << j.dump(2) << std::endl;
-            } else {
+            auto response = dispatchRequest(opts, "GET", "/health", "");
+            printInfoResponse(response, opts.json_output, [](const nlohmann::json& j) {
                 std::cout << "Status: " << j["status"] << std::endl;
                 std::cout << "Term: " << j["term"] << std::endl;
                 std::cout << "Commit Index: " << j["commit_index"] << std::endl;
                 std::cout << "Applied Index: " << j["applied_index"] << std::endl;
-            }
+            });
         }
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << std::endl;

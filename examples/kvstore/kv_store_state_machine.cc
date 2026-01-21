@@ -8,26 +8,6 @@ namespace kvstore {
 
 namespace {
 
-std::string serializeToJson(const Command& cmd) {
-    nlohmann::json j;
-    j["op"] = [&] {
-        switch (cmd.op) {
-            case Op::Put:
-                return "put";
-            case Op::Get:
-                return "get";
-            case Op::Del:
-                return "del";
-        }
-        return "unknown";
-    }();
-    j["key"] = cmd.key;
-    if (cmd.value.has_value()) {
-        j["value"] = cmd.value.value();
-    }
-    return j.dump();
-}
-
 std::optional<Command> parseFromJson(const std::string& json_str) {
     try {
         auto j = nlohmann::json::parse(json_str);
