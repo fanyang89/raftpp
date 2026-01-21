@@ -17,32 +17,6 @@ std::string normalizeAddr(const std::string& addr) {
     return addr;
 }
 
-bool tryRequest(
-    const std::string& addr, const std::string& method, const std::string& path,
-    std::string* response
-) {
-    auto cli = httplib::Client(addr);
-    cli.set_connection_timeout(3);
-    cli.set_read_timeout(3);
-
-    httplib::Result res;
-    if (method == "GET") {
-        res = cli.Get(path.c_str());
-    } else if (method == "PUT") {
-        res = cli.Put(path.c_str());
-    } else if (method == "DELETE") {
-        res = cli.Delete(path.c_str());
-    } else {
-        return false;
-    }
-
-    if (res && res->status == 200) {
-        *response = res->body;
-        return true;
-    }
-    return false;
-}
-
 std::string makeRequest(
     const std::string& method, const std::string& path, const std::string& body,
     const std::vector<std::string>& peers
