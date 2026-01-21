@@ -218,7 +218,7 @@ constexpr std::string_view format_as(RpcErrorCode ec) {
 }
 
 enum class ConfigErrorCode {
-    /// Node ID is invalid (INVALID_ID)
+    /// Node ID is invalid (kInvalidId)
     InvalidNodeId,
     /// Heartbeat tick must be greater than 0
     HeartbeatTickTooSmall,

@@ -190,10 +190,7 @@ std::string DataToString(::capnp::Data::Reader data) {
 // =============================================================================
 
 TEST_SUITE("rpc::capnp") {
-    TEST_CASE(
-        "capnp_start_stop" * doctest::timeout(5) *
-        doctest::skip("Cap'n Proto RPC shutdown occasionally aborts in CI; skip to avoid flake.")
-    ) {
+    TEST_CASE("capnp_start_stop" * doctest::timeout(5)) {
         auto port = PortAllocator::GetNextPort();
         TransportConfig config{
             .listen_addr = fmt::format("127.0.0.1:{}", port),

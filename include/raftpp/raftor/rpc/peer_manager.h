@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-#include "../../core/primitives.h"
+#include "raftpp/core/primitives.h"
 
 namespace raftpp::raftor::rpc {
 

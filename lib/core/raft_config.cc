@@ -19,7 +19,7 @@ size_t Config::MaxElectionTick() const {
 }
 
 Result<void> Config::Validate() const {
-    if (id == INVALID_ID) {
+    if (id == kInvalidId) {
         return RaftError(ConfigErrorCode::InvalidNodeId);
     }
     if (heartbeat_tick == 0) {

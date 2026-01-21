@@ -5,8 +5,8 @@
 
 namespace raftpp {
 
-constexpr uint64_t INVALID_INDEX = 0;
-constexpr uint64_t INVALID_ID = 0;
+constexpr uint64_t kInvalidIndex = 0;
+constexpr uint64_t kInvalidId = 0;
 
 template <typename K, typename V, typename... Args>
 using Map = absl::flat_hash_map<K, V, Args...>;

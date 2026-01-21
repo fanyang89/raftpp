@@ -10,9 +10,9 @@
 
 namespace raftpp {
 
-constexpr std::string_view CAMPAIGN_PRE_ELECTION = "CampaignPreElection";
-constexpr std::string_view CAMPAIGN_ELECTION = "CampaignElection";
-constexpr std::string_view CAMPAIGN_TRANSFER = "CampaignTransfer";
+constexpr std::string_view kCampaignPreElection = "CampaignPreElection";
+constexpr std::string_view kCampaignElection = "CampaignElection";
+constexpr std::string_view kCampaignTransfer = "CampaignTransfer";
 
 bool UncommittedState::IsNoLimit() const {
     return max_uncommitted_size == std::numeric_limits<size_t>::max();
@@ -98,7 +98,7 @@ Raft::Raft(const Config& config, const std::shared_ptr<Storage>& store)
         CommitApplyInternal(config.applied, true);
     }
 
-    BecomeFollower(term_, INVALID_ID);
+    BecomeFollower(term_, kInvalidId);
 
     RaftLog& log = raft_log_;
     SPDLOG_INFO(
@@ -250,7 +250,7 @@ void Raft::BecomePreCandidate() {
     ASSERT(state_ != StateRole::Leader, "invalid transition [leader -> pre-candidate]");
     state_ = StateRole::PreCandidate;
     progress_tracker_.ResetVotes();
-    leader_id_ = INVALID_ID;
+    leader_id_ = kInvalidId;
     SPDLOG_INFO("became pre-candidate, term={}", term_);
 }
 
@@ -299,11 +299,11 @@ VoteResult Raft::Poll(const uint64_t from, MessageType mt, const bool vote) {
         case VoteResult::Pending:
             break;
         case VoteResult::Lost:
-            BecomeFollower(term_, INVALID_ID);
+            BecomeFollower(term_, kInvalidId);
             break;
         case VoteResult::Won:
             if (state_ == StateRole::PreCandidate) {
-                Campaign(CAMPAIGN_ELECTION);
+                Campaign(kCampaignElection);
             } else {
                 BecomeLeader();
                 BroadcastAppend();
@@ -318,7 +318,7 @@ void Raft::Campaign(std::string_view campaign_type) {
     MessageType vote_msg;
     uint64_t term;
 
-    if (campaign_type == CAMPAIGN_PRE_ELECTION) {
+    if (campaign_type == kCampaignPreElection) {
         BecomePreCandidate();
         vote_msg = MessageType::MSG_REQUEST_PRE_VOTE;
         term = term_ + 1;
@@ -351,7 +351,7 @@ void Raft::Campaign(std::string_view campaign_type) {
         m_builder.setLogTerm(raft_log_.LastTerm());
         m_builder.setCommit(commit);
         m_builder.setCommitTerm(commit_term);
-        if (campaign_type == CAMPAIGN_TRANSFER) {
+        if (campaign_type == kCampaignTransfer) {
             m_builder.setContext(
                 kj::arrayPtr(
                     reinterpret_cast<const kj::byte*>(campaign_type.data()), campaign_type.size()
@@ -390,11 +390,11 @@ void Raft::Hup(const bool transfer_leader) {
 
     SPDLOG_INFO("starting a new election, term={}", term_);
     if (transfer_leader) {
-        Campaign(CAMPAIGN_TRANSFER);
+        Campaign(kCampaignTransfer);
     } else if (pre_vote_) {
-        Campaign(CAMPAIGN_PRE_ELECTION);
+        Campaign(kCampaignPreElection);
     } else {
-        Campaign(CAMPAIGN_ELECTION);
+        Campaign(kCampaignElection);
     }
 }
 
@@ -490,7 +490,7 @@ void Raft::MaybeCommitByVote(const Message& m) {
         // The candidate doesn't have to step down in theory, here just for best
         // safety as we assume quorum won't change during election.
         const auto term = term_;
-        BecomeFollower(term, INVALID_ID);
+        BecomeFollower(term, kInvalidId);
     }
 }
 
@@ -600,7 +600,7 @@ void Raft::SendRequestSnapshot() {
 void Raft::HandleHeartbeat(const Message& m) {
     auto m_reader = capnp_util::reader<msg::Message>(m);
     std::ignore = raft_log_.CommitTo(m_reader.getCommit());
-    if (pending_request_snapshot_ != INVALID_INDEX) {
+    if (pending_request_snapshot_ != kInvalidIndex) {
         SendRequestSnapshot();
         return;
     }
@@ -622,7 +622,7 @@ bool Raft::Restore(const Snapshot& snapshot) {
 
     if (state_ != StateRole::Follower) {
         SPDLOG_WARN("non-follower attempted to restore snapshot, state={}", format_as(state_));
-        BecomeFollower(term_ + 1, INVALID_ID);
+        BecomeFollower(term_ + 1, kInvalidId);
         return false;
     }
 
@@ -644,7 +644,7 @@ bool Raft::Restore(const Snapshot& snapshot) {
         return false;
     }
 
-    if (pending_request_snapshot_ == INVALID_INDEX &&
+    if (pending_request_snapshot_ == kInvalidIndex &&
         raft_log_.MatchTerm(snap_meta.getIndex(), snap_meta.getTerm())) {
         SPDLOG_INFO("fast-forwarded commit to snapshot");
         std::ignore = raft_log_.CommitTo(snap_meta.getIndex());
@@ -653,7 +653,7 @@ bool Raft::Restore(const Snapshot& snapshot) {
 
     std::ignore = raft_log_.Restore(snapshot);
 
-    pending_request_snapshot_ = INVALID_INDEX;
+    pending_request_snapshot_ = kInvalidIndex;
 
     SPDLOG_INFO("restored snapshot");
     return true;
@@ -712,7 +712,7 @@ void Raft::HandleSnapshot(const Message& m) {
 
 std::optional<Message> Raft::HandleReadyReadIndex(const Message& req, uint64_t index) {
     auto req_reader = capnp_util::reader<msg::Message>(req);
-    if (req_reader.getFrom() == INVALID_ID || req_reader.getFrom() == id_) {
+    if (req_reader.getFrom() == kInvalidId || req_reader.getFrom() == id_) {
         ReadState rs;
         rs.index = index;
         auto entries = req_reader.getEntries();
@@ -800,7 +800,7 @@ Result<void> Raft::StepFollower(Message& m) {
     auto m_reader = capnp_util::reader<msg::Message>(m);
     switch (m_reader.getMsgType()) {
         case MessageType::MSG_PROPOSE:
-            if (leader_id_ == INVALID_ID) {
+            if (leader_id_ == kInvalidId) {
                 return RaftError(RaftErrorCode::ProposalDropped);
             }
             if (disable_proposal_forwarding_) {
@@ -829,7 +829,7 @@ Result<void> Raft::StepFollower(Message& m) {
             break;
 
         case MessageType::MSG_TRANSFER_LEADER:
-            if (leader_id_ == INVALID_ID) {
+            if (leader_id_ == kInvalidId) {
                 SPDLOG_INFO("no leader at term {}; dropping leader transfer msg", term_);
                 return {};
             }
@@ -848,7 +848,7 @@ Result<void> Raft::StepFollower(Message& m) {
             break;
 
         case MessageType::MSG_READ_INDEX:
-            if (leader_id_ == INVALID_ID) {
+            if (leader_id_ == kInvalidId) {
                 SPDLOG_INFO("no leader at term {}; dropping read index msg", term_);
                 return {};
             }
@@ -919,7 +919,7 @@ void Raft::HandleHeartbeatResponse(const Message& m) {
         "HandleHeartbeatResp check: from={}, matched={}, next={}, last_index={}",
         m_reader.getFrom(), pr.matched(), pr.next_idx(), raft_log_.LastIndex()
     );
-    if (pr.matched() < raft_log_.LastIndex() || pr.pending_request_snapshot() != INVALID_INDEX) {
+    if (pr.matched() < raft_log_.LastIndex() || pr.pending_request_snapshot() != kInvalidIndex) {
         SPDLOG_DEBUG("HandleHeartbeatResp: sending append to {}", m_reader.getFrom());
         RaftCore::SendAppend(m_reader.getFrom(), pr, messages_);
     }
@@ -968,7 +968,7 @@ void Raft::HandleSnapshotStatus(const Message& m) {
     }
 
     pr.Pause();
-    pr.pending_request_snapshot() = INVALID_INDEX;
+    pr.pending_request_snapshot() = kInvalidIndex;
 }
 
 void Raft::HandleUnreachable(const Message& m) {
@@ -1062,7 +1062,7 @@ Result<void> Raft::StepLeader(const Message& m) {
         case MessageType::MSG_CHECK_QUORUM:
             if (!CheckQuorumActive()) {
                 SPDLOG_WARN("stepped down to follower since quorum is not active");
-                BecomeFollower(term_, INVALID_ID);
+                BecomeFollower(term_, kInvalidId);
             }
             return {};
 
@@ -1203,9 +1203,9 @@ Result<void> Raft::Step(Message& m) {
             m_reader.getMsgType() == MessageType::MSG_REQUEST_PRE_VOTE) {
             auto ctx = m_reader.getContext();
             std::string ctx_str(reinterpret_cast<const char*>(ctx.begin()), ctx.size());
-            const bool force = (ctx_str == CAMPAIGN_TRANSFER);
+            const bool force = (ctx_str == kCampaignTransfer);
             const bool in_lease =
-                check_quorum_ && leader_id_ != INVALID_ID && election_elapsed_ < election_timeout_;
+                check_quorum_ && leader_id_ != kInvalidId && election_elapsed_ < election_timeout_;
 
             if (!force && in_lease) {
                 SPDLOG_INFO("ignored vote from {}: lease is not expired");
@@ -1225,7 +1225,7 @@ Result<void> Raft::Step(Message& m) {
                 m_reader.getMsgType() == MessageType::MSG_SNAPSHOT) {
                 BecomeFollower(m_reader.getTerm(), m_reader.getFrom());
             } else {
-                BecomeFollower(m_reader.getTerm(), INVALID_ID);
+                BecomeFollower(m_reader.getTerm(), kInvalidId);
             }
         }
         // Fall through to process the message
@@ -1262,7 +1262,7 @@ Result<void> Raft::Step(Message& m) {
         case MessageType::MSG_REQUEST_VOTE:
         case MessageType::MSG_REQUEST_PRE_VOTE: {
             const bool can_vote = (vote_ == m_reader.getFrom()) ||
-                (vote_ == INVALID_ID && leader_id_ == INVALID_ID) ||
+                (vote_ == kInvalidId && leader_id_ == kInvalidId) ||
                 (m_reader.getMsgType() == MessageType::MSG_REQUEST_PRE_VOTE &&
                  m_reader.getTerm() > term_);
 
@@ -1319,7 +1319,7 @@ Result<void> Raft::Step(Message& m) {
 
 void Raft::HandleAppendEntries(const Message& m) {
     auto m_reader = capnp_util::reader<msg::Message>(m);
-    if (pending_request_snapshot_ != INVALID_INDEX) {
+    if (pending_request_snapshot_ != kInvalidIndex) {
         SendRequestSnapshot();
         return;
     }
@@ -1397,7 +1397,7 @@ bool Raft::TickElection() {
         election_elapsed_ = 0;
         auto m = capnp_util::make<msg::Message>();
         auto m_builder = capnp_util::builder<msg::Message>(m);
-        m_builder.setTo(INVALID_ID);
+        m_builder.setTo(kInvalidId);
         m_builder.setMsgType(MessageType::MSG_HUP);
         m_builder.setFrom(id_);
         has_ready = true;
@@ -1413,7 +1413,7 @@ bool Raft::TickElection() {
         has_ready = true;
         auto m = capnp_util::make<msg::Message>();
         auto m_builder = capnp_util::builder<msg::Message>(m);
-        m_builder.setTo(INVALID_ID);
+        m_builder.setTo(kInvalidId);
         m_builder.setMsgType(MessageType::MSG_BEAT);
         m_builder.setFrom(id_);
         std::ignore = Step(m);
@@ -1432,7 +1432,7 @@ bool Raft::TickHeartbeat() {
         if (check_quorum_) {
             auto m = capnp_util::make<msg::Message>();
             auto m_builder = capnp_util::builder<msg::Message>(m);
-            m_builder.setTo(INVALID_ID);
+            m_builder.setTo(kInvalidId);
             m_builder.setMsgType(MessageType::MSG_CHECK_QUORUM);
             m_builder.setFrom(id_);
             has_ready = true;
@@ -1452,7 +1452,7 @@ bool Raft::TickHeartbeat() {
         has_ready = true;
         auto m = capnp_util::make<msg::Message>();
         auto m_builder = capnp_util::builder<msg::Message>(m);
-        m_builder.setTo(INVALID_ID);
+        m_builder.setTo(kInvalidId);
         m_builder.setMsgType(MessageType::MSG_BEAT);
         m_builder.setFrom(id_);
         std::ignore = Step(m);
@@ -1498,9 +1498,9 @@ void Raft::CommitApply(const uint64_t applied) {
 Result<void> Raft::RequestSnapshot() {
     if (state_ == StateRole::Leader) {
         SPDLOG_INFO("can not request snapshot on leader; dropping request snapshot");
-    } else if (leader_id_ == INVALID_ID) {
+    } else if (leader_id_ == kInvalidId) {
         SPDLOG_INFO("no leader; dropping request snapshot, term={}", term_);
-    } else if (snapshot().has_value() || pending_request_snapshot_ != INVALID_INDEX) {
+    } else if (snapshot().has_value() || pending_request_snapshot_ != kInvalidIndex) {
         SPDLOG_INFO("there is a pending snapshot; dropping request snapshot");
     } else {
         const auto request_index = raft_log_.LastIndex();
@@ -1696,9 +1696,9 @@ void Raft::AbortLeaderTransfer() {
 void Raft::Reset(const uint64_t term) {
     if (term_ != term) {
         term_ = term;
-        vote_ = INVALID_ID;
+        vote_ = kInvalidId;
     }
-    leader_id_ = INVALID_ID;
+    leader_id_ = kInvalidId;
     ResetRandomizedElectionTimeout();
     election_elapsed_ = 0;
     heartbeat_elapsed_ = 0;
@@ -1708,7 +1708,7 @@ void Raft::Reset(const uint64_t term) {
 
     pending_conf_index_ = 0;
     read_only_ = ReadOnly(read_only_.option());
-    pending_request_snapshot_ = INVALID_INDEX;
+    pending_request_snapshot_ = kInvalidIndex;
 
     const uint64_t last_index = raft_log_.LastIndex();
     const uint64_t committed = raft_log_.committed();
@@ -1749,7 +1749,7 @@ size_t Raft::inflight_buffers_size() const {
     return total;
 }
 
-void Raft::maybe_free_inflight_buffers() {
+void Raft::MaybeFreeInflightBuffers() {
     for (auto& [id, pr] : progress_tracker_.progress_map()) {
         if (pr.inflights().Count() == 0 && pr.inflights().buffer_is_allocated()) {
             // Free the buffer if this peer has no inflight messages
@@ -1758,7 +1758,7 @@ void Raft::maybe_free_inflight_buffers() {
     }
 }
 
-void Raft::adjust_max_inflight_msgs(uint64_t id, size_t max_inflight) {
+void Raft::AdjustMaxInflightMsgs(uint64_t id, size_t max_inflight) {
     auto* pr = progress_tracker_.get(id);
     if (pr != nullptr) {
         pr->inflights().SetCapacity(max_inflight);

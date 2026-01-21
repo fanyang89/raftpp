@@ -259,7 +259,7 @@ TEST_CASE("msg app flow control with freeing resources") {
     3: cap=256/start=0/count=2/buffer=[2,3]
     */
 
-    r->maybe_free_inflight_buffers();
+    r->MaybeFreeInflightBuffers();
 
     CHECK(!r->progress_tracker().progress_map().at(2).inflights().buffer_is_allocated());
     CHECK_EQ(r->progress_tracker().progress_map().at(2).inflights().Count(), 0);
@@ -272,7 +272,7 @@ TEST_CASE("msg app flow control with freeing resources") {
     */
 }
 
-// Test progress can be disabled with `adjust_max_inflight_msgs(<id>, 0)`.
+// Test progress can be disabled with `AdjustMaxInflightMsgs(<id>, 0)`.
 TEST_CASE("disable progress") {
     auto storage = std::make_shared<MemoryStorage>();
     auto r = NewTestRaft(1, {1, 2}, 5, 1, storage);
@@ -283,7 +283,7 @@ TEST_CASE("disable progress") {
     pr.BecomeReplicate();
 
     // Disable the progress 2. Internal `free`s shouldn't fail.
-    r->adjust_max_inflight_msgs(2, 0);
+    r->AdjustMaxInflightMsgs(2, 0);
     Message m = MakeHeartbeatResponse();
     auto result = r.Step(m);
     (void)result;
@@ -297,7 +297,7 @@ TEST_CASE("disable progress") {
 
     // After the progress gets enabled and a heartbeat response is received,
     // its leader can continue to append entries to it.
-    r->adjust_max_inflight_msgs(2, 10);
+    r->AdjustMaxInflightMsgs(2, 10);
     Message m2 = MakeHeartbeatResponse();
     result = r.Step(m2);
     (void)result;

@@ -126,12 +126,12 @@ bool Progress::MaybeDecTo(
         rejected, match_hint, request_snapshot, format_as(state_), matched_
     );
     if (state_ == ProgressState::Replicate) {
-        if (rejected < matched_ || (rejected == matched_ && request_snapshot == INVALID_INDEX)) {
+        if (rejected < matched_ || (rejected == matched_ && request_snapshot == kInvalidIndex)) {
             SPDLOG_DEBUG("MaybeDecTo: returning false (stale reject in Replicate)");
             return false;
         }
 
-        if (request_snapshot == INVALID_INDEX) {
+        if (request_snapshot == kInvalidIndex) {
             next_idx_ = matched_ + 1;
         } else {
             SPDLOG_DEBUG("MaybeDecTo: setting pending_request_snapshot to {}", request_snapshot);
@@ -140,16 +140,16 @@ bool Progress::MaybeDecTo(
         return true;
     }
 
-    if ((next_idx_ == 0 || next_idx_ - 1 != rejected) && request_snapshot == INVALID_INDEX) {
+    if ((next_idx_ == 0 || next_idx_ - 1 != rejected) && request_snapshot == kInvalidIndex) {
         return false;
     }
 
-    if (request_snapshot == INVALID_INDEX) {
+    if (request_snapshot == kInvalidIndex) {
         next_idx_ = std::min(rejected, match_hint + 1);
         if (next_idx_ < matched_ + 1) {
             next_idx_ = matched_ + 1;
         }
-    } else if (pending_request_snapshot_ == INVALID_INDEX) {
+    } else if (pending_request_snapshot_ == kInvalidIndex) {
         pending_request_snapshot_ = request_snapshot;
     }
 

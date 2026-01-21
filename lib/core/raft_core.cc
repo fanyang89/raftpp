@@ -13,7 +13,7 @@ RaftCore::RaftCore(const Config& config, const std::shared_ptr<Storage>& store)
       raft_log_(config, std::move(store)),
       max_inflight_(config.max_inflight_messages),
       max_message_size_(config.max_size_per_message),
-      pending_request_snapshot_(INVALID_INDEX),
+      pending_request_snapshot_(kInvalidIndex),
       state_(StateRole::Follower),
       promotable_(false),
       leader_id_(0),
@@ -141,7 +141,7 @@ void RaftCore::Send(Message& m, std::vector<Message>& messages) const {
     auto m_reader = capnp_util::reader<msg::Message>(m);
     auto m_builder = capnp_util::builder<msg::Message>(m);
 
-    if (m_reader.getFrom() == INVALID_ID) {
+    if (m_reader.getFrom() == kInvalidId) {
         m_builder.setFrom(id_);
     }
 
@@ -261,7 +261,7 @@ bool RaftCore::MaybeSendAppend(
     auto m = capnp_util::make<msg::Message>();
     capnp_util::builder<msg::Message>(m).setTo(to);
 
-    if (pr.pending_request_snapshot() != INVALID_INDEX) {
+    if (pr.pending_request_snapshot() != kInvalidIndex) {
         if (!PrepareSendSnapshot(m, pr, to)) {
             return false;
         }

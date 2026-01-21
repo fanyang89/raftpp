@@ -188,7 +188,7 @@ void TestNonleadersElectionTimeoutNonconflict(StateRole state) {
             uint64_t term = r->term();
             switch (state) {
                 case StateRole::Follower:
-                    r->BecomeFollower(term + 1, INVALID_ID);
+                    r->BecomeFollower(term + 1, kInvalidId);
                     break;
                 case StateRole::Candidate:
                     r->BecomeCandidate();
@@ -345,7 +345,7 @@ TEST_CASE("raft paper: follower vote") {
     };
 
     std::vector<TestCase> tests = {
-        {INVALID_ID, 1, false}, {INVALID_ID, 2, false}, {1, 1, false},
+        {kInvalidId, 1, false}, {kInvalidId, 2, false}, {1, 1, false},
         {2, 2, false},          {1, 2, true},           {2, 1, true},
     };
 
