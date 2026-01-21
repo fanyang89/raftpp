@@ -84,6 +84,13 @@ raftpp::Result<raftpp::raftor::ApplyResult> KvStoreStateMachine::Apply(const raf
     switch (cmd.op) {
         case Op::Put: {
             std::lock_guard lock(mutex_);
+            if (!cmd.value.has_value()) {
+                nlohmann::json resp;
+                resp["success"] = false;
+                resp["error"] = "missing value for put operation";
+                result.response = resp.dump();
+                break;
+            }
             data_[cmd.key] = *cmd.value;
             nlohmann::json resp;
             resp["success"] = true;
