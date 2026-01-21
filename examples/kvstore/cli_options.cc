@@ -70,7 +70,14 @@ Options parseArgs(int argc, char** argv) {
         std::exit(1);
     }
 
-    for (int i = 4; i < argc; i++) {
+    int start_index = 2;
+    if (opts.command == "put") {
+        start_index = 4;
+    } else if (opts.command == "get" || opts.command == "del") {
+        start_index = 3;
+    }
+
+    for (int i = start_index; i < argc; i++) {
         std::string a = argv[i];
         if (a == "--node" || a == "-n") {
             if (i + 1 >= argc) {
