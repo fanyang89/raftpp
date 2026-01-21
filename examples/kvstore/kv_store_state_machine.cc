@@ -126,9 +126,6 @@ raftpp::Result<raftpp::raftor::ApplyResult> KvStoreStateMachine::Apply(const raf
 raftpp::Result<raftpp::raftor::SnapshotData> KvStoreStateMachine::TakeSnapshot(
     uint64_t applied_index, uint64_t applied_term, const raftpp::ConfState& conf_state
 ) {
-    (void)applied_index;
-    (void)applied_term;
-
     std::lock_guard lock(mutex_);
     raftpp::raftor::SnapshotData snapshot;
     std::string data_str = serializeData(data_);
