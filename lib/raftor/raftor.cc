@@ -650,26 +650,45 @@ Result<std::unique_ptr<Raftor>> Raftor::Create(
 
     auto storage = std::move(*storage_result);
 
-    // Initialize ConfState if it's empty and we have initial_peers
-    if (!config.initial_peers.empty()) {
-        auto state = storage->InitialState();
-        if (state.has_value()) {
-            auto conf_reader = capnp_util::reader<msg::ConfState>(state->conf_state);
-            if (conf_reader.getVoters().size() == 0) {
-                // Create ConfState with initial peers
-                ConfState conf_state = capnp_util::make<msg::ConfState>();
-                auto conf_builder = capnp_util::builder<msg::ConfState>(conf_state);
-                auto voters = conf_builder.initVoters(config.initial_peers.size());
-                for (size_t i = 0; i < config.initial_peers.size(); ++i) {
-                    voters.set(i, config.initial_peers[i].id);
+    // Bootstrap if WAL is uninitialized
+    if (!storage->IsInitialized()) {
+        ConfState conf_state = capnp_util::make<msg::ConfState>();
+        auto conf_builder = capnp_util::builder<msg::ConfState>(conf_state);
+
+        if (config.initial_peers.empty()) {
+            // Single-node cluster: bootstrap with only this node
+            SPDLOG_INFO("Bootstrapping single-node cluster with node {}", config.node_id);
+            auto voters = conf_builder.initVoters(1);
+            voters.set(0, config.node_id);
+        } else {
+            // Multi-node cluster: validate and use initial_peers
+            bool node_id_found = false;
+            for (const auto& peer : config.initial_peers) {
+                if (peer.id == config.node_id) {
+                    node_id_found = true;
+                    break;
                 }
-                storage->SetConfState(conf_state);
-                SPDLOG_INFO(
-                    "Initialized ConfState with {} voters from initial_peers",
-                    config.initial_peers.size()
-                );
+            }
+
+            if (!node_id_found) {
+                return std::unexpected(RaftError(ConfigErrorCode::NodeIdNotInInitialPeers));
+            }
+
+            SPDLOG_INFO("Bootstrapping cluster with {} initial peers", config.initial_peers.size());
+            auto voters = conf_builder.initVoters(config.initial_peers.size());
+            for (size_t i = 0; i < config.initial_peers.size(); ++i) {
+                voters.set(i, config.initial_peers[i].id);
             }
         }
+
+        // Persist bootstrap ConfState to WAL
+        storage->SetConfState(conf_state);
+        SPDLOG_INFO(
+            "WAL bootstrap complete: node {} initialized with cluster configuration", config.node_id
+        );
+    } else {
+        // WAL already initialized - ignore initial_peers and use existing config
+        SPDLOG_INFO("WAL already initialized, ignoring initial_peers");
     }
 
     // Create TCP transport

@@ -18,9 +18,12 @@ void printHelp() {
     std::cout << "  --node-id <id>       Node ID (default: 1)" << std::endl;
     std::cout << "  --port <port>        HTTP listen port (default: 8080)" << std::endl;
     std::cout << "  --raft-port <port>   Raft transport port (default: 9000)" << std::endl;
-    std::cout << "  --peers <list>       Comma-separated peer list, e.g., "
-                 "\"2:localhost:9001,3:localhost:9002\""
+    std::cout << "  --peers <list>       Comma-separated peer list including THIS node, e.g., "
+                 "\"1:localhost:9000,2:localhost:9001,3:localhost:9002\""
               << std::endl;
+    std::cout
+        << "                       (required for first startup, ignored if WAL already exists)"
+        << std::endl;
     std::cout << "  --data-dir <dir>     Data directory for WAL and snapshots (default: ./kv_data)"
               << std::endl;
     std::cout << "  --help               Show this help message" << std::endl;

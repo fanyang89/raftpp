@@ -232,6 +232,8 @@ enum class ConfigErrorCode {
     ListenAddressEmpty,
     /// Empty data directory
     DataDirectoryEmpty,
+    /// Node ID must be included in initial_peers list
+    NodeIdNotInInitialPeers,
 };
 
 constexpr std::string_view format_as(ConfigErrorCode ec) {
@@ -250,6 +252,8 @@ constexpr std::string_view format_as(ConfigErrorCode ec) {
             return "ListenAddressEmpty";
         case ConfigErrorCode::DataDirectoryEmpty:
             return "DataDirectoryEmpty";
+        case ConfigErrorCode::NodeIdNotInInitialPeers:
+            return "NodeIdNotInInitialPeers";
     }
     return "Unknown";
 }
