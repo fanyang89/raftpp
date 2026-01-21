@@ -172,14 +172,19 @@ std::vector<uint8_t> MetadataStore::Serialize(const WALMetadata& meta) const {
     uint32_t hs_len = static_cast<uint32_t>(hard_state_bytes.size());
     std::memcpy(ptr, &hs_len, sizeof(hs_len));
     ptr += sizeof(hs_len);
-    std::memcpy(ptr, hard_state_bytes.data(), hs_len);
-    ptr += hs_len;
+    if (hs_len > 0) {
+        std::memcpy(ptr, hard_state_bytes.data(), hs_len);
+        ptr += hs_len;
+    }
 
     // Write conf_state
     uint32_t cs_len = static_cast<uint32_t>(conf_state_bytes.size());
     std::memcpy(ptr, &cs_len, sizeof(cs_len));
     ptr += sizeof(cs_len);
-    std::memcpy(ptr, conf_state_bytes.data(), cs_len);
+    if (cs_len > 0) {
+        std::memcpy(ptr, conf_state_bytes.data(), cs_len);
+    }
+    ptr += cs_len;
 
     // Compute CRC over everything after the CRC field
     size_t crc_offset = offsetof(MetadataHeader, crc) + sizeof(header.crc);
