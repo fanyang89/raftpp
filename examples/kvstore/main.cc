@@ -17,8 +17,9 @@ void printHelp() {
     std::cout << "Options:" << std::endl;
     std::cout << "  --node-id <id>       Node ID (default: 1)" << std::endl;
     std::cout << "  --port <port>        HTTP listen port (default: 8080)" << std::endl;
+    std::cout << "  --raft-port <port>   Raft transport port (default: 9000)" << std::endl;
     std::cout << "  --peers <list>       Comma-separated peer list, e.g., "
-                 "\"2:localhost:8081,3:localhost:8082\""
+                 "\"2:localhost:9001,3:localhost:9002\""
               << std::endl;
     std::cout << "  --data-dir <dir>     Data directory for WAL and snapshots (default: ./kv_data)"
               << std::endl;
@@ -28,6 +29,7 @@ void printHelp() {
 struct Options {
     uint64_t node_id = 1;
     uint16_t port = 8080;
+    uint16_t raft_port = 9000;
     std::string peers;
     std::string data_dir = "./kv_data";
 };
@@ -43,6 +45,8 @@ Options parseArgs(int argc, char** argv) {
             opts.node_id = std::stoull(argv[++i]);
         } else if (arg == "--port" && i + 1 < argc) {
             opts.port = static_cast<uint16_t>(std::stoi(argv[++i]));
+        } else if (arg == "--raft-port" && i + 1 < argc) {
+            opts.raft_port = static_cast<uint16_t>(std::stoi(argv[++i]));
         } else if (arg == "--peers" && i + 1 < argc) {
             opts.peers = argv[++i];
         } else if (arg == "--data-dir" && i + 1 < argc) {
@@ -84,7 +88,7 @@ int main(int argc, char** argv) {
 
     raftpp::raftor::RaftorConfig config;
     config.node_id = opts.node_id;
-    config.listen_addr = "0.0.0.0:" + std::to_string(opts.port);
+    config.listen_addr = "0.0.0.0:" + std::to_string(opts.raft_port);
     config.data_dir = opts.data_dir;
     config.initial_peers = parsePeers(opts.peers);
 
@@ -113,8 +117,8 @@ int main(int argc, char** argv) {
     kvstore::HttpServer http_server(raftor.get(), opts.port);
     http_server.Start();
 
-    std::cout << "KV Store started. Node ID: " << opts.node_id << ", Port: " << opts.port
-              << std::endl;
+    std::cout << "KV Store started. Node ID: " << opts.node_id << ", HTTP Port: " << opts.port
+              << ", Raft Port: " << opts.raft_port << std::endl;
 
     raftor->Run();
 
