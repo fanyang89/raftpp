@@ -41,7 +41,7 @@ std::map<std::string, std::string> deserializeData(const std::string& data_str) 
     try {
         auto j = nlohmann::json::parse(data_str);
         return j.get<std::map<std::string, std::string>>();
-    } catch (...) {
+    } catch (const nlohmann::json::exception& e) {
         return {};
     }
 }
