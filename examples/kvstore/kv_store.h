@@ -13,12 +13,6 @@ struct Command {
     std::optional<std::string> value;
 };
 
-struct Response {
-    bool success;
-    std::optional<std::string> value;
-    std::optional<std::string> error;
-};
-
 class IKVStore {
   public:
     virtual ~IKVStore() = default;

@@ -1,6 +1,7 @@
 #include "cli_options.h"
 
 #include <iostream>
+#include <sstream>
 #include <string>
 
 namespace kvstore::cli {
@@ -91,14 +92,12 @@ Options parseArgs(int argc, char** argv) {
                 std::exit(1);
             }
             std::string peers_str = argv[++i];
-            size_t start = 0;
-            while (start < peers_str.size()) {
-                size_t comma = peers_str.find(',', start);
-                opts.peers.push_back(peers_str.substr(start, comma - start));
-                if (comma == std::string::npos) {
-                    break;
+            std::stringstream ss(peers_str);
+            std::string peer;
+            while (std::getline(ss, peer, ',')) {
+                if (!peer.empty()) {
+                    opts.peers.push_back(peer);
                 }
-                start = comma + 1;
             }
         } else if (a == "--json" || a == "-j") {
             opts.json_output = true;
