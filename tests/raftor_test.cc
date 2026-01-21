@@ -1001,11 +1001,13 @@ TEST_CASE("raftor: single node propose multiple entries") {
 
     constexpr int num_entries = 5;
     std::vector<Result<std::string>> results;
+    std::mutex results_mutex;
     std::atomic<int> callback_count{0};
 
     for (int i = 0; i < num_entries; i++) {
         const auto idx = i;
         raftor.Propose("entry_" + std::to_string(i), [&](Result<std::string> result) {
+            std::lock_guard lock(results_mutex);
             results.push_back(std::move(result));
             callback_count++;
         });
