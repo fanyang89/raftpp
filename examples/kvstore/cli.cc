@@ -41,7 +41,7 @@ std::string makeRequest(
         }
 
         if (res) {
-            if (res->status == 200 || res->status == 404) {
+            if (res->status == 200) {
                 return res->body;
             }
             last_error = "HTTP " + std::to_string(res->status);
