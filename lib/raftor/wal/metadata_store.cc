@@ -184,6 +184,7 @@ std::vector<uint8_t> MetadataStore::Serialize(const WALMetadata& meta) const {
     if (cs_len > 0) {
         std::memcpy(ptr, conf_state_bytes.data(), cs_len);
     }
+    ptr += cs_len;
 
     // Compute CRC over everything after the CRC field
     size_t crc_offset = offsetof(MetadataHeader, crc) + sizeof(header.crc);
