@@ -42,11 +42,26 @@ Options parseArgs(int argc, char** argv) {
             printHelp();
             std::exit(0);
         } else if (arg == "--node-id" && i + 1 < argc) {
-            opts.node_id = std::stoull(argv[++i]);
+            try {
+                opts.node_id = std::stoull(argv[++i]);
+            } catch (const std::exception& e) {
+                std::cerr << "Error: invalid node-id: " << e.what() << std::endl;
+                std::exit(1);
+            }
         } else if (arg == "--port" && i + 1 < argc) {
-            opts.port = static_cast<uint16_t>(std::stoi(argv[++i]));
+            try {
+                opts.port = static_cast<uint16_t>(std::stoi(argv[++i]));
+            } catch (const std::exception& e) {
+                std::cerr << "Error: invalid port: " << e.what() << std::endl;
+                std::exit(1);
+            }
         } else if (arg == "--raft-port" && i + 1 < argc) {
-            opts.raft_port = static_cast<uint16_t>(std::stoi(argv[++i]));
+            try {
+                opts.raft_port = static_cast<uint16_t>(std::stoi(argv[++i]));
+            } catch (const std::exception& e) {
+                std::cerr << "Error: invalid raft-port: " << e.what() << std::endl;
+                std::exit(1);
+            }
         } else if (arg == "--peers" && i + 1 < argc) {
             opts.peers = argv[++i];
         } else if (arg == "--data-dir" && i + 1 < argc) {
@@ -68,10 +83,15 @@ std::vector<raftpp::raftor::PeerConfig> parsePeers(const std::string& peers_str)
         std::string peer = peers_str.substr(start, comma - start);
         size_t colon = peer.find(':');
         if (colon != std::string::npos) {
-            raftpp::raftor::PeerConfig config;
-            config.id = std::stoull(peer.substr(0, colon));
-            config.addr = peer.substr(colon + 1);
-            peers.push_back(config);
+            try {
+                raftpp::raftor::PeerConfig config;
+                config.id = std::stoull(peer.substr(0, colon));
+                config.addr = peer.substr(colon + 1);
+                peers.push_back(config);
+            } catch (const std::exception& e) {
+                std::cerr << "Warning: skipping invalid peer '" << peer << "': " << e.what()
+                          << std::endl;
+            }
         }
         if (comma == std::string::npos) {
             break;

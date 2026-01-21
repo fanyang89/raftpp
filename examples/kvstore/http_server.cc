@@ -9,6 +9,10 @@
 
 namespace kvstore {
 
+namespace {
+constexpr size_t kMaxBodySize = 1 * 1024 * 1024;
+}
+
 HttpServer::HttpServer(raftpp::raftor::Raftor* raftor, uint16_t port)
     : raftor_(raftor), port_(port) {}
 
@@ -18,6 +22,7 @@ HttpServer::~HttpServer() {
 
 void HttpServer::Start() {
     server_ = std::make_unique<httplib::Server>();
+    server_->set_payload_max_length(kMaxBodySize);
     setupRoutes();
 
     running_ = true;
