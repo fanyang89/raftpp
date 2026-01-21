@@ -846,6 +846,201 @@ TEST_CASE("error_preservation: config validation returns specific errors") {
     }
 }
 
+// =============================================================================
+// Raftor Single Node Integration Tests
+// =============================================================================
+
+class SingleNodeRaftorFixture {
+  public:
+    SingleNodeRaftorFixture() = default;
+
+    void SetUp(const std::string& test_name) {
+        temp_dir_ = std::filesystem::temp_directory_path() / ("raftpp_test_" + test_name);
+        std::filesystem::remove_all(temp_dir_);
+        std::filesystem::create_directories(temp_dir_);
+
+        config_.node_id = 1;
+        config_.listen_addr = "127.0.0.1:" + std::to_string(next_port_++);
+        config_.data_dir = temp_dir_;
+        config_.election_tick = 10;
+        config_.heartbeat_tick = 2;
+
+        wal_config_.dir = temp_dir_ / "wal";
+
+        auto storage_result = wal::WALStorage::Open(wal_config_);
+        if (!storage_result) {
+            throw std::runtime_error("Failed to open WALStorage");
+        }
+        storage_ = std::move(*storage_result);
+
+        ConfState conf_state = capnp_util::make<msg::ConfState>();
+        auto conf_builder = capnp_util::builder<msg::ConfState>(conf_state);
+        auto voters = conf_builder.initVoters(1);
+        voters.set(0, 1);
+
+        storage_->SetConfState(conf_state);
+
+        HardState hard_state = capnp_util::make<msg::HardState>();
+        auto hs_builder = capnp_util::builder<msg::HardState>(hard_state);
+        hs_builder.setCommit(0);
+        hs_builder.setTerm(0);
+        hs_builder.setVote(0);
+
+        storage_->SetHardState(std::move(hard_state));
+
+        sm_ = std::make_unique<MockStateMachine>();
+        transport_ = std::make_unique<MockTransport>();
+
+        auto create_result =
+            Raftor::Create(config_, std::move(sm_), storage_, std::move(transport_));
+        if (!create_result) {
+            throw std::runtime_error("Failed to create Raftor");
+        }
+        raftor_ = std::move(*create_result);
+
+        auto result = raftor_->Start();
+        if (!result) {
+            throw std::runtime_error("Failed to start Raftor");
+        }
+    }
+
+    void TearDown() {
+        if (raftor_) {
+            raftor_->Stop();
+        }
+        std::filesystem::remove_all(temp_dir_);
+    }
+
+    void ElectLeader() {
+        for (int i = 0; i < 25; i++) {
+            raftor_->Tick();
+        }
+        if (!raftor_->IsLeader()) {
+            throw std::runtime_error("Failed to become leader");
+        }
+    }
+
+    Raftor* GetRaftor() { return raftor_.get(); }
+
+    static std::atomic<int> next_port_;
+
+  private:
+    std::filesystem::path temp_dir_;
+    RaftorConfig config_;
+    wal::WALConfig wal_config_;
+    std::shared_ptr<wal::WALStorage> storage_;
+    std::unique_ptr<MockStateMachine> sm_;
+    std::unique_ptr<MockTransport> transport_;
+    std::unique_ptr<Raftor> raftor_;
+};
+
+std::atomic<int> SingleNodeRaftorFixture::next_port_{19991};
+
+TEST_CASE("raftor: single node tests") {
+    SUBCASE("propose entry") {
+        SingleNodeRaftorFixture fixture;
+        fixture.SetUp("single_node_propose");
+        Raftor* raftor = fixture.GetRaftor();
+
+        fixture.ElectLeader();
+
+        auto status = raftor->GetStatus();
+        CHECK(status.id == 1);
+        CHECK(status.role == StateRole::Leader);
+        CHECK(status.term == 1);
+
+        std::atomic<bool> async_callback_called{false};
+        Result<std::string> async_result;
+
+        raftor->Propose("async_data", [&](Result<std::string> result) {
+            async_callback_called = true;
+            async_result = std::move(result);
+        });
+
+        for (int i = 0; i < 20; i++) {
+            raftor->Tick();
+        }
+
+        CHECK(async_callback_called);
+        REQUIRE(async_result.has_value());
+        CHECK(async_result->find("async_data") != std::string::npos);
+
+        {
+            std::atomic<bool> sync_callback_called{false};
+            Result<std::string> sync_result;
+            raftor->Propose("sync_data", [&](Result<std::string> result) {
+                sync_callback_called = true;
+                sync_result = std::move(result);
+            });
+
+            for (int i = 0; i < 20; i++) {
+                raftor->Tick();
+            }
+
+            CHECK(sync_callback_called);
+            REQUIRE(sync_result.has_value());
+            CHECK(sync_result->find("sync_data") != std::string::npos);
+        }
+
+        for (int i = 0; i < 20; i++) {
+            raftor->Tick();
+        }
+    }
+
+    SUBCASE("propose multiple entries") {
+        SingleNodeRaftorFixture fixture;
+        fixture.SetUp("single_node_multi_entries");
+        Raftor* raftor = fixture.GetRaftor();
+
+        fixture.ElectLeader();
+
+        constexpr int num_entries = 5;
+        std::vector<Result<std::string>> results;
+        std::mutex results_mutex;
+        std::atomic<int> callback_count{0};
+
+        for (int i = 0; i < num_entries; i++) {
+            raftor->Propose("entry_" + std::to_string(i), [&](Result<std::string> result) {
+                std::lock_guard lock(results_mutex);
+                results.push_back(std::move(result));
+                callback_count++;
+            });
+        }
+
+        for (int i = 0; i < 30; i++) {
+            raftor->Tick();
+        }
+
+        CHECK(callback_count == num_entries);
+        for (int i = 0; i < num_entries; i++) {
+            REQUIRE(results[i].has_value());
+        }
+    }
+
+    SUBCASE("read index") {
+        SingleNodeRaftorFixture fixture;
+        fixture.SetUp("single_node_read_index");
+        Raftor* raftor = fixture.GetRaftor();
+
+        fixture.ElectLeader();
+
+        std::atomic<bool> read_callback_called{false};
+        Result<void> read_result;
+
+        raftor->ReadIndex("read_ctx", [&](Result<void> result) {
+            read_callback_called = true;
+            read_result = std::move(result);
+        });
+
+        for (int i = 0; i < 20; i++) {
+            raftor->Tick();
+        }
+
+        CHECK(read_callback_called);
+        CHECK(read_result.has_value());
+    }
+}
+
 // Note: This test is disabled because it requires proper WAL initialization
 // The error preservation for AlreadyStarted is already tested indirectly
 // TEST_CASE("error_preservation: Start returns AlreadyStarted when called twice") {
