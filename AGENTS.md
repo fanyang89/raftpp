@@ -158,6 +158,19 @@ Always use spdlog's bundled fmt instead of the system fmt library:
 Always use Context7 MCP when I need library/API documentation,
 code generation, setup or configuration steps without me having to explicitly ask.
 
+## Common Issues
+
+### clangd doctest Errors
+
+You may encounter clangd errors like:
+```
+[PasteError [23:1] Redefinition of 'DOCTEST_ANON_VAR_0'
+:3076:1:
+note: previous definition is here
+```
+
+This is a known clangd bug when analyzing doctest test files. These errors can be safely ignored - the code will build and run correctly.
+
 ## Dependencies
 
 Agents can find CPM-downloaded dependency code under `.cache/cpm`.

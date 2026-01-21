@@ -936,12 +936,6 @@ class SingleNodeRaftorFixture {
 
 std::atomic<int> SingleNodeRaftorFixture::next_port_{19991};
 
-#define SINGLE_NODE_TEST(name)           \
-    SUBCASE(name) {                      \
-        SingleNodeRaftorFixture fixture; \
-        fixture.SetUp(name);             \
-        auto& raftor = fixture.GetRaftor()
-
 TEST_CASE("raftor: single node tests") {
     SUBCASE("propose entry") {
         SingleNodeRaftorFixture fixture;
