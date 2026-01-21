@@ -11,6 +11,14 @@ target_link_libraries(kvstore-example PRIVATE raftor)
 target_link_libraries(kvstore-example PRIVATE httplib::httplib)
 target_link_libraries(kvstore-example PRIVATE nlohmann_json::nlohmann_json)
 
+add_executable(kvstore-cli
+  cli.cc
+  cli_options.cc
+)
+
+target_link_libraries(kvstore-cli PRIVATE httplib::httplib)
+target_link_libraries(kvstore-cli PRIVATE nlohmann_json::nlohmann_json)
+
 if(RAFTPP_BUILD_TESTING)
   add_executable(kvstore-test test/kv_store_test.cc)
   target_link_libraries(kvstore-test PRIVATE raftor)
