@@ -478,20 +478,8 @@ Result<void> WAL::SaveConfState(const ConfState& cs) {
 
     conf_state_ = CloneConfState(cs);
 
-    // Also save to metadata file for durability
     auto meta = CreateMetadata();
-    auto save_result = metadata_store_->Save(meta);
-    if (!save_result) {
-        return save_result;
-    }
-
-    if (config_.sync_on_write) {
-        auto sync_result = segment_manager_->SyncAll();
-        if (!sync_result) {
-            return sync_result;
-        }
-    }
-    return {};
+    return metadata_store_->Save(meta);
 }
 
 Result<std::vector<Entry>> WAL::ReadEntries(
