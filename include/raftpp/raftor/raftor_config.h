@@ -66,6 +66,12 @@ struct RaftorConfig {
     /// Network connection timeout (default: 5s)
     std::chrono::milliseconds connect_timeout{5000};
 
+    /// Default timeout for async proposals (0 to disable, default: 5s)
+    std::chrono::milliseconds proposal_timeout{5000};
+
+    /// Default timeout for async read index requests (0 to disable, default: 5s)
+    std::chrono::milliseconds read_index_timeout{5000};
+
     /// Validate the configuration
     /// @return void on success, or error describing what's invalid
     [[nodiscard]] Result<void> Validate() const;

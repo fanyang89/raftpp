@@ -93,6 +93,7 @@ class RaftorImpl : public Raftor {
     void EventLoop();
     void ProcessProposalQueue();
     void ProcessReadIndexQueue();
+    void ProcessTimeouts();
     bool ShouldTick();
     void OnMessage(Message msg);
     void OnPeerError(uint64_t peer_id, std::string error);
@@ -195,6 +196,7 @@ void RaftorImpl::Stop() {
 
     // Fail all pending proposals
     proposal_tracker_.FailAll(RaftError(RaftErrorCode::ShuttingDown));
+    proposal_tracker_.FailAllReads(RaftError(RaftErrorCode::ShuttingDown));
 
     // Stop transport
     transport_->Stop();
@@ -229,6 +231,8 @@ void RaftorImpl::EventLoop() {
             spdlog::error("Ready processing failed: {}", result.error().ToString());
         }
 
+        ProcessTimeouts();
+
         RefreshStatus();
     }
 }
@@ -248,6 +252,8 @@ void RaftorImpl::Poll(std::chrono::milliseconds timeout) {
         spdlog::error("Ready processing failed: {}", result.error().ToString());
     }
 
+    ProcessTimeouts();
+
     RefreshStatus();
 }
 
@@ -261,6 +267,8 @@ bool RaftorImpl::Tick() {
     if (auto result = ready_processor_->Process(); !result) {
         spdlog::error("Ready processing failed: {}", result.error().ToString());
     }
+
+    ProcessTimeouts();
 
     RefreshStatus();
     return ticked;
@@ -279,7 +287,7 @@ void RaftorImpl::ProcessProposalQueue() {
         std::string ctx = GenerateProposalContext();
 
         // Track the proposal
-        proposal_tracker_.Track(ctx, std::move(callback));
+        proposal_tracker_.Track(ctx, std::move(callback), config_.proposal_timeout);
 
         // Submit to Raft
         if (auto result = raw_node_->Propose(ctx, data); !result) {
@@ -293,7 +301,7 @@ void RaftorImpl::ProcessReadIndexQueue() {
         auto& [ctx, callback] = *item;
 
         // Track the read
-        proposal_tracker_.TrackRead(ctx, std::move(callback));
+        proposal_tracker_.TrackRead(ctx, std::move(callback), config_.read_index_timeout);
 
         // Submit to Raft
         raw_node_->ReadIndex(ctx);
@@ -303,6 +311,10 @@ void RaftorImpl::ProcessReadIndexQueue() {
 std::string RaftorImpl::GenerateProposalContext() {
     uint64_t counter = proposal_counter_.fetch_add(1);
     return std::to_string(config_.node_id) + ":" + std::to_string(counter);
+}
+
+void RaftorImpl::ProcessTimeouts() {
+    proposal_tracker_.ExpireTimeouts(std::chrono::steady_clock::now());
 }
 
 void RaftorImpl::OnMessage(Message msg) {
@@ -323,14 +335,19 @@ void RaftorImpl::Propose(std::string data, ProposalCallback callback) {
 }
 
 Result<std::string> RaftorImpl::ProposeSync(std::string data, std::chrono::milliseconds timeout) {
-    std::promise<Result<std::string>> promise;
-    auto future = promise.get_future();
+    auto promise = std::make_shared<std::promise<Result<std::string>>>();
+    auto future = promise->get_future();
+    auto completed = std::make_shared<std::atomic<bool>>(false);
 
-    Propose(std::move(data), [&promise](Result<std::string> result) {
-        promise.set_value(std::move(result));
+    Propose(std::move(data), [promise, completed](Result<std::string> result) {
+        if (completed->exchange(true)) {
+            return;
+        }
+        promise->set_value(std::move(result));
     });
 
     if (future.wait_for(timeout) == std::future_status::timeout) {
+        completed->exchange(true);
         return std::unexpected(RaftError(RpcErrorCode::Timeout));
     }
 
@@ -353,14 +370,19 @@ void RaftorImpl::ReadIndex(std::string ctx, ReadIndexCallback callback) {
 }
 
 Result<void> RaftorImpl::ReadIndexSync(std::string ctx, std::chrono::milliseconds timeout) {
-    std::promise<Result<void>> promise;
-    auto future = promise.get_future();
+    auto promise = std::make_shared<std::promise<Result<void>>>();
+    auto future = promise->get_future();
+    auto completed = std::make_shared<std::atomic<bool>>(false);
 
-    ReadIndex(std::move(ctx), [&promise](Result<void> result) {
-        promise.set_value(std::move(result));
+    ReadIndex(std::move(ctx), [promise, completed](Result<void> result) {
+        if (completed->exchange(true)) {
+            return;
+        }
+        promise->set_value(std::move(result));
     });
 
     if (future.wait_for(timeout) == std::future_status::timeout) {
+        completed->exchange(true);
         return std::unexpected(RaftError(RpcErrorCode::Timeout));
     }
 

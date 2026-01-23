@@ -362,6 +362,71 @@ TEST_CASE("proposal_tracker: fail read") {
     CHECK(tracker.PendingReadCount() == 0);
 }
 
+TEST_CASE("proposal_tracker: fail all reads") {
+    ProposalTracker tracker;
+
+    int call_count = 0;
+    int fail_count = 0;
+
+    for (int i = 0; i < 3; i++) {
+        tracker.TrackRead("read" + std::to_string(i), [&](Result<void> result) {
+            call_count++;
+            if (!result) {
+                fail_count++;
+            }
+        });
+    }
+
+    CHECK(tracker.PendingReadCount() == 3);
+
+    tracker.FailAllReads(RaftError(RaftErrorCode::LostLeadership));
+
+    CHECK(call_count == 3);
+    CHECK(fail_count == 3);
+    CHECK(tracker.PendingReadCount() == 0);
+}
+
+TEST_CASE("proposal_tracker: expire timeouts") {
+    ProposalTracker tracker;
+
+    bool proposal_called = false;
+    RaftError proposal_error(RaftErrorCode::ProposalDropped);
+
+    tracker.Track(
+        "ctx1",
+        [&](Result<std::string> result) {
+            proposal_called = true;
+            if (!result) {
+                proposal_error = result.error();
+            }
+        },
+        std::chrono::milliseconds{1}
+    );
+
+    bool read_called = false;
+    RaftError read_error(RaftErrorCode::ProposalDropped);
+
+    tracker.TrackRead(
+        "read1",
+        [&](Result<void> result) {
+            read_called = true;
+            if (!result) {
+                read_error = result.error();
+            }
+        },
+        std::chrono::milliseconds{1}
+    );
+
+    tracker.ExpireTimeouts(std::chrono::steady_clock::now() + std::chrono::milliseconds{10});
+
+    CHECK(proposal_called);
+    CHECK(read_called);
+    CHECK(proposal_error.Is(RpcErrorCode::Timeout));
+    CHECK(read_error.Is(RpcErrorCode::Timeout));
+    CHECK(tracker.PendingCount() == 0);
+    CHECK(tracker.PendingReadCount() == 0);
+}
+
 // =============================================================================
 // ProposalQueue Tests
 // =============================================================================
