@@ -104,7 +104,7 @@ Result<void> WAL::Recover() {
 
     SPDLOG_DEBUG(
         "WAL recovery complete: {} entries from index {} to {}", index_.size(), first_index_,
-        last_idx
+        LastIndexUnlocked()
     );
 
     return {};
@@ -478,13 +478,19 @@ Result<void> WAL::SaveConfState(const ConfState& cs) {
 
     conf_state_ = CloneConfState(cs);
 
-    // Save to metadata file for durability
+    // Also save to metadata file for durability
     auto meta = CreateMetadata();
     auto save_result = metadata_store_->Save(meta);
     if (!save_result) {
         return save_result;
     }
 
+    if (config_.sync_on_write) {
+        auto sync_result = segment_manager_->SyncAll();
+        if (!sync_result) {
+            return sync_result;
+        }
+    }
     return {};
 }
 
