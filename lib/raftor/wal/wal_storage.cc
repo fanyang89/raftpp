@@ -42,13 +42,6 @@ Result<std::vector<Entry>> WALStorage::Entries(
 Result<uint64_t> WALStorage::Term(uint64_t idx) {
     std::lock_guard lock(mutex_);
 
-    // Special case: empty WAL - return 0 for term at index 0
-    auto first_idx = wal_->FirstIndex();
-    auto last_idx = wal_->LastIndex();
-    if (first_idx == last_idx && idx == 0) {
-        return 0;
-    }
-
     // Check snapshot first
     auto snap_reader = capnp_util::reader<msg::Snapshot>(snapshot_);
     auto snap_meta = snap_reader.getMetadata();

@@ -40,7 +40,10 @@ Result<bool> ReadyProcessor::Process() {
     }
 
     // 4. Send messages
-    SendMessages(rd.Messages());
+    // For non-leaders (is_persisted_msg=true), messages are in rd.light.messages
+    // and should be sent after persisting entries/hard state.
+    // rd.Messages() returns empty for non-leaders, so we use rd.light.messages directly.
+    SendMessages(rd.light.messages);
 
     // 5. Apply committed entries to state machine
     if (auto result = ApplyCommittedEntries(rd.light.committed_entries); !result) {
