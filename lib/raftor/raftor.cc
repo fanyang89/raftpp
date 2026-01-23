@@ -3,6 +3,7 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <filesystem>
 #include <mutex>
 #include <thread>
 
@@ -14,6 +15,10 @@
 #include "ready_processor.h"
 
 namespace raftpp::raftor {
+
+namespace {
+constexpr auto kLogSizeCheckMinInterval = std::chrono::seconds{1};
+}  // namespace
 
 // === RaftorConfig implementation ===
 
@@ -95,10 +100,13 @@ class RaftorImpl : public Raftor {
     void ProcessReadIndexQueue();
     void ProcessTimeouts();
     bool ShouldTick();
+    void MaybeAutoSnapshot();
     void OnMessage(Message msg);
     void OnPeerError(uint64_t peer_id, std::string error);
     std::string GenerateProposalContext();
     void RefreshStatus();
+    void InitializeSnapshotState();
+    [[nodiscard]] uint64_t GetWalDirSizeBytes() const;
 
     RaftorConfig config_;
     std::unique_ptr<StateMachine> state_machine_;
@@ -123,6 +131,11 @@ class RaftorImpl : public Raftor {
     // Cache status for thread-safe access from non-event-loop threads.
     mutable std::mutex status_mutex_;
     NodeStatus cached_status_{};
+
+    // Auto snapshot tracking
+    uint64_t last_snapshot_attempt_index_ = 0;
+    std::chrono::steady_clock::time_point last_snapshot_time_{};
+    std::chrono::steady_clock::time_point last_log_size_check_{};
 };
 
 RaftorImpl::RaftorImpl(
@@ -175,6 +188,7 @@ Result<void> RaftorImpl::Start() {
 
     running_ = true;
     last_tick_ = std::chrono::steady_clock::now();
+    InitializeSnapshotState();
 
     spdlog::info("Raftor node {} started, listening on {}", config_.node_id, config_.listen_addr);
     return {};
@@ -232,6 +246,7 @@ void RaftorImpl::EventLoop() {
         }
 
         ProcessTimeouts();
+        MaybeAutoSnapshot();
 
         RefreshStatus();
     }
@@ -253,6 +268,7 @@ void RaftorImpl::Poll(std::chrono::milliseconds timeout) {
     }
 
     ProcessTimeouts();
+    MaybeAutoSnapshot();
 
     RefreshStatus();
 }
@@ -269,6 +285,7 @@ bool RaftorImpl::Tick() {
     }
 
     ProcessTimeouts();
+    MaybeAutoSnapshot();
 
     RefreshStatus();
     return ticked;
@@ -277,6 +294,122 @@ bool RaftorImpl::Tick() {
 bool RaftorImpl::ShouldTick() {
     auto now = std::chrono::steady_clock::now();
     return (now - last_tick_) >= config_.tick_interval;
+}
+
+void RaftorImpl::InitializeSnapshotState() {
+    last_snapshot_time_ = std::chrono::steady_clock::now();
+    last_log_size_check_ = std::chrono::steady_clock::time_point{};
+
+    auto first_index_result = storage_->FirstIndex();
+    if (first_index_result) {
+        const uint64_t first_index = *first_index_result;
+        last_snapshot_attempt_index_ = first_index > 0 ? first_index - 1 : 0;
+        return;
+    }
+
+    spdlog::warn(
+        "Snapshot init failed to read first index: {}", first_index_result.error().ToString()
+    );
+    last_snapshot_attempt_index_ = 0;
+}
+
+uint64_t RaftorImpl::GetWalDirSizeBytes() const {
+    std::error_code ec;
+    const auto wal_dir = config_.data_dir / "wal";
+    if (!std::filesystem::exists(wal_dir, ec)) {
+        return 0;
+    }
+
+    uint64_t total_bytes = 0;
+    auto options = std::filesystem::directory_options::skip_permission_denied;
+    for (auto it = std::filesystem::recursive_directory_iterator(wal_dir, options, ec);
+         it != std::filesystem::recursive_directory_iterator(); it.increment(ec)) {
+        if (ec) {
+            spdlog::debug("WAL size scan error: {}", ec.message());
+            break;
+        }
+
+        if (!it->is_regular_file(ec)) {
+            continue;
+        }
+
+        const uint64_t size = it->file_size(ec);
+        if (!ec) {
+            total_bytes += size;
+        } else {
+            ec.clear();
+        }
+    }
+
+    return total_bytes;
+}
+
+void RaftorImpl::MaybeAutoSnapshot() {
+    if (config_.snapshot_entries_threshold == 0 && config_.snapshot_log_size_bytes == 0 &&
+        config_.snapshot_interval.count() == 0) {
+        return;
+    }
+
+    const uint64_t applied_index = ready_processor_->GetAppliedIndex();
+    if (applied_index == 0) {
+        return;
+    }
+
+    auto first_index_result = storage_->FirstIndex();
+    if (!first_index_result) {
+        spdlog::error(
+            "Auto snapshot skipped: failed to read first index: {}",
+            first_index_result.error().ToString()
+        );
+        return;
+    }
+
+    const uint64_t first_index = *first_index_result;
+    const uint64_t snapshot_index = first_index > 0 ? first_index - 1 : 0;
+    if (applied_index <= snapshot_index) {
+        return;
+    }
+
+    const auto now = std::chrono::steady_clock::now();
+    bool should_snapshot = false;
+    const char* reason = nullptr;
+
+    if (config_.snapshot_entries_threshold > 0 &&
+        applied_index - snapshot_index >= config_.snapshot_entries_threshold) {
+        should_snapshot = true;
+        reason = "entries";
+    } else if (config_.snapshot_interval.count() > 0 &&
+               now - last_snapshot_time_ >= config_.snapshot_interval) {
+        should_snapshot = true;
+        reason = "time";
+    } else if (config_.snapshot_log_size_bytes > 0) {
+        if (now - last_log_size_check_ >= kLogSizeCheckMinInterval) {
+            last_log_size_check_ = now;
+            const uint64_t wal_size = GetWalDirSizeBytes();
+            if (wal_size >= config_.snapshot_log_size_bytes) {
+                should_snapshot = true;
+                reason = "log_size";
+            }
+        }
+    }
+
+    if (!should_snapshot) {
+        return;
+    }
+
+    if (applied_index <= last_snapshot_attempt_index_) {
+        return;
+    }
+
+    last_snapshot_attempt_index_ = applied_index;
+    spdlog::info(
+        "Auto snapshot triggered (reason={}, applied_index={}, snapshot_index={})",
+        reason ? reason : "unknown", applied_index, snapshot_index
+    );
+
+    if (auto result = TakeSnapshot(); !result) {
+        spdlog::error("Auto snapshot failed: {}", result.error().ToString());
+    }
 }
 
 void RaftorImpl::ProcessProposalQueue() {
@@ -483,6 +616,8 @@ Result<void> RaftorImpl::TakeSnapshot() {
         return result;
     }
 
+    last_snapshot_time_ = std::chrono::steady_clock::now();
+    last_snapshot_attempt_index_ = applied_index;
     return {};
 }
 
