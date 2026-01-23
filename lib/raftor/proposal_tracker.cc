@@ -29,7 +29,6 @@ void FailAllPending(Map& pending, std::mutex& mutex, const RaftError& error) {
         }
     }
 }
-
 }  // namespace
 
 void ProposalTracker::Track(
@@ -132,20 +131,27 @@ void ProposalTracker::ExpireTimeouts(std::chrono::steady_clock::time_point now) 
     std::vector<ProposalCallback> proposal_callbacks;
     std::vector<ReadIndexCallback> read_callbacks;
 
-    auto collect_expired = [&](auto& pending, auto& callbacks) {
-        absl::erase_if(pending, [&](auto& entry) {
-            if (entry.second.deadline > now) {
-                return false;
-            }
-            callbacks.push_back(std::move(entry.second.callback));
-            return true;
-        });
-    };
-
     {
         std::lock_guard lock(mutex_);
-        collect_expired(proposals_, proposal_callbacks);
-        collect_expired(reads_, read_callbacks);
+        for (auto it = proposals_.begin(); it != proposals_.end();) {
+            if (it->second.deadline <= now) {
+                proposal_callbacks.push_back(std::move(it->second.callback));
+                auto to_erase = it++;
+                proposals_.erase(to_erase);
+                continue;
+            }
+            ++it;
+        }
+
+        for (auto it = reads_.begin(); it != reads_.end();) {
+            if (it->second.deadline <= now) {
+                read_callbacks.push_back(std::move(it->second.callback));
+                auto to_erase = it++;
+                reads_.erase(to_erase);
+                continue;
+            }
+            ++it;
+        }
     }
 
     if (proposal_callbacks.empty() && read_callbacks.empty()) {
