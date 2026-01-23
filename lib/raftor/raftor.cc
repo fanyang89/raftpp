@@ -210,9 +210,23 @@ void RaftorImpl::Stop() {
         return;
     }
 
+    const auto shutdown_error = RaftError(RaftErrorCode::ShuttingDown);
+
+    // Fail requests still waiting in the cross-thread queues.
+    while (auto item = proposal_queue_.TryPop()) {
+        if (item->callback) {
+            item->callback(std::unexpected(shutdown_error));
+        }
+    }
+    while (auto item = read_index_queue_.TryPop()) {
+        if (item->callback) {
+            item->callback(std::unexpected(shutdown_error));
+        }
+    }
+
     // Fail all pending proposals
-    proposal_tracker_.FailAll(RaftError(RaftErrorCode::ShuttingDown));
-    proposal_tracker_.FailAllReads(RaftError(RaftErrorCode::ShuttingDown));
+    proposal_tracker_.FailAll(shutdown_error);
+    proposal_tracker_.FailAllReads(shutdown_error);
 
     // Stop transport
     transport_->Stop();
