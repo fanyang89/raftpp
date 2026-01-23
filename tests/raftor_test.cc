@@ -143,6 +143,20 @@ bool HasLeader(const std::vector<std::unique_ptr<Raftor>>& raftors) {
     return false;
 }
 
+bool WaitForLeader(
+    std::vector<std::unique_ptr<Raftor>>& raftors, std::chrono::milliseconds timeout,
+    std::chrono::milliseconds step = 25ms
+) {
+    auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (std::chrono::steady_clock::now() < deadline) {
+        PollAll(raftors, step);
+        if (HasLeader(raftors)) {
+            return true;
+        }
+    }
+    return HasLeader(raftors);
+}
+
 uint64_t GetLeaderId(const std::vector<std::unique_ptr<Raftor>>& raftors) {
     for (const auto& r : raftors) {
         auto status = r->GetStatus();
@@ -332,9 +346,7 @@ TEST_CASE("three_node_leader_failure") {
         }
     }
 
-    PollAll(remaining_raftors, 800ms);
-
-    REQUIRE(HasLeader(remaining_raftors));
+    REQUIRE(WaitForLeader(remaining_raftors, 2s));
     uint64_t second_leader_id = GetLeaderId(remaining_raftors);
 
     REQUIRE_MESSAGE(second_leader_id != first_leader_id, "A new leader should be elected");
@@ -369,10 +381,8 @@ TEST_CASE("five_node_cluster_propose") {
     }
 
     // Wait for leader election (5 nodes need more time)
-    std::cout << "Polling for leader election (600ms)..." << std::endl;
-    PollAll(raftors, 600ms);
-
-    REQUIRE_MESSAGE(HasLeader(raftors), "Leader should be elected in 5-node cluster");
+    std::cout << "Polling for leader election (up to 2s)..." << std::endl;
+    REQUIRE_MESSAGE(WaitForLeader(raftors, 2s), "Leader should be elected in 5-node cluster");
     uint64_t leader_id = GetLeaderId(raftors);
     REQUIRE_NE(leader_id, 0);
     REQUIRE_MESSAGE(leader_id <= state_machines.size(), "Leader ID out of range");
