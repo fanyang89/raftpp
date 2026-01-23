@@ -319,12 +319,12 @@ TEST_CASE("proposal_queue: push and pop") {
 
     auto item = queue.TryPop();
     REQUIRE(item.has_value());
-    CHECK(item->first == "data1");
+    CHECK(item->data == "data1");
 
     CHECK(queue.Empty());
 
     // Invoke callback
-    item->second(std::string("result"));
+    item->callback(std::string("result"));
     CHECK(called);
 }
 
@@ -350,9 +350,9 @@ TEST_CASE("proposal_queue: fifo order") {
     REQUIRE(item2.has_value());
     REQUIRE(item3.has_value());
 
-    CHECK(item1->first == "data1");
-    CHECK(item2->first == "data2");
-    CHECK(item3->first == "data3");
+    CHECK(item1->data == "data1");
+    CHECK(item2->data == "data2");
+    CHECK(item3->data == "data3");
 }
 
 TEST_CASE("proposal_queue: thread safety") {
@@ -413,11 +413,11 @@ TEST_CASE("read_index_queue: push and pop") {
 
     auto item = queue.TryPop();
     REQUIRE(item.has_value());
-    CHECK(item->first == "ctx1");
+    CHECK(item->ctx == "ctx1");
 
     CHECK(queue.Empty());
 
-    item->second({});
+    item->callback({});
     CHECK(called);
 }
 
