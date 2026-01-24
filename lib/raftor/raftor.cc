@@ -457,7 +457,9 @@ Result<std::string> RaftorImpl::ProposeSync(std::string data, std::chrono::milli
     });
 
     if (future.wait_for(timeout) == std::future_status::timeout) {
-        completed->exchange(true);
+        if (completed->exchange(true)) {
+            return future.get();
+        }
         return std::unexpected(RaftError(RpcErrorCode::Timeout));
     }
 
@@ -492,7 +494,9 @@ Result<void> RaftorImpl::ReadIndexSync(std::string ctx, std::chrono::millisecond
     });
 
     if (future.wait_for(timeout) == std::future_status::timeout) {
-        completed->exchange(true);
+        if (completed->exchange(true)) {
+            return future.get();
+        }
         return std::unexpected(RaftError(RpcErrorCode::Timeout));
     }
 

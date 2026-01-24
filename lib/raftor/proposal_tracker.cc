@@ -15,6 +15,21 @@ std::chrono::steady_clock::time_point DeadlineFromTimeout(std::chrono::milliseco
     return std::chrono::steady_clock::now() + timeout;
 }
 
+template <typename Map>
+void FailAllPending(Map& pending, std::mutex& mutex, const RaftError& error) {
+    Map callbacks;
+    {
+        std::lock_guard lock(mutex);
+        callbacks = std::move(pending);
+        pending.clear();
+    }
+    for (auto& [ctx, entry] : callbacks) {
+        if (entry.callback) {
+            entry.callback(std::unexpected(error));
+        }
+    }
+}
+
 }  // namespace
 
 void ProposalTracker::Track(
@@ -57,32 +72,11 @@ void ProposalTracker::Fail(const std::string& ctx, RaftError error) {
 }
 
 void ProposalTracker::FailAll(RaftError error) {
-    absl::flat_hash_map<std::string, PendingProposal> callbacks;
-    {
-        std::lock_guard lock(mutex_);
-        callbacks = std::move(proposals_);
-        proposals_.clear();
-    }
-    // Use the actual error for all failures
-    for (auto& [ctx, pending] : callbacks) {
-        if (pending.callback) {
-            pending.callback(std::unexpected(error));
-        }
-    }
+    FailAllPending(proposals_, mutex_, error);
 }
 
 void ProposalTracker::FailAllReads(RaftError error) {
-    absl::flat_hash_map<std::string, PendingRead> callbacks;
-    {
-        std::lock_guard lock(mutex_);
-        callbacks = std::move(reads_);
-        reads_.clear();
-    }
-    for (auto& [ctx, pending] : callbacks) {
-        if (pending.callback) {
-            pending.callback(std::unexpected(error));
-        }
-    }
+    FailAllPending(reads_, mutex_, error);
 }
 
 void ProposalTracker::TrackRead(
