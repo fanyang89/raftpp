@@ -390,14 +390,16 @@ void RaftorImpl::MaybeAutoSnapshot() {
 }
 
 void RaftorImpl::ProcessProposalQueue() {
-    while (auto item = proposal_queue_.TryPop()) {
-        auto& [data, callback] = *item;
+    while (auto item = proposal_queue_.TryPopWithTimeout()) {
+        auto& data = item->data;
+        auto& callback = item->callback;
 
         // Generate a unique context for tracking this proposal
         std::string ctx = GenerateProposalContext();
 
         // Track the proposal
-        proposal_tracker_.Track(ctx, std::move(callback), config_.proposal_timeout);
+        const auto timeout = item->timeout.value_or(config_.proposal_timeout);
+        proposal_tracker_.Track(ctx, std::move(callback), timeout);
 
         // Submit to Raft
         if (auto result = raw_node_->Propose(ctx, data); !result) {
@@ -407,11 +409,13 @@ void RaftorImpl::ProcessProposalQueue() {
 }
 
 void RaftorImpl::ProcessReadIndexQueue() {
-    while (auto item = read_index_queue_.TryPop()) {
-        auto& [ctx, callback] = *item;
+    while (auto item = read_index_queue_.TryPopWithTimeout()) {
+        auto& ctx = item->ctx;
+        auto& callback = item->callback;
 
         // Track the read
-        proposal_tracker_.TrackRead(ctx, std::move(callback), config_.read_index_timeout);
+        const auto timeout = item->timeout.value_or(config_.read_index_timeout);
+        proposal_tracker_.TrackRead(ctx, std::move(callback), timeout);
 
         // Submit to Raft
         raw_node_->ReadIndex(ctx);
@@ -441,7 +445,7 @@ void RaftorImpl::OnPeerError(uint64_t peer_id, std::string error) {
 }
 
 void RaftorImpl::Propose(std::string data, ProposalCallback callback) {
-    proposal_queue_.Push(std::move(data), std::move(callback));
+    proposal_queue_.Push(std::move(data), std::move(callback), config_.proposal_timeout);
 }
 
 Result<std::string> RaftorImpl::ProposeSync(std::string data, std::chrono::milliseconds timeout) {
@@ -449,12 +453,16 @@ Result<std::string> RaftorImpl::ProposeSync(std::string data, std::chrono::milli
     auto future = promise->get_future();
     auto completed = std::make_shared<std::atomic<bool>>(false);
 
-    Propose(std::move(data), [promise, completed](Result<std::string> result) {
-        if (completed->exchange(true)) {
-            return;
-        }
-        promise->set_value(std::move(result));
-    });
+    proposal_queue_.Push(
+        std::move(data),
+        [promise, completed](Result<std::string> result) {
+            if (completed->exchange(true)) {
+                return;
+            }
+            promise->set_value(std::move(result));
+        },
+        timeout
+    );
 
     if (future.wait_for(timeout) == std::future_status::timeout) {
         if (completed->exchange(true)) {
@@ -478,7 +486,7 @@ std::future<Result<std::string>> RaftorImpl::ProposeAsync(std::string data) {
 }
 
 void RaftorImpl::ReadIndex(std::string ctx, ReadIndexCallback callback) {
-    read_index_queue_.Push(std::move(ctx), std::move(callback));
+    read_index_queue_.Push(std::move(ctx), std::move(callback), config_.read_index_timeout);
 }
 
 Result<void> RaftorImpl::ReadIndexSync(std::string ctx, std::chrono::milliseconds timeout) {
@@ -486,12 +494,16 @@ Result<void> RaftorImpl::ReadIndexSync(std::string ctx, std::chrono::millisecond
     auto future = promise->get_future();
     auto completed = std::make_shared<std::atomic<bool>>(false);
 
-    ReadIndex(std::move(ctx), [promise, completed](Result<void> result) {
-        if (completed->exchange(true)) {
-            return;
-        }
-        promise->set_value(std::move(result));
-    });
+    read_index_queue_.Push(
+        std::move(ctx),
+        [promise, completed](Result<void> result) {
+            if (completed->exchange(true)) {
+                return;
+            }
+            promise->set_value(std::move(result));
+        },
+        timeout
+    );
 
     if (future.wait_for(timeout) == std::future_status::timeout) {
         if (completed->exchange(true)) {

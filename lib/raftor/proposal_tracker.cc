@@ -176,10 +176,39 @@ void ProposalTracker::ExpireTimeouts(std::chrono::steady_clock::time_point now) 
 
 void ProposalQueue::Push(std::string data, ProposalCallback callback) {
     std::lock_guard lock(mutex_);
-    queue_.emplace_back(std::move(data), std::move(callback));
+    queue_.push_back(
+        ProposalQueueItem{
+            .data = std::move(data),
+            .callback = std::move(callback),
+            .timeout = std::nullopt,
+        }
+    );
+}
+
+void ProposalQueue::Push(
+    std::string data, ProposalCallback callback, std::chrono::milliseconds timeout
+) {
+    std::lock_guard lock(mutex_);
+    queue_.push_back(
+        ProposalQueueItem{
+            .data = std::move(data),
+            .callback = std::move(callback),
+            .timeout = timeout,
+        }
+    );
 }
 
 std::optional<std::pair<std::string, ProposalCallback>> ProposalQueue::TryPop() {
+    std::lock_guard lock(mutex_);
+    if (queue_.empty()) {
+        return std::nullopt;
+    }
+    auto item = std::move(queue_.front());
+    queue_.pop_front();
+    return std::make_pair(std::move(item.data), std::move(item.callback));
+}
+
+std::optional<ProposalQueue::ProposalQueueItem> ProposalQueue::TryPopWithTimeout() {
     std::lock_guard lock(mutex_);
     if (queue_.empty()) {
         return std::nullopt;
@@ -203,10 +232,39 @@ size_t ProposalQueue::Size() const {
 
 void ReadIndexQueue::Push(std::string ctx, ReadIndexCallback callback) {
     std::lock_guard lock(mutex_);
-    queue_.emplace_back(std::move(ctx), std::move(callback));
+    queue_.push_back(
+        ReadIndexQueueItem{
+            .ctx = std::move(ctx),
+            .callback = std::move(callback),
+            .timeout = std::nullopt,
+        }
+    );
+}
+
+void ReadIndexQueue::Push(
+    std::string ctx, ReadIndexCallback callback, std::chrono::milliseconds timeout
+) {
+    std::lock_guard lock(mutex_);
+    queue_.push_back(
+        ReadIndexQueueItem{
+            .ctx = std::move(ctx),
+            .callback = std::move(callback),
+            .timeout = timeout,
+        }
+    );
 }
 
 std::optional<std::pair<std::string, ReadIndexCallback>> ReadIndexQueue::TryPop() {
+    std::lock_guard lock(mutex_);
+    if (queue_.empty()) {
+        return std::nullopt;
+    }
+    auto item = std::move(queue_.front());
+    queue_.pop_front();
+    return std::make_pair(std::move(item.ctx), std::move(item.callback));
+}
+
+std::optional<ReadIndexQueue::ReadIndexQueueItem> ReadIndexQueue::TryPopWithTimeout() {
     std::lock_guard lock(mutex_);
     if (queue_.empty()) {
         return std::nullopt;
