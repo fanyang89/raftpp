@@ -107,6 +107,7 @@ class RaftorImpl : public Raftor {
     void RefreshStatus();
     void InitializeSnapshotState();
     [[nodiscard]] uint64_t GetWalDirSizeBytes() const;
+    void ProcessRaftWork();
 
     RaftorConfig config_;
     std::unique_ptr<StateMachine> state_machine_;
@@ -235,21 +236,7 @@ void RaftorImpl::EventLoop() {
             last_tick_ = std::chrono::steady_clock::now();
         }
 
-        // 3. Process pending proposals from queue
-        ProcessProposalQueue();
-
-        // 4. Process pending read index requests
-        ProcessReadIndexQueue();
-
-        // 5. Process Ready if available
-        if (auto result = ready_processor_->Process(); !result) {
-            spdlog::error("Ready processing failed: {}", result.error().ToString());
-        }
-
-        ProcessTimeouts();
-        MaybeAutoSnapshot();
-
-        RefreshStatus();
+        ProcessRaftWork();
     }
 }
 
@@ -261,34 +248,14 @@ void RaftorImpl::Poll(std::chrono::milliseconds timeout) {
         last_tick_ = std::chrono::steady_clock::now();
     }
 
-    ProcessProposalQueue();
-    ProcessReadIndexQueue();
-
-    if (auto result = ready_processor_->Process(); !result) {
-        spdlog::error("Ready processing failed: {}", result.error().ToString());
-    }
-
-    ProcessTimeouts();
-    MaybeAutoSnapshot();
-
-    RefreshStatus();
+    ProcessRaftWork();
 }
 
 bool RaftorImpl::Tick() {
     bool ticked = raw_node_->Tick();
     last_tick_ = std::chrono::steady_clock::now();
 
-    ProcessProposalQueue();
-    ProcessReadIndexQueue();
-
-    if (auto result = ready_processor_->Process(); !result) {
-        spdlog::error("Ready processing failed: {}", result.error().ToString());
-    }
-
-    ProcessTimeouts();
-    MaybeAutoSnapshot();
-
-    RefreshStatus();
+    ProcessRaftWork();
     return ticked;
 }
 
@@ -317,6 +284,19 @@ void RaftorImpl::InitializeSnapshotState() {
 
 uint64_t RaftorImpl::GetWalDirSizeBytes() const {
     return storage_ ? storage_->LogSizeBytes() : 0;
+}
+
+void RaftorImpl::ProcessRaftWork() {
+    ProcessProposalQueue();
+    ProcessReadIndexQueue();
+
+    if (auto result = ready_processor_->Process(); !result) {
+        spdlog::error("Ready processing failed: {}", result.error().ToString());
+    }
+
+    ProcessTimeouts();
+    MaybeAutoSnapshot();
+    RefreshStatus();
 }
 
 void RaftorImpl::MaybeAutoSnapshot() {
