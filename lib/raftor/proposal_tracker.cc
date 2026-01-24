@@ -132,23 +132,20 @@ void ProposalTracker::ExpireTimeouts(std::chrono::steady_clock::time_point now) 
     std::vector<ProposalCallback> proposal_callbacks;
     std::vector<ReadIndexCallback> read_callbacks;
 
+    auto collect_expired = [&](auto& pending, auto& callbacks) {
+        absl::erase_if(pending, [&](auto& entry) {
+            if (entry.second.deadline > now) {
+                return false;
+            }
+            callbacks.push_back(std::move(entry.second.callback));
+            return true;
+        });
+    };
+
     {
         std::lock_guard lock(mutex_);
-        absl::erase_if(proposals_, [&](auto& entry) {
-            if (entry.second.deadline > now) {
-                return false;
-            }
-            proposal_callbacks.push_back(std::move(entry.second.callback));
-            return true;
-        });
-
-        absl::erase_if(reads_, [&](auto& entry) {
-            if (entry.second.deadline > now) {
-                return false;
-            }
-            read_callbacks.push_back(std::move(entry.second.callback));
-            return true;
-        });
+        collect_expired(proposals_, proposal_callbacks);
+        collect_expired(reads_, read_callbacks);
     }
 
     if (proposal_callbacks.empty() && read_callbacks.empty()) {
