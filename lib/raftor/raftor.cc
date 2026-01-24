@@ -18,6 +18,7 @@ namespace raftpp::raftor {
 
 namespace {
 constexpr auto kLogSizeCheckMinInterval = std::chrono::seconds{1};
+constexpr auto kSnapshotRetryMinInterval = std::chrono::seconds{1};
 }  // namespace
 
 // === RaftorConfig implementation ===
@@ -134,6 +135,7 @@ class RaftorImpl : public Raftor {
 
     // Auto snapshot tracking
     uint64_t last_snapshot_attempt_index_ = 0;
+    std::chrono::steady_clock::time_point last_snapshot_attempt_time_{};
     std::chrono::steady_clock::time_point last_snapshot_time_{};
     std::chrono::steady_clock::time_point last_log_size_check_{};
 };
@@ -298,6 +300,7 @@ bool RaftorImpl::ShouldTick() {
 
 void RaftorImpl::InitializeSnapshotState() {
     last_snapshot_time_ = std::chrono::steady_clock::now();
+    last_snapshot_attempt_time_ = std::chrono::steady_clock::time_point{};
     last_log_size_check_ = std::chrono::steady_clock::time_point{};
 
     auto first_index_result = storage_->FirstIndex();
@@ -397,11 +400,13 @@ void RaftorImpl::MaybeAutoSnapshot() {
         return;
     }
 
-    if (applied_index <= last_snapshot_attempt_index_) {
+    if (applied_index <= last_snapshot_attempt_index_ &&
+        now - last_snapshot_attempt_time_ < kSnapshotRetryMinInterval) {
         return;
     }
 
     last_snapshot_attempt_index_ = applied_index;
+    last_snapshot_attempt_time_ = now;
     spdlog::info(
         "Auto snapshot triggered (reason={}, applied_index={}, snapshot_index={})",
         reason ? reason : "unknown", applied_index, snapshot_index
