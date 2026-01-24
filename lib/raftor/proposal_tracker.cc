@@ -192,13 +192,11 @@ void ProposalQueue::Push(
 }
 
 std::optional<std::pair<std::string, ProposalCallback>> ProposalQueue::TryPop() {
-    std::lock_guard lock(mutex_);
-    if (queue_.empty()) {
+    auto item = TryPopWithTimeout();
+    if (!item) {
         return std::nullopt;
     }
-    auto item = std::move(queue_.front());
-    queue_.pop_front();
-    return std::make_pair(std::move(item.data), std::move(item.callback));
+    return std::make_pair(std::move(item->data), std::move(item->callback));
 }
 
 std::optional<ProposalQueue::ProposalQueueItem> ProposalQueue::TryPopWithTimeout() {
@@ -248,13 +246,11 @@ void ReadIndexQueue::Push(
 }
 
 std::optional<std::pair<std::string, ReadIndexCallback>> ReadIndexQueue::TryPop() {
-    std::lock_guard lock(mutex_);
-    if (queue_.empty()) {
+    auto item = TryPopWithTimeout();
+    if (!item) {
         return std::nullopt;
     }
-    auto item = std::move(queue_.front());
-    queue_.pop_front();
-    return std::make_pair(std::move(item.ctx), std::move(item.callback));
+    return std::make_pair(std::move(item->ctx), std::move(item->callback));
 }
 
 std::optional<ReadIndexQueue::ReadIndexQueueItem> ReadIndexQueue::TryPopWithTimeout() {
