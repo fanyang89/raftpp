@@ -3,7 +3,6 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
-#include <filesystem>
 #include <mutex>
 #include <thread>
 
@@ -317,34 +316,7 @@ void RaftorImpl::InitializeSnapshotState() {
 }
 
 uint64_t RaftorImpl::GetWalDirSizeBytes() const {
-    std::error_code ec;
-    const auto wal_dir = config_.data_dir / "wal";
-    if (!std::filesystem::exists(wal_dir, ec)) {
-        return 0;
-    }
-
-    uint64_t total_bytes = 0;
-    auto options = std::filesystem::directory_options::skip_permission_denied;
-    for (auto it = std::filesystem::recursive_directory_iterator(wal_dir, options, ec);
-         it != std::filesystem::recursive_directory_iterator(); it.increment(ec)) {
-        if (ec) {
-            spdlog::debug("WAL size scan error: {}", ec.message());
-            break;
-        }
-
-        if (!it->is_regular_file(ec)) {
-            continue;
-        }
-
-        const uint64_t size = it->file_size(ec);
-        if (!ec) {
-            total_bytes += size;
-        } else {
-            ec.clear();
-        }
-    }
-
-    return total_bytes;
+    return storage_ ? storage_->LogSizeBytes() : 0;
 }
 
 void RaftorImpl::MaybeAutoSnapshot() {

@@ -121,6 +121,14 @@ Result<void> WALStorage::Sync() {
     return wal_->Sync();
 }
 
+uint64_t WALStorage::LogSizeBytes() const {
+    std::lock_guard lock(mutex_);
+    if (!wal_) {
+        return 0;
+    }
+    return wal_->LogSizeBytes();
+}
+
 std::vector<Entry> WALStorage::AllEntries() {
     std::lock_guard lock(mutex_);
 

@@ -194,6 +194,14 @@ std::vector<SegmentInfo> SegmentManager::ListSegments() const {
     return result;
 }
 
+uint64_t SegmentManager::TotalSizeBytes() const {
+    uint64_t total = 0;
+    for (const auto& [seg_id, segment] : segments_) {
+        total += segment->file_size();
+    }
+    return total;
+}
+
 Result<void> SegmentManager::SyncAll() {
     for (auto& [seg_id, segment] : segments_) {
         auto result = segment->Sync();

@@ -88,6 +88,25 @@ bool MetadataStore::Exists() const {
     return std::filesystem::exists(path_);
 }
 
+uint64_t MetadataStore::SizeBytes() const {
+    std::error_code ec;
+    uint64_t total = 0;
+    if (std::filesystem::exists(path_, ec)) {
+        auto size = std::filesystem::file_size(path_, ec);
+        if (!ec) {
+            total += size;
+        }
+    }
+    ec.clear();
+    if (std::filesystem::exists(tmp_path_, ec)) {
+        auto size = std::filesystem::file_size(tmp_path_, ec);
+        if (!ec) {
+            total += size;
+        }
+    }
+    return total;
+}
+
 Result<void> MetadataStore::AtomicWrite(const std::vector<uint8_t>& data) {
     // Write to temporary file
     int fd = ::open(tmp_path_.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);

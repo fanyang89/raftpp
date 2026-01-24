@@ -23,6 +23,7 @@ Segment::Segment(Segment&& other) noexcept
       segment_id_(other.segment_id_),
       first_index_(other.first_index_),
       write_offset_(other.write_offset_),
+      file_size_(other.file_size_),
       path_(std::move(other.path_)) {
     other.fd_ = -1;
 }
@@ -36,6 +37,7 @@ Segment& Segment::operator=(Segment&& other) noexcept {
         segment_id_ = other.segment_id_;
         first_index_ = other.first_index_;
         write_offset_ = other.write_offset_;
+        file_size_ = other.file_size_;
         path_ = std::move(other.path_);
         other.fd_ = -1;
     }
@@ -81,11 +83,21 @@ Result<std::unique_ptr<Segment>> Segment::Create(
         );
     }
 
+    struct stat st{};
+    if (::fstat(fd, &st) < 0) {
+        ::close(fd);
+        ::unlink(path.c_str());
+        return RaftError(
+            StorageErrorOther{fmt::format("failed to stat segment: {}", strerror(errno))}
+        );
+    }
+
     auto segment = std::unique_ptr<Segment>(new Segment());
     segment->fd_ = fd;
     segment->segment_id_ = segment_id;
     segment->first_index_ = first_index;
     segment->write_offset_ = sizeof(SegmentHeader);
+    segment->file_size_ = static_cast<uint64_t>(st.st_size);
     segment->path_ = path;
 
     SPDLOG_DEBUG("created segment {} with first_index={}", path.string(), first_index);
@@ -133,6 +145,7 @@ Result<std::unique_ptr<Segment>> Segment::Open(const std::filesystem::path& path
     segment->segment_id_ = header.segment_id;
     segment->first_index_ = header.first_index;
     segment->write_offset_ = static_cast<uint64_t>(st.st_size);
+    segment->file_size_ = static_cast<uint64_t>(st.st_size);
     segment->path_ = path;
 
     SPDLOG_DEBUG(
@@ -156,6 +169,9 @@ Result<void> Segment::Append(std::span<const uint8_t> data) {
     }
 
     write_offset_ += data.size();
+    if (write_offset_ > file_size_) {
+        file_size_ = write_offset_;
+    }
     return {};
 }
 
@@ -215,6 +231,7 @@ Result<void> Segment::Truncate(uint64_t offset) {
     }
 
     write_offset_ = offset;
+    file_size_ = offset;
     SPDLOG_DEBUG("truncated segment {} to offset {}", path_.string(), offset);
 
     return {};

@@ -36,6 +36,9 @@ class MetadataStore {
     // Check if metadata file exists
     [[nodiscard]] bool Exists() const;
 
+    // Get total size of metadata files in bytes
+    [[nodiscard]] uint64_t SizeBytes() const;
+
   private:
     // Atomic write implementation
     [[nodiscard]] Result<void> AtomicWrite(const std::vector<uint8_t>& data);

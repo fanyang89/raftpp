@@ -53,6 +53,9 @@ class WALStorage final : public Storage {
     // Sync all pending writes to disk
     [[nodiscard]] Result<void> Sync();
 
+    // Get approximate WAL size in bytes
+    [[nodiscard]] uint64_t LogSizeBytes() const;
+
     // Get all entries (for testing)
     [[nodiscard]] std::vector<Entry> AllEntries();
 

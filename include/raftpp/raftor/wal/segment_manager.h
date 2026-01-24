@@ -47,6 +47,9 @@ class SegmentManager {
     // List all segments sorted by segment_id
     [[nodiscard]] std::vector<SegmentInfo> ListSegments() const;
 
+    // Sum of segment file sizes (no filesystem scan)
+    [[nodiscard]] uint64_t TotalSizeBytes() const;
+
     // Sync all segments
     [[nodiscard]] Result<void> SyncAll();
 

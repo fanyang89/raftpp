@@ -55,6 +55,8 @@ class Segment {
 
     [[nodiscard]] uint64_t write_offset() const { return write_offset_; }
 
+    [[nodiscard]] uint64_t file_size() const { return file_size_; }
+
     [[nodiscard]] const std::filesystem::path& path() const { return path_; }
 
     // Check if segment has reached size threshold
@@ -73,6 +75,7 @@ class Segment {
     uint64_t segment_id_ = 0;
     uint64_t first_index_ = 0;
     uint64_t write_offset_ = 0;
+    uint64_t file_size_ = 0;
     std::filesystem::path path_;
 };
 
