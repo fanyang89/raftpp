@@ -134,25 +134,21 @@ void ProposalTracker::ExpireTimeouts(std::chrono::steady_clock::time_point now) 
 
     {
         std::lock_guard lock(mutex_);
-        for (auto it = proposals_.begin(); it != proposals_.end();) {
-            if (it->second.deadline <= now) {
-                proposal_callbacks.push_back(std::move(it->second.callback));
-                auto to_erase = it++;
-                proposals_.erase(to_erase);
-                continue;
+        absl::erase_if(proposals_, [&](auto& entry) {
+            if (entry.second.deadline > now) {
+                return false;
             }
-            ++it;
-        }
+            proposal_callbacks.push_back(std::move(entry.second.callback));
+            return true;
+        });
 
-        for (auto it = reads_.begin(); it != reads_.end();) {
-            if (it->second.deadline <= now) {
-                read_callbacks.push_back(std::move(it->second.callback));
-                auto to_erase = it++;
-                reads_.erase(to_erase);
-                continue;
+        absl::erase_if(reads_, [&](auto& entry) {
+            if (entry.second.deadline > now) {
+                return false;
             }
-            ++it;
-        }
+            read_callbacks.push_back(std::move(entry.second.callback));
+            return true;
+        });
     }
 
     if (proposal_callbacks.empty() && read_callbacks.empty()) {
