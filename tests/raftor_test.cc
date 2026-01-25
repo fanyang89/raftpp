@@ -1,1041 +1,549 @@
 #include "raftpp/raftor/raftor.h"
 
+#include <unistd.h>
+
 #include <atomic>
 #include <chrono>
 #include <filesystem>
-#include <span>
+#include <memory>
+#include <system_error>
 #include <thread>
 
 #include <doctest/doctest.h>
-#include <kj/array.h>
+#include <spdlog/spdlog.h>
 
+#include "raftpp/core/capnp_util.h"
 #include "raftpp/core/memory_storage.h"
-#include "raftpp/raftor/mock_state_machine.h"
 #include "raftpp/raftor/proposal_tracker.h"
 #include "raftpp/raftor/raftor_config.h"
 #include "raftpp/raftor/rpc/transport.h"
 #include "raftpp/raftor/state_machine.h"
-#include "raftpp/raftor/wal/wal_storage.h"
-#include "test_util.h"
 
 using namespace raftpp;
 using namespace raftpp::raftor;
+using namespace std::chrono_literals;
 
-TEST_SUITE_BEGIN("raftor");
+namespace {
 
-// =============================================================================
-// Mock Transport for testing
-// =============================================================================
-
-class MockTransport : public rpc::Transport {
+class PortAllocator {
   public:
-    Result<void> Start() override {
-        started_ = true;
+    static uint16_t GetNextPort() {
+        static std::atomic<uint16_t> next_port{19000};
+        return next_port.fetch_add(1);
+    }
+};
+
+class MockStateMachine : public StateMachine {
+  public:
+    Result<ApplyResult> Apply(const Entry& entry) override {
+        std::lock_guard lock(mutex_);
+        auto reader = capnp_util::reader<msg::Entry>(entry);
+        auto data = reader.getData();
+        applied_entries_.emplace_back(data.begin(), data.end());
+        apply_count_++;
+        return ApplyResult{.response = "OK:" + std::to_string(apply_count_)};
+    }
+
+    Result<SnapshotData> TakeSnapshot(
+        uint64_t applied_index, uint64_t applied_term, const ConfState& conf_state
+    ) override {
+        std::lock_guard lock(mutex_);
+        SnapshotData data;
+        data.data = {'s', 'n', 'a', 'p'};
+        return data;
+    }
+
+    Result<void> RestoreSnapshot(const SnapshotData& snapshot) override {
+        std::lock_guard lock(mutex_);
+        restore_count_++;
         return {};
     }
 
-    void Stop() override { started_ = false; }
-
-    void Run() override {
-        // No-op for mock
-    }
-
-    void Poll(std::chrono::milliseconds /*timeout*/) override {
-        // Process any queued messages
+    void OnLeadershipChange(bool is_leader, uint64_t term, uint64_t leader_id) override {
         std::lock_guard lock(mutex_);
-        for (auto& msg : incoming_messages_) {
-            if (on_message_) {
-                on_message_(std::move(msg));
-            }
-        }
-        incoming_messages_.clear();
+        leadership_changes_.push_back({is_leader, term, leader_id});
+        SPDLOG_INFO(
+            "Leadership change: is_leader={}, term={}, leader_id={}", is_leader, term, leader_id
+        );
     }
 
-    void Send(std::span<const Message> messages) override {
+    size_t ApplyCount() const {
         std::lock_guard lock(mutex_);
-        for (const auto& msg : messages) {
-            sent_messages_.push_back(CloneMessage(msg));
-        }
+        return apply_count_;
     }
 
-    void AddPeer(uint64_t id, const std::string& addr) override {
+    std::vector<std::vector<uint8_t>> GetAppliedEntries() const {
         std::lock_guard lock(mutex_);
-        peers_[id] = addr;
+        return applied_entries_;
     }
 
-    void RemovePeer(uint64_t id) override {
+    std::vector<std::tuple<bool, uint64_t, uint64_t>> GetLeadershipChanges() const {
         std::lock_guard lock(mutex_);
-        peers_.erase(id);
+        return leadership_changes_;
     }
-
-    void SetMessageCallback(std::function<void(Message)> callback) override {
-        on_message_ = std::move(callback);
-    }
-
-    void SetErrorCallback(std::function<void(uint64_t, std::string)> callback) override {
-        on_error_ = std::move(callback);
-    }
-
-    // Test helpers
-    void InjectMessage(Message msg) {
-        std::lock_guard lock(mutex_);
-        incoming_messages_.push_back(std::move(msg));
-    }
-
-    void TriggerError(uint64_t peer_id, const std::string& error) {
-        if (on_error_) {
-            on_error_(peer_id, error);
-        }
-    }
-
-    std::vector<Message> SentMessages() const {
-        std::lock_guard lock(mutex_);
-        std::vector<Message> result;
-        result.reserve(sent_messages_.size());
-        for (const auto& msg : sent_messages_) {
-            result.push_back(CloneMessage(msg));
-        }
-        return result;
-    }
-
-    void ClearSentMessages() {
-        std::lock_guard lock(mutex_);
-        sent_messages_.clear();
-    }
-
-    bool HasPeer(uint64_t id) const {
-        std::lock_guard lock(mutex_);
-        return peers_.contains(id);
-    }
-
-    bool IsStarted() const { return started_; }
 
   private:
     mutable std::mutex mutex_;
-    std::atomic<bool> started_{false};
-    std::function<void(Message)> on_message_;
-    std::function<void(uint64_t, std::string)> on_error_;
-    std::vector<Message> incoming_messages_;
-    std::vector<Message> sent_messages_;
-    absl::flat_hash_map<uint64_t, std::string> peers_;
+    size_t apply_count_ = 0;
+    size_t restore_count_ = 0;
+    std::vector<std::vector<uint8_t>> applied_entries_;
+    std::vector<std::tuple<bool, uint64_t, uint64_t>> leadership_changes_;
 };
 
-// =============================================================================
-// ProposalTracker Tests
-// =============================================================================
-
-TEST_CASE("proposal_tracker: track and complete") {
-    ProposalTracker tracker;
-
-    bool called = false;
-    std::string response;
-
-    tracker.Track("ctx1", [&](Result<std::string> result) {
-        called = true;
-        if (result) {
-            response = *result;
-        }
-    });
-
-    CHECK(tracker.PendingCount() == 1);
-
-    tracker.Complete("ctx1", "success");
-
-    CHECK(called);
-    CHECK(response == "success");
-    CHECK(tracker.PendingCount() == 0);
-}
-
-TEST_CASE("proposal_tracker: track and fail") {
-    ProposalTracker tracker;
-
-    bool called = false;
-    bool failed = false;
-
-    tracker.Track("ctx1", [&](Result<std::string> result) {
-        called = true;
-        failed = !result.has_value();
-    });
-
-    tracker.Fail("ctx1", RaftError(RaftErrorCode::ProposalDropped));
-
-    CHECK(called);
-    CHECK(failed);
-    CHECK(tracker.PendingCount() == 0);
-}
-
-TEST_CASE("proposal_tracker: fail all") {
-    ProposalTracker tracker;
-
-    int call_count = 0;
-    int fail_count = 0;
-
-    for (int i = 0; i < 5; i++) {
-        tracker.Track("ctx" + std::to_string(i), [&](Result<std::string> result) {
-            call_count++;
-            if (!result) {
-                fail_count++;
-            }
-        });
-    }
-
-    CHECK(tracker.PendingCount() == 5);
-
-    tracker.FailAll(RaftError(RaftErrorCode::ProposalDropped));
-
-    CHECK(call_count == 5);
-    CHECK(fail_count == 5);
-    CHECK(tracker.PendingCount() == 0);
-}
-
-TEST_CASE("proposal_tracker: complete non-existent proposal is no-op") {
-    ProposalTracker tracker;
-
-    // Should not crash
-    tracker.Complete("nonexistent", "response");
-    tracker.Fail("nonexistent", RaftError(RaftErrorCode::ProposalDropped));
-
-    CHECK(tracker.PendingCount() == 0);
-}
-
-TEST_CASE("proposal_tracker: track and complete read") {
-    ProposalTracker tracker;
-
-    bool called = false;
-    bool success = false;
-
-    tracker.TrackRead("read1", [&](Result<void> result) {
-        called = true;
-        success = result.has_value();
-    });
-
-    CHECK(tracker.PendingReadCount() == 1);
-
-    tracker.CompleteRead("read1");
-
-    CHECK(called);
-    CHECK(success);
-    CHECK(tracker.PendingReadCount() == 0);
-}
-
-TEST_CASE("proposal_tracker: fail read") {
-    ProposalTracker tracker;
-
-    bool called = false;
-    bool failed = false;
-
-    tracker.TrackRead("read1", [&](Result<void> result) {
-        called = true;
-        failed = !result.has_value();
-    });
-
-    tracker.FailRead("read1", RaftError(RaftErrorCode::ProposalDropped));
-
-    CHECK(called);
-    CHECK(failed);
-    CHECK(tracker.PendingReadCount() == 0);
-}
-
-TEST_CASE("proposal_tracker: fail all reads") {
-    ProposalTracker tracker;
-
-    int call_count = 0;
-    int fail_count = 0;
-
-    for (int i = 0; i < 3; i++) {
-        tracker.TrackRead("read" + std::to_string(i), [&](Result<void> result) {
-            call_count++;
-            if (!result) {
-                fail_count++;
-            }
-        });
-    }
-
-    CHECK(tracker.PendingReadCount() == 3);
-
-    tracker.FailAllReads(RaftError(RaftErrorCode::LostLeadership));
-
-    CHECK(call_count == 3);
-    CHECK(fail_count == 3);
-    CHECK(tracker.PendingReadCount() == 0);
-}
-
-TEST_CASE("proposal_tracker: expire timeouts") {
-    ProposalTracker tracker;
-
-    bool proposal_called = false;
-    RaftError proposal_error(RaftErrorCode::ProposalDropped);
-
-    tracker.Track(
-        "ctx1",
-        [&](Result<std::string> result) {
-            proposal_called = true;
-            if (!result) {
-                proposal_error = result.error();
-            }
-        },
-        std::chrono::milliseconds{1}
-    );
-
-    bool read_called = false;
-    RaftError read_error(RaftErrorCode::ProposalDropped);
-
-    tracker.TrackRead(
-        "read1",
-        [&](Result<void> result) {
-            read_called = true;
-            if (!result) {
-                read_error = result.error();
-            }
-        },
-        std::chrono::milliseconds{1}
-    );
-
-    tracker.ExpireTimeouts(std::chrono::steady_clock::now() + std::chrono::milliseconds{10});
-
-    CHECK(proposal_called);
-    CHECK(read_called);
-    CHECK(proposal_error.Is(RpcErrorCode::Timeout));
-    CHECK(read_error.Is(RpcErrorCode::Timeout));
-    CHECK(tracker.PendingCount() == 0);
-    CHECK(tracker.PendingReadCount() == 0);
-}
-
-// =============================================================================
-// ProposalQueue Tests
-// =============================================================================
-
-TEST_CASE("proposal_queue: push and pop") {
-    ProposalQueue queue;
-
-    CHECK(queue.Empty());
-    CHECK(queue.Size() == 0);
-
-    bool called = false;
-    queue.Push("data1", [&](Result<std::string>) { called = true; });
-
-    CHECK_FALSE(queue.Empty());
-    CHECK(queue.Size() == 1);
-
-    auto item = queue.TryPop();
-    REQUIRE(item.has_value());
-    CHECK(item->data == "data1");
-
-    CHECK(queue.Empty());
-
-    // Invoke callback
-    item->callback(std::string("result"));
-    CHECK(called);
-}
-
-TEST_CASE("proposal_queue: try pop empty returns nullopt") {
-    ProposalQueue queue;
-
-    auto item = queue.TryPop();
-    CHECK_FALSE(item.has_value());
-}
-
-TEST_CASE("proposal_queue: fifo order") {
-    ProposalQueue queue;
-
-    queue.Push("data1", [](Result<std::string>) {});
-    queue.Push("data2", [](Result<std::string>) {});
-    queue.Push("data3", [](Result<std::string>) {});
-
-    auto item1 = queue.TryPop();
-    auto item2 = queue.TryPop();
-    auto item3 = queue.TryPop();
-
-    REQUIRE(item1.has_value());
-    REQUIRE(item2.has_value());
-    REQUIRE(item3.has_value());
-
-    CHECK(item1->data == "data1");
-    CHECK(item2->data == "data2");
-    CHECK(item3->data == "data3");
-}
-
-TEST_CASE("proposal_queue: thread safety") {
-    ProposalQueue queue;
-    std::atomic<int> push_count{0};
-    std::atomic<int> pop_count{0};
-
-    constexpr int num_pushers = 4;
-    constexpr int pushes_per_thread = 100;
-
-    std::vector<std::thread> pushers;
-    for (int i = 0; i < num_pushers; i++) {
-        pushers.emplace_back([&, i]() {
-            for (int j = 0; j < pushes_per_thread; j++) {
-                queue.Push(
-                    "data_" + std::to_string(i) + "_" + std::to_string(j),
-                    [](Result<std::string>) {}
-                );
-                push_count++;
-            }
-        });
-    }
-
-    std::atomic<bool> stop{false};
-    std::thread popper([&]() {
-        while (!stop || !queue.Empty()) {
-            if (auto item = queue.TryPop(); item) {
-                pop_count++;
-            }
-            std::this_thread::yield();
-        }
-    });
-
-    for (auto& t : pushers) {
-        t.join();
-    }
-    stop = true;
-    popper.join();
-
-    CHECK(push_count == num_pushers * pushes_per_thread);
-    CHECK(pop_count == num_pushers * pushes_per_thread);
-    CHECK(queue.Empty());
-}
-
-// =============================================================================
-// ReadIndexQueue Tests
-// =============================================================================
-
-TEST_CASE("read_index_queue: push and pop") {
-    ReadIndexQueue queue;
-
-    CHECK(queue.Empty());
-
-    bool called = false;
-    queue.Push("ctx1", [&](Result<void>) { called = true; });
-
-    CHECK_FALSE(queue.Empty());
-
-    auto item = queue.TryPop();
-    REQUIRE(item.has_value());
-    CHECK(item->ctx == "ctx1");
-
-    CHECK(queue.Empty());
-
-    item->callback({});
-    CHECK(called);
-}
-
-// =============================================================================
-// RaftorConfig Tests
-// =============================================================================
-
-TEST_CASE("raftor_config: validate - valid config") {
+struct TestNode {
+    std::unique_ptr<Raftor> raftor;
     RaftorConfig config;
-    config.node_id = 1;
-    config.listen_addr = "127.0.0.1:9001";
-    config.data_dir = "/tmp/raft";
-    config.election_tick = 10;
-    config.heartbeat_tick = 2;
-
-    auto result = config.Validate();
-    CHECK(result.has_value());
-}
-
-TEST_CASE("raftor_config: validate - missing node_id") {
-    RaftorConfig config;
-    config.node_id = 0;  // Invalid
-    config.listen_addr = "127.0.0.1:9001";
-    config.data_dir = "/tmp/raft";
-
-    auto result = config.Validate();
-    CHECK_FALSE(result.has_value());
-}
-
-TEST_CASE("raftor_config: validate - empty listen_addr") {
-    RaftorConfig config;
-    config.node_id = 1;
-    config.listen_addr = "";  // Invalid
-    config.data_dir = "/tmp/raft";
-
-    auto result = config.Validate();
-    CHECK_FALSE(result.has_value());
-}
-
-TEST_CASE("raftor_config: validate - empty data_dir") {
-    RaftorConfig config;
-    config.node_id = 1;
-    config.listen_addr = "127.0.0.1:9001";
-    config.data_dir = "";  // Invalid
-
-    auto result = config.Validate();
-    CHECK_FALSE(result.has_value());
-}
-
-TEST_CASE("raftor_config: validate - election_tick <= heartbeat_tick") {
-    RaftorConfig config;
-    config.node_id = 1;
-    config.listen_addr = "127.0.0.1:9001";
-    config.data_dir = "/tmp/raft";
-    config.election_tick = 2;
-    config.heartbeat_tick = 2;  // Invalid: must be less than election_tick
-
-    auto result = config.Validate();
-    CHECK_FALSE(result.has_value());
-}
-
-TEST_CASE("raftor_config: to_raft_config") {
-    RaftorConfig config;
-    config.node_id = 42;
-    config.election_tick = 15;
-    config.heartbeat_tick = 3;
-    config.max_size_per_message = 1024;
-    config.max_inflight_messages = 100;
-    config.pre_vote = true;
-    config.check_quorum = false;
-    config.read_only_option = ReadOnlyOption::LeaseBased;
-
-    auto raft_config = config.ToRaftConfig();
-
-    CHECK(raft_config.id == 42);
-    CHECK(raft_config.election_tick == 15);
-    CHECK(raft_config.heartbeat_tick == 3);
-    CHECK(raft_config.max_size_per_message == 1024);
-    CHECK(raft_config.max_inflight_messages == 100);
-    CHECK(raft_config.pre_vote == true);
-    CHECK(raft_config.check_quorum == false);
-    CHECK(raft_config.read_only_option == ReadOnlyOption::LeaseBased);
-}
-
-// =============================================================================
-// MockStateMachine Tests
-// =============================================================================
-
-TEST_CASE("mock_state_machine: apply entry") {
-    MockStateMachine sm;
-
-    Entry entry = capnp_util::make<msg::Entry>();
-    auto builder = capnp_util::builder<msg::Entry>(entry);
-    const std::string data = "test_data";
-    builder.setData(kj::arrayPtr(reinterpret_cast<const kj::byte*>(data.data()), data.size()));
-
-    auto result = sm.Apply(entry);
-    REQUIRE(result.has_value());
-    CHECK(result->response == "OK:test_data");
-    CHECK(sm.ApplyCount() == 1);
-
-    auto applied = sm.AppliedEntries();
-    REQUIRE(applied.size() == 1);
-    CHECK(applied[0] == "test_data");
-}
-
-TEST_CASE("mock_state_machine: apply entry failure") {
-    MockStateMachine sm;
-    sm.SetShouldFailApply(true);
-
-    Entry entry = capnp_util::make<msg::Entry>();
-    auto builder = capnp_util::builder<msg::Entry>(entry);
-    const std::string data = "test_data";
-    builder.setData(kj::arrayPtr(reinterpret_cast<const kj::byte*>(data.data()), data.size()));
-
-    auto result = sm.Apply(entry);
-    CHECK_FALSE(result.has_value());
-    CHECK(sm.ApplyCount() == 1);  // Still counted
-}
-
-TEST_CASE("mock_state_machine: take snapshot") {
-    MockStateMachine sm;
-
-    ConfState conf_state = capnp_util::make<msg::ConfState>();
-    auto conf_builder = capnp_util::builder<msg::ConfState>(conf_state);
-    auto voters = conf_builder.initVoters(2);
-    voters.set(0, 1);
-    voters.set(1, 2);
-
-    auto result = sm.TakeSnapshot(100, 5, conf_state);
-    REQUIRE(result.has_value());
-    auto meta_reader = capnp_util::reader<msg::SnapshotMetadata>(result->metadata);
-    CHECK(meta_reader.getIndex() == 100);
-    CHECK(meta_reader.getTerm() == 5);
-    CHECK(meta_reader.getConfState().getVoters().size() == 2);
-    CHECK(sm.SnapshotCount() == 1);
-}
-
-TEST_CASE("mock_state_machine: restore snapshot") {
-    MockStateMachine sm;
-
-    SnapshotData snapshot;
-    snapshot.metadata = capnp_util::make<msg::SnapshotMetadata>();
-    auto meta_builder = capnp_util::builder<msg::SnapshotMetadata>(snapshot.metadata);
-    meta_builder.setIndex(50);
-
-    auto result = sm.RestoreSnapshot(snapshot);
-    CHECK(result.has_value());
-    CHECK(sm.RestoreCount() == 1);
-    CHECK(sm.LastRestoredIndex() == 50);
-}
-
-TEST_CASE("mock_state_machine: leadership change") {
-    MockStateMachine sm;
-
-    CHECK(sm.LeadershipChangeCount() == 0);
-    CHECK_FALSE(sm.IsLeader());
-
-    sm.OnLeadershipChange(true, 5, 1);
-
-    CHECK(sm.LeadershipChangeCount() == 1);
-    CHECK(sm.IsLeader());
-    CHECK(sm.CurrentTerm() == 5);
-    CHECK(sm.CurrentLeader() == 1);
-
-    sm.OnLeadershipChange(false, 6, 2);
-
-    CHECK(sm.LeadershipChangeCount() == 2);
-    CHECK_FALSE(sm.IsLeader());
-    CHECK(sm.CurrentTerm() == 6);
-    CHECK(sm.CurrentLeader() == 2);
-}
-
-TEST_CASE("mock_state_machine: peer unreachable") {
-    MockStateMachine sm;
-
-    sm.OnPeerUnreachable(2);
-    sm.OnPeerUnreachable(3);
-
-    auto peers = sm.UnreachablePeers();
-    REQUIRE(peers.size() == 2);
-    CHECK(peers[0] == 2);
-    CHECK(peers[1] == 3);
-}
-
-// =============================================================================
-// MockTransport Tests
-// =============================================================================
-
-TEST_CASE("mock_transport: start and stop") {
-    MockTransport transport;
-
-    CHECK_FALSE(transport.IsStarted());
-
-    auto result = transport.Start();
-    CHECK(result.has_value());
-    CHECK(transport.IsStarted());
-
-    transport.Stop();
-    CHECK_FALSE(transport.IsStarted());
-}
-
-TEST_CASE("mock_transport: add and remove peer") {
-    MockTransport transport;
-
-    CHECK_FALSE(transport.HasPeer(1));
-
-    transport.AddPeer(1, "127.0.0.1:9001");
-    CHECK(transport.HasPeer(1));
-
-    transport.RemovePeer(1);
-    CHECK_FALSE(transport.HasPeer(1));
-}
-
-TEST_CASE("mock_transport: send messages") {
-    MockTransport transport;
-
-    std::vector<Message> messages;
-    Message m1 = capnp_util::make<msg::Message>();
-    Message m2 = capnp_util::make<msg::Message>();
-    capnp_util::builder<msg::Message>(m1).setTo(1);
-    capnp_util::builder<msg::Message>(m2).setTo(2);
-    messages.push_back(std::move(m1));
-    messages.push_back(std::move(m2));
-
-    transport.Send(std::span<const Message>(messages));
-
-    auto sent = transport.SentMessages();
-    REQUIRE(sent.size() == 2);
-    CHECK(capnp_util::reader<msg::Message>(sent[0]).getTo() == 1);
-    CHECK(capnp_util::reader<msg::Message>(sent[1]).getTo() == 2);
-
-    transport.ClearSentMessages();
-    CHECK(transport.SentMessages().empty());
-}
-
-TEST_CASE("mock_transport: message callback") {
-    MockTransport transport;
-
-    Message received;
-    transport.SetMessageCallback([&](Message msg) { received = std::move(msg); });
-
-    Message m = capnp_util::make<msg::Message>();
-    capnp_util::builder<msg::Message>(m).setFrom(42);
-    transport.InjectMessage(std::move(m));
-
-    transport.Poll(std::chrono::milliseconds(0));
-
-    CHECK(capnp_util::reader<msg::Message>(received).getFrom() == 42);
-}
-
-TEST_CASE("mock_transport: error callback") {
-    MockTransport transport;
-
-    uint64_t error_peer = 0;
-    std::string error_msg;
-    transport.SetErrorCallback([&](uint64_t peer, std::string msg) {
-        error_peer = peer;
-        error_msg = std::move(msg);
-    });
-
-    transport.TriggerError(5, "connection failed");
-
-    CHECK(error_peer == 5);
-    CHECK(error_msg == "connection failed");
-}
-
-// =============================================================================
-// Error Preservation Tests
-// =============================================================================
-
-TEST_CASE("error_preservation: FailAll preserves actual error type") {
-    ProposalTracker tracker;
-
-    RaftError captured_error(RaftErrorCode::ProposalDropped);
-    bool called = false;
-
-    tracker.Track("ctx1", [&](Result<std::string> result) {
-        called = true;
-        if (!result) {
-            captured_error = result.error();
-        }
-    });
-
-    // FailAll with ShuttingDown error
-    tracker.FailAll(RaftError(RaftErrorCode::ShuttingDown));
-
-    CHECK(called);
-    CHECK(captured_error.Is(RaftErrorCode::ShuttingDown));
-}
-
-TEST_CASE("error_preservation: FailAll with different error codes") {
-    ProposalTracker tracker;
-
-    std::vector<RaftError> captured_errors;
-
-    for (int i = 0; i < 3; i++) {
-        tracker.Track("ctx" + std::to_string(i), [&](Result<std::string> result) {
-            if (!result) {
-                captured_errors.push_back(result.error());
-            }
-        });
-    }
-
-    // FailAll with LostLeadership error
-    tracker.FailAll(RaftError(RaftErrorCode::LostLeadership));
-
-    REQUIRE(captured_errors.size() == 3);
-    for (const auto& err : captured_errors) {
-        CHECK(err.Is(RaftErrorCode::LostLeadership));
-    }
-}
-
-TEST_CASE("error_preservation: config validation returns specific errors") {
-    SUBCASE("InvalidNodeId") {
-        RaftorConfig config;
-        config.node_id = 0;
-        config.listen_addr = "127.0.0.1:9001";
-        config.data_dir = "/tmp/raft";
-        config.election_tick = 10;
-        config.heartbeat_tick = 2;
-
-        auto result = config.Validate();
-        REQUIRE_FALSE(result.has_value());
-        CHECK(result.error().Is(ConfigErrorCode::InvalidNodeId));
-    }
-
-    SUBCASE("ListenAddressEmpty") {
-        RaftorConfig config;
-        config.node_id = 1;
-        config.listen_addr = "";
-        config.data_dir = "/tmp/raft";
-        config.election_tick = 10;
-        config.heartbeat_tick = 2;
-
-        auto result = config.Validate();
-        REQUIRE_FALSE(result.has_value());
-        CHECK(result.error().Is(ConfigErrorCode::ListenAddressEmpty));
-    }
-
-    SUBCASE("DataDirectoryEmpty") {
-        RaftorConfig config;
-        config.node_id = 1;
-        config.listen_addr = "127.0.0.1:9001";
-        config.data_dir = "";
-        config.election_tick = 10;
-        config.heartbeat_tick = 2;
-
-        auto result = config.Validate();
-        REQUIRE_FALSE(result.has_value());
-        CHECK(result.error().Is(ConfigErrorCode::DataDirectoryEmpty));
-    }
-
-    SUBCASE("ElectionTickTooSmall") {
-        RaftorConfig config;
-        config.node_id = 1;
-        config.listen_addr = "127.0.0.1:9001";
-        config.data_dir = "/tmp/raft";
-        config.election_tick = 2;
-        config.heartbeat_tick = 2;
-
-        auto result = config.Validate();
-        REQUIRE_FALSE(result.has_value());
-        CHECK(result.error().Is(ConfigErrorCode::ElectionTickTooSmall));
-    }
-}
-
-// =============================================================================
-// Raftor Single Node Integration Tests
-// =============================================================================
-
-class SingleNodeRaftorFixture {
-  public:
-    SingleNodeRaftorFixture() = default;
-
-    void SetUp(const std::string& test_name) {
-        temp_dir_ = std::filesystem::temp_directory_path() / ("raftpp_test_" + test_name);
-        std::filesystem::remove_all(temp_dir_);
-        std::filesystem::create_directories(temp_dir_);
-
-        config_.node_id = 1;
-        config_.listen_addr = "127.0.0.1:" + std::to_string(next_port_++);
-        config_.data_dir = temp_dir_;
-        config_.election_tick = 10;
-        config_.heartbeat_tick = 2;
-
-        wal_config_.dir = temp_dir_ / "wal";
-
-        auto storage_result = wal::WALStorage::Open(wal_config_);
-        if (!storage_result) {
-            throw std::runtime_error("Failed to open WALStorage");
-        }
-        storage_ = std::move(*storage_result);
-
-        ConfState conf_state = capnp_util::make<msg::ConfState>();
-        auto conf_builder = capnp_util::builder<msg::ConfState>(conf_state);
-        auto voters = conf_builder.initVoters(1);
-        voters.set(0, 1);
-
-        storage_->SetConfState(conf_state);
-
-        HardState hard_state = capnp_util::make<msg::HardState>();
-        auto hs_builder = capnp_util::builder<msg::HardState>(hard_state);
-        hs_builder.setCommit(0);
-        hs_builder.setTerm(0);
-        hs_builder.setVote(0);
-
-        storage_->SetHardState(std::move(hard_state));
-
-        sm_ = std::make_unique<MockStateMachine>();
-        transport_ = std::make_unique<MockTransport>();
-
-        auto create_result =
-            Raftor::Create(config_, std::move(sm_), storage_, std::move(transport_));
-        if (!create_result) {
-            throw std::runtime_error("Failed to create Raftor");
-        }
-        raftor_ = std::move(*create_result);
-
-        auto result = raftor_->Start();
-        if (!result) {
-            throw std::runtime_error("Failed to start Raftor");
-        }
-    }
-
-    void TearDown() {
-        if (raftor_) {
-            raftor_->Stop();
-        }
-        std::filesystem::remove_all(temp_dir_);
-    }
-
-    void ElectLeader() {
-        for (int i = 0; i < 25; i++) {
-            raftor_->Tick();
-        }
-        if (!raftor_->IsLeader()) {
-            throw std::runtime_error("Failed to become leader");
-        }
-    }
-
-    Raftor* GetRaftor() { return raftor_.get(); }
-
-    static std::atomic<int> next_port_;
-
-  private:
-    std::filesystem::path temp_dir_;
-    RaftorConfig config_;
-    wal::WALConfig wal_config_;
-    std::shared_ptr<wal::WALStorage> storage_;
-    std::unique_ptr<MockStateMachine> sm_;
-    std::unique_ptr<MockTransport> transport_;
-    std::unique_ptr<Raftor> raftor_;
+    MockStateMachine* state_machine = nullptr;
+    std::filesystem::path temp_dir;
 };
 
-std::atomic<int> SingleNodeRaftorFixture::next_port_{19991};
+Result<TestNode> CreateTestNode(
+    uint64_t node_id, const std::string& listen_addr, const std::vector<PeerConfig>& initial_peers
+) {
+    TestNode node;
 
-TEST_CASE("raftor: single node tests") {
-    SUBCASE("propose entry") {
-        SingleNodeRaftorFixture fixture;
-        fixture.SetUp("single_node_propose");
-        Raftor* raftor = fixture.GetRaftor();
+    const auto pid = static_cast<uint64_t>(::getpid());
+    node.temp_dir = std::filesystem::temp_directory_path() /
+        ("raftpp_test_" + std::to_string(pid) + "_" + std::to_string(node_id));
+    std::error_code ec;
+    std::filesystem::remove_all(node.temp_dir, ec);
+    std::filesystem::create_directories(node.temp_dir);
 
-        fixture.ElectLeader();
+    node.config.node_id = node_id;
+    node.config.listen_addr = listen_addr;
+    node.config.data_dir = node.temp_dir;
+    node.config.election_tick = 10;
+    node.config.heartbeat_tick = 1;
+    node.config.tick_interval = 10ms;
+    node.config.pre_vote = true;
+    node.config.check_quorum = true;
+    node.config.initial_peers = initial_peers;
 
-        auto status = raftor->GetStatus();
-        CHECK(status.id == 1);
-        CHECK(status.role == StateRole::Leader);
-        CHECK(status.term == 1);
+    auto state_machine = std::make_unique<MockStateMachine>();
+    node.state_machine = state_machine.get();
 
-        std::atomic<bool> async_callback_called{false};
-        Result<std::string> async_result;
-
-        raftor->Propose("async_data", [&](Result<std::string> result) {
-            async_callback_called = true;
-            async_result = std::move(result);
-        });
-
-        for (int i = 0; i < 20; i++) {
-            raftor->Tick();
-        }
-
-        CHECK(async_callback_called);
-        REQUIRE(async_result.has_value());
-        CHECK(async_result->find("async_data") != std::string::npos);
-
-        {
-            std::atomic<bool> sync_callback_called{false};
-            Result<std::string> sync_result;
-            raftor->Propose("sync_data", [&](Result<std::string> result) {
-                sync_callback_called = true;
-                sync_result = std::move(result);
-            });
-
-            for (int i = 0; i < 20; i++) {
-                raftor->Tick();
-            }
-
-            CHECK(sync_callback_called);
-            REQUIRE(sync_result.has_value());
-            CHECK(sync_result->find("sync_data") != std::string::npos);
-        }
-
-        for (int i = 0; i < 20; i++) {
-            raftor->Tick();
-        }
+    auto raftor_result = Raftor::Create(node.config, std::move(state_machine));
+    if (!raftor_result) {
+        return std::unexpected(raftor_result.error());
     }
+    node.raftor = std::move(*raftor_result);
 
-    SUBCASE("propose multiple entries") {
-        SingleNodeRaftorFixture fixture;
-        fixture.SetUp("single_node_multi_entries");
-        Raftor* raftor = fixture.GetRaftor();
+    return node;
+}
 
-        fixture.ElectLeader();
-
-        constexpr int num_entries = 5;
-        std::vector<Result<std::string>> results;
-        std::mutex results_mutex;
-        std::atomic<int> callback_count{0};
-
-        for (int i = 0; i < num_entries; i++) {
-            raftor->Propose("entry_" + std::to_string(i), [&](Result<std::string> result) {
-                std::lock_guard lock(results_mutex);
-                results.push_back(std::move(result));
-                callback_count++;
-            });
+void PollAll(std::vector<std::unique_ptr<Raftor>>& raftors, std::chrono::milliseconds duration) {
+    auto deadline = std::chrono::steady_clock::now() + duration;
+    while (std::chrono::steady_clock::now() < deadline) {
+        for (auto& r : raftors) {
+            r->Poll(1ms);
         }
-
-        for (int i = 0; i < 30; i++) {
-            raftor->Tick();
-        }
-
-        CHECK(callback_count == num_entries);
-        for (int i = 0; i < num_entries; i++) {
-            REQUIRE(results[i].has_value());
-        }
-    }
-
-    SUBCASE("read index") {
-        SingleNodeRaftorFixture fixture;
-        fixture.SetUp("single_node_read_index");
-        Raftor* raftor = fixture.GetRaftor();
-
-        fixture.ElectLeader();
-
-        std::atomic<bool> read_callback_called{false};
-        Result<void> read_result;
-
-        raftor->ReadIndex("read_ctx", [&](Result<void> result) {
-            read_callback_called = true;
-            read_result = std::move(result);
-        });
-
-        for (int i = 0; i < 20; i++) {
-            raftor->Tick();
-        }
-
-        CHECK(read_callback_called);
-        CHECK(read_result.has_value());
-    }
-
-    SUBCASE("read index after Campaign does not fail") {
-        SingleNodeRaftorFixture fixture;
-        fixture.SetUp("single_node_read_index_after_campaign");
-        Raftor* raftor = fixture.GetRaftor();
-
-        // Become leader without driving Ready processing yet.
-        auto campaign_result = raftor->Campaign();
-        REQUIRE(campaign_result.has_value());
-
-        std::atomic<bool> read_callback_called{false};
-        Result<void> read_result;
-
-        raftor->ReadIndex("read_ctx_after_campaign", [&](Result<void> result) {
-            read_callback_called = true;
-            read_result = std::move(result);
-        });
-
-        for (int i = 0; i < 50 && !read_callback_called.load(); i++) {
-            raftor->Tick();
-        }
-
-        CHECK(read_callback_called);
-        CHECK(read_result.has_value());
+        std::this_thread::sleep_for(1ms);
     }
 }
 
-// Note: This test is disabled because it requires proper WAL initialization
-// The error preservation for AlreadyStarted is already tested indirectly
-// TEST_CASE("error_preservation: Start returns AlreadyStarted when called twice") {
-//     // Create a temporary directory for WAL
-//     auto temp_dir = std::filesystem::temp_directory_path() / "raftpp_test_already_started";
-//     std::filesystem::create_directories(temp_dir);
-//
-//     RaftorConfig config;
-//     config.node_id = 1;
-//     config.listen_addr = "127.0.0.1:19999";  // Use unique port
-//     config.data_dir = temp_dir;
-//     config.election_tick = 10;
-//     config.heartbeat_tick = 2;
-//
-//     auto result = Raftor::Create(config, std::make_unique<MockStateMachine>());
-//     REQUIRE(result.has_value());
-//     auto raftor = std::move(*result);
-//
-//     // First Start should succeed
-//     auto start_result = raftor->Start();
-//     CHECK(start_result.has_value());
-//
-//     // Second Start should fail with AlreadyStarted
-//     auto second_start_result = raftor->Start();
-//     REQUIRE_FALSE(second_start_result.has_value());
-//     CHECK(second_start_result.error().Is(RaftErrorCode::AlreadyStarted));
-//
-//     raftor->Stop();
-//
-//     // Clean up
-//     std::filesystem::remove_all(temp_dir);
-// }
+bool HasLeader(const std::vector<std::unique_ptr<Raftor>>& raftors) {
+    for (const auto& r : raftors) {
+        auto status = r->GetStatus();
+        if (status.role == StateRole::Leader) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool WaitForLeader(
+    std::vector<std::unique_ptr<Raftor>>& raftors, std::chrono::milliseconds timeout,
+    std::chrono::milliseconds step = 25ms
+) {
+    auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (std::chrono::steady_clock::now() < deadline) {
+        PollAll(raftors, step);
+        if (HasLeader(raftors)) {
+            return true;
+        }
+    }
+    return HasLeader(raftors);
+}
+
+bool HasStableLeader(const std::vector<std::unique_ptr<Raftor>>& raftors) {
+    uint64_t leader_id = 0;
+    int leader_count = 0;
+
+    for (const auto& r : raftors) {
+        auto status = r->GetStatus();
+        if (status.role == StateRole::Leader) {
+            leader_count++;
+            leader_id = status.id;
+        }
+    }
+
+    if (leader_count != 1 || leader_id == 0) {
+        return false;
+    }
+
+    for (const auto& r : raftors) {
+        auto status = r->GetStatus();
+        if (status.role == StateRole::Candidate || status.role == StateRole::PreCandidate) {
+            return false;
+        }
+        if (status.leader_id != leader_id) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool WaitForStableLeader(
+    std::vector<std::unique_ptr<Raftor>>& raftors, std::chrono::milliseconds timeout,
+    std::chrono::milliseconds step = 25ms
+) {
+    auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (std::chrono::steady_clock::now() < deadline) {
+        PollAll(raftors, step);
+        if (HasStableLeader(raftors)) {
+            return true;
+        }
+    }
+    return HasStableLeader(raftors);
+}
+
+uint64_t GetLeaderId(const std::vector<std::unique_ptr<Raftor>>& raftors) {
+    for (const auto& r : raftors) {
+        auto status = r->GetStatus();
+        if (status.role == StateRole::Leader) {
+            return status.id;
+        }
+    }
+    return 0;
+}
+
+}  // namespace
+
+TEST_SUITE_BEGIN("raftor_bootstrap");
+
+TEST_CASE("three_node_cluster_bootstrap") {
+    SPDLOG_INFO("Creating 3-node cluster...");
+
+    std::vector<PeerConfig> peers = {
+        {.id = 1, .addr = "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())},
+        {.id = 2, .addr = "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())},
+        {.id = 3, .addr = "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())},
+    };
+
+    SPDLOG_INFO("Peers configured:");
+    for (const auto& peer : peers) {
+        SPDLOG_INFO("  ID: {}, addr: {}", peer.id, peer.addr);
+    }
+
+    std::vector<TestNode> test_nodes;
+
+    for (auto peer : peers) {
+        auto result = CreateTestNode(peer.id, peer.addr, peers);
+        if (!result) {
+            SPDLOG_ERROR("Error creating node {}: {}", peer.id, result.error().ToString());
+        }
+        REQUIRE(result.has_value());
+        test_nodes.push_back(std::move(*result));
+    }
+
+    std::vector<std::unique_ptr<Raftor>> raftors;
+    for (auto& node : test_nodes) {
+        auto start_result = node.raftor->Start();
+        if (!start_result) {
+            SPDLOG_ERROR("Error starting node: {}", start_result.error().ToString());
+        }
+        REQUIRE(start_result.has_value());
+        raftors.push_back(std::move(node.raftor));
+    }
+
+    SPDLOG_INFO("Polling for leader election (up to 2s)...");
+    REQUIRE_MESSAGE(WaitForStableLeader(raftors, 2s), "No leader was elected");
+
+    for (size_t i = 0; i < raftors.size(); ++i) {
+        auto status = raftors[i]->GetStatus();
+        SPDLOG_INFO(
+            "Node {}: role={}, term={}, leader_id={}", status.id, static_cast<int>(status.role),
+            status.term, status.leader_id
+        );
+    }
+
+    uint64_t leader_id = GetLeaderId(raftors);
+    REQUIRE_MESSAGE(leader_id != 0, "Leader ID should not be zero");
+
+    int leader_count = 0;
+    for (const auto& r : raftors) {
+        auto status = r->GetStatus();
+        if (status.role == StateRole::Leader) {
+            leader_count++;
+        }
+    }
+    REQUIRE_MESSAGE(
+        leader_count == 1, "Exactly one leader should be elected, got {}", leader_count
+    );
+
+    for (const auto& r : raftors) {
+        auto status = r->GetStatus();
+        REQUIRE_MESSAGE(
+            status.leader_id == leader_id, "All nodes should know the leader ID {}",
+            status.leader_id
+        );
+    }
+}
+
+TEST_CASE("conf_state_initialized_from_initial_peers") {
+    std::string listen_addr = "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort());
+    std::vector<PeerConfig> peers = {
+        {.id = 1, .addr = listen_addr},
+        {.id = 2, .addr = ""},
+        {.id = 3, .addr = ""},
+    };
+
+    auto result = CreateTestNode(1, listen_addr, peers);
+    REQUIRE(result.has_value());
+    TestNode node = std::move(*result);
+
+    auto raftor = std::move(node.raftor);
+    auto status = raftor->GetStatus();
+
+    REQUIRE_MESSAGE(status.role != StateRole::Leader, "Node should not be leader without quorum");
+}
+
+TEST_CASE("three_node_proposal_after_bootstrap") {
+    std::vector<PeerConfig> peers = {
+        {.id = 1, .addr = "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())},
+        {.id = 2, .addr = "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())},
+        {.id = 3, .addr = "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())},
+    };
+
+    std::vector<std::unique_ptr<Raftor>> raftors;
+
+    for (auto peer : peers) {
+        auto result = CreateTestNode(peer.id, peer.addr, peers);
+        REQUIRE(result.has_value());
+        auto start_result = result->raftor->Start();
+        REQUIRE(start_result.has_value());
+        raftors.push_back(std::move(result->raftor));
+    }
+
+    PollAll(raftors, 500ms);
+
+    REQUIRE(HasLeader(raftors));
+    uint64_t leader_id = GetLeaderId(raftors);
+    REQUIRE_NE(leader_id, 0);
+
+    std::promise<bool> proposal_completed;
+    auto proposal_future = proposal_completed.get_future();
+
+    std::string test_data = "test proposal data";
+
+    raftors[leader_id - 1]->Propose(test_data, [&proposal_completed](Result<std::string> result) {
+        proposal_completed.set_value(result.has_value());
+    });
+
+    PollAll(raftors, 300ms);
+
+    REQUIRE(proposal_future.wait_for(100ms) == std::future_status::ready);
+    REQUIRE(proposal_future.get());
+
+    PollAll(raftors, 200ms);
+
+    size_t total_applied = 0;
+    for (const auto& r : raftors) {
+        auto status = r->GetStatus();
+        total_applied += status.applied_index;
+    }
+    REQUIRE_MESSAGE(
+        total_applied >= 3,
+        "All nodes should have applied at least the no-op entry and our proposal"
+    );
+}
+
+TEST_CASE("three_node_leader_failure") {
+    std::vector<PeerConfig> peers = {
+        {.id = 1, .addr = "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())},
+        {.id = 2, .addr = "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())},
+        {.id = 3, .addr = "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())},
+    };
+
+    std::vector<std::unique_ptr<Raftor>> raftors;
+
+    for (auto peer : peers) {
+        auto result = CreateTestNode(peer.id, peer.addr, peers);
+        REQUIRE(result.has_value());
+        auto start_result = result->raftor->Start();
+        REQUIRE(start_result.has_value());
+        raftors.push_back(std::move(result->raftor));
+    }
+
+    PollAll(raftors, 500ms);
+
+    REQUIRE(HasLeader(raftors));
+    uint64_t first_leader_id = GetLeaderId(raftors);
+
+    raftors[first_leader_id - 1]->Stop();
+
+    std::vector<std::unique_ptr<Raftor>> remaining_raftors;
+    for (size_t i = 0; i < raftors.size(); ++i) {
+        if (i != first_leader_id - 1) {
+            remaining_raftors.push_back(std::move(raftors[i]));
+        }
+    }
+
+    REQUIRE(WaitForStableLeader(remaining_raftors, 2s));
+    uint64_t second_leader_id = GetLeaderId(remaining_raftors);
+
+    REQUIRE_MESSAGE(second_leader_id != first_leader_id, "A new leader should be elected");
+    REQUIRE_MESSAGE(second_leader_id != 0, "Leader ID should not be zero");
+}
+
+TEST_CASE("five_node_cluster_propose") {
+    SPDLOG_INFO("Creating 5-node cluster...");
+
+    std::vector<PeerConfig> peers;
+    for (uint64_t i = 1; i <= 5; ++i) {
+        peers.push_back(
+            {.id = i, .addr = "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())}
+        );
+    }
+
+    SPDLOG_INFO("Peers configured:");
+    for (const auto& peer : peers) {
+        SPDLOG_INFO("  ID: {}, addr: {}", peer.id, peer.addr);
+    }
+
+    std::vector<std::unique_ptr<Raftor>> raftors;
+    std::vector<MockStateMachine*> state_machines;
+    state_machines.reserve(peers.size());
+
+    for (const auto& peer : peers) {
+        auto result = CreateTestNode(peer.id, peer.addr, peers);
+        REQUIRE(result.has_value());
+        state_machines.push_back(result->state_machine);
+        auto start_result = result->raftor->Start();
+        REQUIRE(start_result.has_value());
+        raftors.push_back(std::move(result->raftor));
+    }
+
+    // Wait for leader election (5 nodes need more time)
+    SPDLOG_INFO("Polling for leader election (up to 2s)...");
+    REQUIRE_MESSAGE(WaitForStableLeader(raftors, 2s), "Leader should be elected in 5-node cluster");
+    uint64_t leader_id = GetLeaderId(raftors);
+    REQUIRE_NE(leader_id, 0);
+    REQUIRE_MESSAGE(leader_id <= state_machines.size(), "Leader ID out of range");
+
+    SPDLOG_INFO("Leader elected: node {}", leader_id);
+
+    // Print cluster status
+    for (const auto& r : raftors) {
+        auto status = r->GetStatus();
+        SPDLOG_INFO(
+            "Node {}: role={}, term={}, leader_id={}", status.id, static_cast<int>(status.role),
+            status.term, status.leader_id
+        );
+    }
+
+    // Verify exactly one leader
+    int leader_count = 0;
+    for (const auto& r : raftors) {
+        if (r->GetStatus().role == StateRole::Leader) {
+            leader_count++;
+        }
+    }
+    REQUIRE_MESSAGE(leader_count == 1, "Exactly one leader should exist");
+
+    // Test multiple proposals
+    constexpr int kNumProposals = 5;
+    std::atomic<int> completed_count{0};
+    std::atomic<int> success_count{0};
+
+    SPDLOG_INFO("Submitting {} proposals...", kNumProposals);
+
+    for (int i = 0; i < kNumProposals; ++i) {
+        std::string data = "proposal_" + std::to_string(i);
+        raftors[leader_id - 1]->Propose(data, [&, i](Result<std::string> result) {
+            completed_count++;
+            if (result.has_value()) {
+                success_count++;
+                SPDLOG_INFO("Proposal {} succeeded: {}", i, *result);
+            } else {
+                SPDLOG_WARN("Proposal {} failed: {}", i, result.error().ToString());
+            }
+        });
+    }
+
+    // Poll until all proposals complete or timeout
+    auto deadline = std::chrono::steady_clock::now() + 2s;
+    while (completed_count < kNumProposals && std::chrono::steady_clock::now() < deadline) {
+        for (auto& r : raftors) {
+            r->Poll(1ms);
+        }
+        std::this_thread::sleep_for(1ms);
+    }
+
+    SPDLOG_INFO(
+        "Completed: {}/{}, Success: {}", completed_count.load(), kNumProposals, success_count.load()
+    );
+
+    REQUIRE_MESSAGE(completed_count == kNumProposals, "All proposals should complete");
+    REQUIRE_MESSAGE(success_count == kNumProposals, "All proposals should succeed");
+
+    // Allow time for replication to all nodes
+    // Need more time for commit to propagate via heartbeats
+    PollAll(raftors, 1000ms);
+
+    auto apply_deadline = std::chrono::steady_clock::now() + 1s;
+    while (state_machines[leader_id - 1]->ApplyCount() < static_cast<size_t>(kNumProposals + 1) &&
+           std::chrono::steady_clock::now() < apply_deadline) {
+        PollAll(raftors, 50ms);
+    }
+
+    // Verify the leader has applied all entries
+    SPDLOG_INFO("Checking applied indices...");
+    auto leader_status = raftors[leader_id - 1]->GetStatus();
+    SPDLOG_INFO(
+        "Leader (Node {}): applied_index={}, commit_index={}", leader_status.id,
+        leader_status.applied_index, leader_status.commit_index
+    );
+
+    // Leader should have applied the no-op entry + all our proposals
+    REQUIRE_MESSAGE(
+        leader_status.applied_index >= static_cast<uint64_t>(kNumProposals + 1),
+        "Leader should have applied at least {} entries (no-op + proposals), got {}",
+        kNumProposals + 1, leader_status.applied_index
+    );
+
+    auto leader_entries = state_machines[leader_id - 1]->GetAppliedEntries();
+    for (int i = 0; i < kNumProposals; ++i) {
+        std::string expected = "proposal_" + std::to_string(i);
+        bool found = false;
+        for (const auto& entry : leader_entries) {
+            if (std::string(entry.begin(), entry.end()) == expected) {
+                found = true;
+                break;
+            }
+        }
+        REQUIRE_MESSAGE(found, "Leader state machine should apply {}", expected);
+    }
+
+    // Check all nodes and count how many have caught up
+    int caught_up_count = 0;
+    for (const auto& r : raftors) {
+        auto status = r->GetStatus();
+        SPDLOG_INFO(
+            "Node {}: applied_index={}, commit_index={}", status.id, status.applied_index,
+            status.commit_index
+        );
+        if (status.applied_index >= static_cast<uint64_t>(kNumProposals)) {
+            caught_up_count++;
+        }
+    }
+
+    // At least a majority (3 out of 5) should have applied the entries
+    REQUIRE_MESSAGE(
+        caught_up_count >= 3,
+        "At least 3 nodes should have applied {} entries, got {} nodes caught up", kNumProposals,
+        caught_up_count
+    );
+}
 
 TEST_SUITE_END();

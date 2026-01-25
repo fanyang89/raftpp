@@ -648,6 +648,30 @@ Result<std::unique_ptr<Raftor>> Raftor::Create(
         return storage_result.error();
     }
 
+    auto storage = std::move(*storage_result);
+
+    // Initialize ConfState if it's empty and we have initial_peers
+    if (!config.initial_peers.empty()) {
+        auto state = storage->InitialState();
+        if (state.has_value()) {
+            auto conf_reader = capnp_util::reader<msg::ConfState>(state->conf_state);
+            if (conf_reader.getVoters().size() == 0) {
+                // Create ConfState with initial peers
+                ConfState conf_state = capnp_util::make<msg::ConfState>();
+                auto conf_builder = capnp_util::builder<msg::ConfState>(conf_state);
+                auto voters = conf_builder.initVoters(config.initial_peers.size());
+                for (size_t i = 0; i < config.initial_peers.size(); ++i) {
+                    voters.set(i, config.initial_peers[i].id);
+                }
+                storage->SetConfState(conf_state);
+                SPDLOG_INFO(
+                    "Initialized ConfState with {} voters from initial_peers",
+                    config.initial_peers.size()
+                );
+            }
+        }
+    }
+
     // Create TCP transport
     rpc::TransportConfig transport_config;
     transport_config.listen_addr = config.listen_addr;
@@ -656,9 +680,7 @@ Result<std::unique_ptr<Raftor>> Raftor::Create(
 
     auto transport = std::make_unique<rpc::CapnpTransport>(transport_config);
 
-    return Create(
-        config, std::move(state_machine), std::move(*storage_result), std::move(transport)
-    );
+    return Create(config, std::move(state_machine), std::move(storage), std::move(transport));
 }
 
 Result<std::unique_ptr<Raftor>> Raftor::Create(

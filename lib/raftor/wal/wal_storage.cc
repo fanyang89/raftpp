@@ -49,6 +49,11 @@ Result<uint64_t> WALStorage::Term(uint64_t idx) {
         return snap_meta.getTerm();
     }
 
+    // Special case: index 0 before any entries or snapshot
+    if (idx == 0 && snap_meta.getIndex() == 0) {
+        return 0;
+    }
+
     return wal_->Term(idx);
 }
 

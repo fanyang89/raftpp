@@ -158,6 +158,14 @@ Always use spdlog's bundled fmt instead of the system fmt library:
 #include <fmt/format.h>
 ```
 
+### Logging and Output
+
+- Do not write directly to the console from production code or tests: no `std::cout`, `std::cerr`, `std::clog`, `printf`/`fprintf`, `puts`, `fmt::print`, or `std::print`.
+- Use `spdlog` for all logging. Prefer `SPDLOG_INFO/WARN/ERROR/DEBUG` (or `spdlog::info()`, etc.).
+- Avoid configuring `spdlog` to write to stderr (no `stderr_*` sinks) unless explicitly required; keep logs on stdout by default.
+- Quick check before shipping changes:
+  - `rg -n --glob '!build/**' --glob '!.cache/**' "\\bstd::cout\\b|\\bstd::cerr\\b|\\bstd::clog\\b|\\bprintf\\s*\\(|\\bfprintf\\s*\\(\\s*stderr\\b|\\bfmt::print\\b|\\bstd::print\\b" .`
+
 ## MCP usage
 
 Always use Context7 MCP when I need library/API documentation,
