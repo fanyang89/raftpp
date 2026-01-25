@@ -176,9 +176,11 @@ void CapnpTransport::Poll(std::chrono::milliseconds timeout) {
         std::swap(incoming, incoming_queue_);
     }
     MessageCallback message_cb;
+    ErrorCallback error_cb;
     {
         std::lock_guard lock(callback_mutex_);
         message_cb = on_message_;
+        error_cb = on_error_;
     }
     while (!incoming.empty()) {
         auto msg = std::move(incoming.front());
@@ -192,11 +194,6 @@ void CapnpTransport::Poll(std::chrono::milliseconds timeout) {
     {
         std::lock_guard lock(error_mutex_);
         std::swap(errors, error_queue_);
-    }
-    ErrorCallback error_cb;
-    {
-        std::lock_guard lock(callback_mutex_);
-        error_cb = on_error_;
     }
     while (!errors.empty()) {
         auto error = std::move(errors.front());
@@ -286,11 +283,20 @@ void CapnpTransport::RpcLoop(std::promise<Result<void>> start_promise) {
                     client_it = clients.end();
                 }
                 if (client_it == clients.end()) {
-                    auto client = std::make_unique<::capnp::EzRpcClient>(addr, 0);
-                    auto cap = client->getMain<raftpp::capnp::RaftTransport>();
-                    client_it =
-                        clients.emplace(batch.peer_id, RpcClient{std::move(client), cap, addr})
-                            .first;
+                    try {
+                        auto client = std::make_unique<::capnp::EzRpcClient>(addr, 0);
+                        auto cap = client->getMain<raftpp::capnp::RaftTransport>();
+                        client_it =
+                            clients.emplace(batch.peer_id, RpcClient{std::move(client), cap, addr})
+                                .first;
+                    } catch (const kj::Exception& e) {
+                        SPDLOG_ERROR(
+                            "Failed to create RPC client for peer {} at {}: {}", batch.peer_id,
+                            addr, e.getDescription().cStr()
+                        );
+                        EnqueueError(batch.peer_id, e.getDescription().cStr());
+                        continue;
+                    }
                 }
 
                 auto& cap = client_it->second.cap;
@@ -366,6 +372,10 @@ void CapnpTransport::EnqueueMessage(Message msg) {
 void CapnpTransport::EnqueueError(uint64_t peer_id, std::string error) {
     std::lock_guard lock(error_mutex_);
     if (error_queue_.size() >= kMaxPendingErrorEvents) {
+        SPDLOG_WARN(
+            "error_queue_ overflow (capacity={}) for peer {}, dropping error: {}",
+            kMaxPendingErrorEvents, peer_id, error
+        );
         return;
     }
     error_queue_.push(ErrorEvent{peer_id, std::move(error)});
