@@ -481,4 +481,211 @@ TEST_SUITE("wal") {
         CHECK(read_result->size() < 10);
     }
 
+    TEST_CASE("wal: batch write basic") {
+        TempDir temp_dir;
+
+        WALConfig config;
+        config.dir = temp_dir.path();
+        config.write_buffer_size = 1024;
+        config.sync_on_write = false;
+
+        auto wal = WAL::Open(config);
+        REQUIRE(wal.has_value());
+
+        std::vector<Entry> entries;
+        for (int i = 0; i < 10; ++i) {
+            entries.push_back(MakeWalEntry(i + 1, 1, "data"));
+        }
+
+        auto append_result = (*wal)->Append(entries);
+        CHECK(append_result.has_value());
+
+        auto read_result = (*wal)->ReadEntries(1, 11, std::nullopt);
+        REQUIRE(read_result.has_value());
+        CHECK(read_result->size() == 10);
+
+        for (size_t i = 0; i < read_result->size(); ++i) {
+            auto entry_reader = capnp_util::reader<msg::Entry>((*read_result)[i]);
+            CHECK(entry_reader.getIndex() == i + 1);
+            CHECK(entry_reader.getTerm() == 1);
+        }
+    }
+
+    TEST_CASE("wal: flush triggers at buffer threshold") {
+        TempDir temp_dir;
+
+        WALConfig config;
+        config.dir = temp_dir.path();
+        config.write_buffer_size = 200;
+        config.sync_on_write = false;
+
+        auto wal = WAL::Open(config);
+        REQUIRE(wal.has_value());
+
+        std::vector<Entry> entries;
+        for (int i = 0; i < 10; ++i) {
+            entries.push_back(MakeWalEntry(i + 1, 1, "test data payload"));
+        }
+
+        auto append_result = (*wal)->Append(entries);
+        CHECK(append_result.has_value());
+
+        auto read_result = (*wal)->ReadEntries(1, 11, std::nullopt);
+        REQUIRE(read_result.has_value());
+        CHECK(read_result->size() == 10);
+    }
+
+    TEST_CASE("wal: recovery after batch write") {
+        TempDir temp_dir;
+
+        WALConfig config;
+        config.dir = temp_dir.path();
+        config.sync_on_write = true;
+
+        {
+            auto wal = WAL::Open(config);
+            REQUIRE(wal.has_value());
+
+            std::vector<Entry> entries;
+            for (int i = 0; i < 100; ++i) {
+                entries.push_back(MakeWalEntry(i + 1, 1, "data"));
+            }
+
+            auto append_result = (*wal)->Append(entries);
+            CHECK(append_result.has_value());
+
+            auto close_result = (*wal)->Close();
+            CHECK(close_result.has_value());
+        }
+
+        auto wal = WAL::Open(config);
+        REQUIRE(wal.has_value());
+
+        CHECK((*wal)->FirstIndex() == 1);
+        CHECK((*wal)->LastIndex() == 100);
+
+        auto read_result = (*wal)->ReadEntries(1, 101, std::nullopt);
+        REQUIRE(read_result.has_value());
+        CHECK(read_result->size() == 100);
+    }
+
+    TEST_CASE("wal: segment roll with batch write") {
+        TempDir temp_dir;
+
+        WALConfig config;
+        config.dir = temp_dir.path();
+        config.segment_size = 1000;
+        config.write_buffer_size = 500;
+        config.sync_on_write = false;
+
+        auto wal = WAL::Open(config);
+        REQUIRE(wal.has_value());
+
+        std::vector<Entry> entries;
+        for (int i = 0; i < 50; ++i) {
+            entries.push_back(MakeWalEntry(i + 1, 1, "data data data"));
+        }
+
+        auto append_result = (*wal)->Append(entries);
+        CHECK(append_result.has_value());
+
+        auto read_result = (*wal)->ReadEntries(1, 51, std::nullopt);
+        REQUIRE(read_result.has_value());
+        CHECK(read_result->size() == 50);
+    }
+
+    TEST_CASE("wal: sync with batch write") {
+        TempDir temp_dir;
+
+        WALConfig config;
+        config.dir = temp_dir.path();
+        config.write_buffer_size = 4096;
+        config.sync_on_write = true;
+
+        auto wal = WAL::Open(config);
+        REQUIRE(wal.has_value());
+
+        std::vector<Entry> entries;
+        for (int i = 0; i < 5; ++i) {
+            entries.push_back(MakeWalEntry(i + 1, 1, "data"));
+        }
+
+        auto append_result = (*wal)->Append(entries);
+        CHECK(append_result.has_value());
+
+        auto sync_result = (*wal)->Sync();
+        CHECK(sync_result.has_value());
+
+        auto close_result = (*wal)->Close();
+        CHECK(close_result.has_value());
+
+        auto wal2 = WAL::Open(config);
+        REQUIRE(wal2.has_value());
+        CHECK((*wal2)->LastIndex() == 5);
+    }
+
+    TEST_CASE("wal: append entry larger than write buffer") {
+        TempDir temp_dir;
+
+        WALConfig config;
+        config.dir = temp_dir.path();
+        config.write_buffer_size = 64;
+        config.sync_on_write = false;
+
+        auto wal = WAL::Open(config);
+        REQUIRE(wal.has_value());
+
+        std::string big_payload(4096, 'x');
+        std::vector<Entry> entries;
+        entries.push_back(MakeWalEntry(1, 1, big_payload));
+
+        auto append_result = (*wal)->Append(entries);
+        CHECK(append_result.has_value());
+        CHECK((*wal)->LastIndex() == 1);
+
+        auto read_result = (*wal)->ReadEntries(1, 2, std::nullopt);
+        REQUIRE(read_result.has_value());
+        REQUIRE(read_result->size() == 1);
+
+        auto entry_reader = capnp_util::reader<msg::Entry>((*read_result)[0]);
+        CHECK(entry_reader.getIndex() == 1);
+        CHECK(entry_reader.getTerm() == 1);
+
+        auto data = entry_reader.getData();
+        CHECK(std::string(reinterpret_cast<const char*>(data.begin()), data.size()) == big_payload);
+    }
+
+    TEST_CASE("wal: save hard state larger than write buffer") {
+        TempDir temp_dir;
+
+        WALConfig config;
+        config.dir = temp_dir.path();
+        config.write_buffer_size = 1;
+        config.sync_on_write = true;
+
+        {
+            auto wal = WAL::Open(config);
+            REQUIRE(wal.has_value());
+
+            HardState hs = capnp_util::make<msg::HardState>();
+            auto hs_builder = capnp_util::builder<msg::HardState>(hs);
+            hs_builder.setTerm(2);
+            hs_builder.setVote(1);
+            hs_builder.setCommit(0);
+
+            auto save_result = (*wal)->SaveHardState(hs);
+            CHECK(save_result.has_value());
+            auto close_result = (*wal)->Close();
+            CHECK(close_result.has_value());
+        }
+
+        auto wal2 = WAL::Open(config);
+        REQUIRE(wal2.has_value());
+        const auto& hs2 = (*wal2)->GetHardState();
+        auto hs_reader = capnp_util::reader<msg::HardState>(hs2);
+        CHECK(hs_reader.getTerm() == 2);
+        CHECK(hs_reader.getVote() == 1);
+        CHECK(hs_reader.getCommit() == 0);
+    }
+
 }  // TEST_SUITE

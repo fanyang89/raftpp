@@ -124,7 +124,19 @@ class WAL {
 
     // Write buffer for batching
     std::vector<uint8_t> write_buffer_;
-    size_t write_buffer_used_ = 0;
+    size_t write_buffer_used_;
+
+    struct PendingEntry {
+        uint64_t index;
+        uint64_t term;
+        uint32_t offset_in_buffer;
+        uint32_t record_length;
+    };
+
+    std::vector<PendingEntry> pending_entries_;
+
+    [[nodiscard]] Result<void> FlushWriteBufferIfNeeded();
+    [[nodiscard]] bool ShouldFlushBuffer(Segment* segment) const;
 
     // Thread safety
     mutable std::shared_mutex mutex_;
