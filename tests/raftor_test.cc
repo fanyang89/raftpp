@@ -342,7 +342,7 @@ TEST_CASE("three_node_proposal_after_bootstrap") {
     std::vector<std::unique_ptr<Raftor>> raftors;
     raftors.reserve(peers.size());
 
-    for (auto peer : peers) {
+    for (const auto& peer : peers) {
         auto result = CreateTestNode(peer.id, peer.addr, peers);
         REQUIRE(result.has_value());
         test_nodes.push_back(std::move(*result));
