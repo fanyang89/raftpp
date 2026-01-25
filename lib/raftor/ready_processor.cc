@@ -298,12 +298,14 @@ void ReadyProcessor::CheckLeadershipChange(const Ready& rd) {
 
         state_machine_.OnLeadershipChange(is_leader, term, ss.leader_id);
 
-        // Any leadership change can invalidate pending read index requests.
-        proposal_tracker_.FailAllReads(RaftError(RaftErrorCode::LostLeadership));
-
-        // If we lost leadership, fail all pending proposals
+        // If we lost leadership, fail all pending requests.
+        //
+        // Pending proposals should be dropped because they can no longer be committed by us.
+        // Pending reads should fail because read index requests issued under our leadership may
+        // never complete once we step down.
         if (was_leader && !is_leader) {
             proposal_tracker_.FailAll(RaftError(RaftErrorCode::ProposalDropped));
+            proposal_tracker_.FailAllReads(RaftError(RaftErrorCode::LostLeadership));
         }
     }
 

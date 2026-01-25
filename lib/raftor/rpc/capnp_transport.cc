@@ -187,7 +187,8 @@ void CapnpTransport::RpcLoop(std::promise<Result<void>> start_promise) {
 
         set_start({});
 
-        while (running_ && !stopped_) {
+        while (running_.load(std::memory_order_acquire) &&
+               !stopped_.load(std::memory_order_acquire)) {
             std::queue<OutgoingBatch> outgoing;
             {
                 std::lock_guard lock(outgoing_mutex_);
@@ -235,10 +236,27 @@ void CapnpTransport::RpcLoop(std::promise<Result<void>> start_promise) {
                 }
             }
 
-            wait_scope.poll();
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            // Avoid driving the event loop once shutdown has been requested.
+            if (!running_.load(std::memory_order_acquire) ||
+                stopped_.load(std::memory_order_acquire)) {
+                break;
+            }
+
+            const uint max_turns = wait_scope.poll();
+            if (max_turns == 0) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
         }
+
+        // Best-effort teardown of internal detached tasks (EzRpcServer uses detached promises).
+        // cancelAllDetached() alone can leave cancellation callbacks pending; drain a bit so that
+        // tear-down doesn't run while callbacks are still firing.
         wait_scope.cancelAllDetached();
+        for (int i = 0; i < 1024; ++i) {
+            if (wait_scope.poll() == 0) {
+                break;
+            }
+        }
     } catch (const kj::Exception& e) {
         set_start(std::unexpected(RaftError(RpcErrorCode::BindFailed)));
         SPDLOG_ERROR("Cap'n Proto RPC loop failed: {}", e.getDescription().cStr());

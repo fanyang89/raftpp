@@ -319,12 +319,12 @@ TEST_CASE("proposal_queue: push and pop") {
 
     auto item = queue.TryPop();
     REQUIRE(item.has_value());
-    CHECK(item->first == "data1");
+    CHECK(item->data == "data1");
 
     CHECK(queue.Empty());
 
     // Invoke callback
-    item->second(std::string("result"));
+    item->callback(std::string("result"));
     CHECK(called);
 }
 
@@ -350,9 +350,9 @@ TEST_CASE("proposal_queue: fifo order") {
     REQUIRE(item2.has_value());
     REQUIRE(item3.has_value());
 
-    CHECK(item1->first == "data1");
-    CHECK(item2->first == "data2");
-    CHECK(item3->first == "data3");
+    CHECK(item1->data == "data1");
+    CHECK(item2->data == "data2");
+    CHECK(item3->data == "data3");
 }
 
 TEST_CASE("proposal_queue: thread safety") {
@@ -413,11 +413,11 @@ TEST_CASE("read_index_queue: push and pop") {
 
     auto item = queue.TryPop();
     REQUIRE(item.has_value());
-    CHECK(item->first == "ctx1");
+    CHECK(item->ctx == "ctx1");
 
     CHECK(queue.Empty());
 
-    item->second({});
+    item->callback({});
     CHECK(called);
 }
 
@@ -972,6 +972,31 @@ TEST_CASE("raftor: single node tests") {
         });
 
         for (int i = 0; i < 20; i++) {
+            raftor->Tick();
+        }
+
+        CHECK(read_callback_called);
+        CHECK(read_result.has_value());
+    }
+
+    SUBCASE("read index after Campaign does not fail") {
+        SingleNodeRaftorFixture fixture;
+        fixture.SetUp("single_node_read_index_after_campaign");
+        Raftor* raftor = fixture.GetRaftor();
+
+        // Become leader without driving Ready processing yet.
+        auto campaign_result = raftor->Campaign();
+        REQUIRE(campaign_result.has_value());
+
+        std::atomic<bool> read_callback_called{false};
+        Result<void> read_result;
+
+        raftor->ReadIndex("read_ctx_after_campaign", [&](Result<void> result) {
+            read_callback_called = true;
+            read_result = std::move(result);
+        });
+
+        for (int i = 0; i < 50 && !read_callback_called.load(); i++) {
             raftor->Tick();
         }
 
