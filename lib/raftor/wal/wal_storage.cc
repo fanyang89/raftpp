@@ -153,4 +153,10 @@ std::vector<Entry> WALStorage::AllEntries() {
     return std::move(*result);
 }
 
+bool WALStorage::IsInitialized() const {
+    std::lock_guard lock(mutex_);
+    auto conf_reader = capnp_util::reader<msg::ConfState>(wal_->GetConfState());
+    return conf_reader.getVoters().size() > 0;
+}
+
 }  // namespace raftpp::raftor::wal

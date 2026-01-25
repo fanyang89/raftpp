@@ -10,6 +10,7 @@ project(raftpp
   LANGUAGES C CXX)
 
 option(RAFTPP_BUILD_TESTING "Build unit tests" ON)
+option(RAFTPP_BUILD_EXAMPLES "Build examples" ON)
 option(RAFTPP_WITH_CCACHE "Build with ccache" ON)
 option(RAFTPP_WITH_LLD "Build with lld" OFF)
 option(RAFTPP_SANITIZE "Build with address sanitizer" OFF)
@@ -50,6 +51,9 @@ set(RAFTPP_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
 add_subdirectory(third_party)
 add_subdirectory(lib)
 add_subdirectory(proto)
+if (RAFTPP_BUILD_EXAMPLES)
+  add_subdirectory(examples)
+endif ()
 
 if (RAFTPP_BUILD_TESTING)
   add_subdirectory(tests)
