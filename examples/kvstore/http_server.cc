@@ -2,10 +2,9 @@
 
 #include <functional>
 #include <iostream>
+#include <utility>
 
 #include <nlohmann/json.hpp>
-
-#include "kv_store_state_machine.h"
 
 namespace kvstore {
 
@@ -13,8 +12,8 @@ namespace {
 constexpr size_t kMaxBodySize = 1 * 1024 * 1024;
 }
 
-HttpServer::HttpServer(raftpp::raftor::Raftor* raftor, uint16_t port)
-    : raftor_(raftor), port_(port) {}
+HttpServer::HttpServer(raftpp::raftor::Raftor* raftor, IKVStore* kv_store, uint16_t port)
+    : raftor_(raftor), kv_store_(kv_store), port_(port) {}
 
 HttpServer::~HttpServer() {
     Stop();
@@ -93,11 +92,38 @@ void HttpServer::handleGet(const httplib::Request& req, httplib::Response& res) 
     try {
         auto key = req.path_params.at("1");
 
-        nlohmann::json cmd;
-        cmd["op"] = "get";
-        cmd["key"] = key;
+        const auto status = raftor_->GetStatus();
+        if (status.id != status.leader_id) {
+            res.status = 503;
+            nlohmann::json err;
+            err["success"] = false;
+            err["error"] = "not leader";
+            err["leader_id"] = status.leader_id;
+            res.set_content(err.dump(), "application/json");
+            return;
+        }
 
-        sendCommand(cmd.dump(), res);
+        std::string ctx = "http_get:" + key + ":" +
+            std::to_string(read_counter_.fetch_add(1, std::memory_order_relaxed));
+        if (auto result = raftor_->ReadIndexSync(std::move(ctx)); !result.has_value()) {
+            res.status = 500;
+            nlohmann::json err;
+            err["success"] = false;
+            err["error"] = result.error().ToString();
+            res.set_content(err.dump(), "application/json");
+            return;
+        }
+
+        auto value = kv_store_->Get(key);
+        nlohmann::json resp;
+        if (value.has_value()) {
+            resp["success"] = true;
+            resp["value"] = *value;
+        } else {
+            resp["success"] = false;
+            resp["error"] = "key not found";
+        }
+        res.set_content(resp.dump(), "application/json");
     } catch (const std::exception& e) {
         res.status = 500;
         nlohmann::json err;

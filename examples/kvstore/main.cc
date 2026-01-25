@@ -121,8 +121,9 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    auto raftor_result =
-        raftpp::raftor::Raftor::Create(config, std::make_unique<kvstore::KvStoreStateMachine>());
+    auto state_machine = std::make_unique<kvstore::KvStoreStateMachine>();
+    auto* kv_store = state_machine.get();
+    auto raftor_result = raftpp::raftor::Raftor::Create(config, std::move(state_machine));
 
     if (!raftor_result.has_value()) {
         std::cerr << "Failed to create Raftor: " << raftor_result.error().ToString() << std::endl;
@@ -137,7 +138,7 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    kvstore::HttpServer http_server(raftor.get(), opts.port);
+    kvstore::HttpServer http_server(raftor.get(), kv_store, opts.port);
     http_server.Start();
 
     std::cout << "KV Store started. Node ID: " << opts.node_id << ", HTTP Port: " << opts.port

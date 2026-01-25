@@ -7,13 +7,14 @@
 #include <string>
 #include <thread>
 
+#include "kv_store.h"
 #include "raftpp/raftor/raftor.h"
 
 namespace kvstore {
 
 class HttpServer {
   public:
-    HttpServer(raftpp::raftor::Raftor* raftor, uint16_t port);
+    HttpServer(raftpp::raftor::Raftor* raftor, IKVStore* kv_store, uint16_t port);
     ~HttpServer();
 
     void Start();
@@ -33,9 +34,11 @@ class HttpServer {
     void sendCommand(const std::string& cmd_json, httplib::Response& res);
 
     raftpp::raftor::Raftor* raftor_;
+    IKVStore* kv_store_;
     uint16_t port_;
     std::unique_ptr<httplib::Server> server_;
     std::atomic<bool> running_{false};
+    std::atomic<uint64_t> read_counter_{0};
     std::thread server_thread_;
 };
 
