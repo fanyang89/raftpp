@@ -26,7 +26,7 @@ TEST_SUITE_BEGIN("raftor");
 // Mock StateMachine for testing
 // =============================================================================
 
-class MockStateMachine : public StateMachine {
+class TestStateMachine : public StateMachine {
   public:
     Result<ApplyResult> Apply(const Entry& entry) override {
         std::lock_guard lock(mutex_);
@@ -568,7 +568,7 @@ TEST_CASE("raftor_config: to_raft_config") {
 // =============================================================================
 
 TEST_CASE("mock_state_machine: apply entry") {
-    MockStateMachine sm;
+    TestStateMachine sm;
 
     Entry entry = capnp_util::make<msg::Entry>();
     auto builder = capnp_util::builder<msg::Entry>(entry);
@@ -586,7 +586,7 @@ TEST_CASE("mock_state_machine: apply entry") {
 }
 
 TEST_CASE("mock_state_machine: apply entry failure") {
-    MockStateMachine sm;
+    TestStateMachine sm;
     sm.SetShouldFailApply(true);
 
     Entry entry = capnp_util::make<msg::Entry>();
@@ -600,7 +600,7 @@ TEST_CASE("mock_state_machine: apply entry failure") {
 }
 
 TEST_CASE("mock_state_machine: take snapshot") {
-    MockStateMachine sm;
+    TestStateMachine sm;
 
     ConfState conf_state = capnp_util::make<msg::ConfState>();
     auto conf_builder = capnp_util::builder<msg::ConfState>(conf_state);
@@ -618,7 +618,7 @@ TEST_CASE("mock_state_machine: take snapshot") {
 }
 
 TEST_CASE("mock_state_machine: restore snapshot") {
-    MockStateMachine sm;
+    TestStateMachine sm;
 
     SnapshotData snapshot;
     snapshot.metadata = capnp_util::make<msg::SnapshotMetadata>();
@@ -632,7 +632,7 @@ TEST_CASE("mock_state_machine: restore snapshot") {
 }
 
 TEST_CASE("mock_state_machine: leadership change") {
-    MockStateMachine sm;
+    TestStateMachine sm;
 
     CHECK(sm.LeadershipChangeCount() == 0);
     CHECK_FALSE(sm.IsLeader());
@@ -653,7 +653,7 @@ TEST_CASE("mock_state_machine: leadership change") {
 }
 
 TEST_CASE("mock_state_machine: peer unreachable") {
-    MockStateMachine sm;
+    TestStateMachine sm;
 
     sm.OnPeerUnreachable(2);
     sm.OnPeerUnreachable(3);
@@ -888,7 +888,7 @@ class SingleNodeRaftorFixture {
 
         storage_->SetHardState(std::move(hard_state));
 
-        sm_ = std::make_unique<MockStateMachine>();
+        sm_ = std::make_unique<TestStateMachine>();
         transport_ = std::make_unique<MockTransport>();
 
         auto create_result =
@@ -929,7 +929,7 @@ class SingleNodeRaftorFixture {
     RaftorConfig config_;
     wal::WALConfig wal_config_;
     std::shared_ptr<wal::WALStorage> storage_;
-    std::unique_ptr<MockStateMachine> sm_;
+    std::unique_ptr<TestStateMachine> sm_;
     std::unique_ptr<MockTransport> transport_;
     std::unique_ptr<Raftor> raftor_;
 };
@@ -1055,7 +1055,7 @@ TEST_CASE("raftor: single node tests") {
 //     config.election_tick = 10;
 //     config.heartbeat_tick = 2;
 //
-//     auto result = Raftor::Create(config, std::make_unique<MockStateMachine>());
+//     auto result = Raftor::Create(config, std::make_unique<TestStateMachine>());
 //     REQUIRE(result.has_value());
 //     auto raftor = std::move(*result);
 //
