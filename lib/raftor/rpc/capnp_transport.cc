@@ -23,6 +23,7 @@ namespace {
 constexpr size_t kMaxPendingIncomingMessages = 4096;
 constexpr size_t kMaxPendingOutgoingBatches = 1024;
 constexpr size_t kMaxPendingErrorEvents = 1024;
+constexpr size_t kMaxInFlightSendTasks = 4096;
 
 class RaftTransportImpl final : public raftpp::capnp::RaftTransport::Server {
   public:
@@ -239,6 +240,9 @@ void CapnpTransport::RpcLoop(std::promise<Result<void>> start_promise) {
 
         kj::TaskSet send_tasks(task_error_handler);
 
+        size_t inflight_send_tasks = 0;
+        auto last_backpressure_log = std::chrono::steady_clock::time_point::min();
+
         std::unordered_map<uint64_t, RpcClient> clients;
 
         set_start({});
@@ -258,9 +262,32 @@ void CapnpTransport::RpcLoop(std::promise<Result<void>> start_promise) {
                 clients.erase(peer_id);
             }
             std::queue<OutgoingBatch> outgoing;
+            uint64_t backpressure_peer = 0;
             {
                 std::lock_guard lock(outgoing_mutex_);
-                std::swap(outgoing, outgoing_queue_);
+                if (inflight_send_tasks < kMaxInFlightSendTasks) {
+                    auto budget = kMaxInFlightSendTasks - inflight_send_tasks;
+                    while (budget > 0 && !outgoing_queue_.empty()) {
+                        outgoing.push(std::move(outgoing_queue_.front()));
+                        outgoing_queue_.pop();
+                        --budget;
+                    }
+                }
+                if (outgoing.empty() && !outgoing_queue_.empty() &&
+                    inflight_send_tasks >= kMaxInFlightSendTasks) {
+                    auto now = std::chrono::steady_clock::now();
+                    if (now - last_backpressure_log > std::chrono::seconds(1)) {
+                        backpressure_peer = outgoing_queue_.front().peer_id;
+                        last_backpressure_log = now;
+                    }
+                }
+            }
+
+            if (backpressure_peer != 0) {
+                SPDLOG_WARN(
+                    "RPC send backpressure for peer {} (cap={})", backpressure_peer,
+                    kMaxInFlightSendTasks
+                );
             }
 
             while (!outgoing.empty()) {
@@ -305,13 +332,25 @@ void CapnpTransport::RpcLoop(std::promise<Result<void>> start_promise) {
                 for (size_t i = 0; i < batch.messages.size(); ++i) {
                     list.setWithCaveats(i, capnp_util::reader<msg::Message>(batch.messages[i]));
                 }
-                auto send_promise = req.send().then(
-                                                  [](auto&&) {}
-                ).catch_([&clients, this, peer_id = batch.peer_id](kj::Exception&& e) {
-                    SPDLOG_WARN("RPC send to {} failed: {}", peer_id, e.getDescription().cStr());
-                    clients.erase(peer_id);
-                    EnqueueError(peer_id, e.getDescription().cStr());
-                });
+                ++inflight_send_tasks;
+                auto send_promise =
+                    req.send()
+                        .then([&inflight_send_tasks](auto&&) {
+                            if (inflight_send_tasks > 0) {
+                                --inflight_send_tasks;
+                            }
+                        })
+                        .catch_([&clients, this, peer_id = batch.peer_id,
+                                 &inflight_send_tasks](kj::Exception&& e) {
+                            if (inflight_send_tasks > 0) {
+                                --inflight_send_tasks;
+                            }
+                            SPDLOG_WARN(
+                                "RPC send to {} failed: {}", peer_id, e.getDescription().cStr()
+                            );
+                            clients.erase(peer_id);
+                            EnqueueError(peer_id, e.getDescription().cStr());
+                        });
                 send_tasks.add(kj::mv(send_promise));
             }
 
