@@ -1,5 +1,7 @@
 #include "ready_processor.h"
 
+#include <algorithm>
+
 #include <spdlog/spdlog.h>
 
 namespace raftpp::raftor {
@@ -293,21 +295,21 @@ void ReadyProcessor::MaybeCompletePendingReads() {
         return;
     }
 
-    std::vector<PendingRead> remaining;
-    remaining.reserve(pending_reads_.size());
-
-    for (auto& pending : pending_reads_) {
-        if (!proposal_tracker_.IsReadPending(pending.ctx)) {
-            continue;
+    // This is on a hot path: avoid allocating a new vector on every invocation.
+    const auto applied_index = applied_index_;
+    auto new_end = std::remove_if(
+        pending_reads_.begin(), pending_reads_.end(), [&](const PendingRead& pending) {
+            if (!proposal_tracker_.IsReadPending(pending.ctx)) {
+                return true;
+            }
+            if (applied_index >= pending.index) {
+                proposal_tracker_.CompleteRead(pending.ctx);
+                return true;
+            }
+            return false;
         }
-        if (applied_index_ >= pending.index) {
-            proposal_tracker_.CompleteRead(pending.ctx);
-            continue;
-        }
-        remaining.push_back(std::move(pending));
-    }
-
-    pending_reads_ = std::move(remaining);
+    );
+    pending_reads_.erase(new_end, pending_reads_.end());
 }
 
 void ReadyProcessor::CheckLeadershipChange(const Ready& rd) {
