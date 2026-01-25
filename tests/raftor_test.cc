@@ -25,6 +25,25 @@ using namespace std::chrono_literals;
 
 namespace {
 
+class TempDirCleanup {
+  public:
+    explicit TempDirCleanup(std::filesystem::path path) : path_(std::move(path)) {}
+
+    TempDirCleanup(const TempDirCleanup&) = delete;
+    TempDirCleanup& operator=(const TempDirCleanup&) = delete;
+
+    ~TempDirCleanup() {
+        std::error_code ec;
+        std::filesystem::remove_all(path_, ec);
+        if (ec) {
+            SPDLOG_WARN("Failed to remove temp directory {}: {}", path_.string(), ec.message());
+        }
+    }
+
+  private:
+    std::filesystem::path path_;
+};
+
 class PortAllocator {
   public:
     static uint16_t GetNextPort() {
@@ -95,6 +114,7 @@ struct TestNode {
     RaftorConfig config;
     MockStateMachine* state_machine = nullptr;
     std::filesystem::path temp_dir;
+    std::unique_ptr<TempDirCleanup> temp_dir_cleanup;
 };
 
 Result<TestNode> CreateTestNode(
@@ -108,6 +128,7 @@ Result<TestNode> CreateTestNode(
     std::error_code ec;
     std::filesystem::remove_all(node.temp_dir, ec);
     std::filesystem::create_directories(node.temp_dir);
+    node.temp_dir_cleanup = std::make_unique<TempDirCleanup>(node.temp_dir);
 
     node.config.node_id = node_id;
     node.config.listen_addr = listen_addr;
@@ -315,14 +336,22 @@ TEST_CASE("three_node_proposal_after_bootstrap") {
         {.id = 3, .addr = "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())},
     };
 
-    std::vector<std::unique_ptr<Raftor>> raftors;
+    std::vector<TestNode> test_nodes;
+    test_nodes.reserve(peers.size());
 
-    for (auto peer : peers) {
+    std::vector<std::unique_ptr<Raftor>> raftors;
+    raftors.reserve(peers.size());
+
+    for (const auto& peer : peers) {
         auto result = CreateTestNode(peer.id, peer.addr, peers);
         REQUIRE(result.has_value());
-        auto start_result = result->raftor->Start();
+        test_nodes.push_back(std::move(*result));
+    }
+
+    for (auto& node : test_nodes) {
+        auto start_result = node.raftor->Start();
         REQUIRE(start_result.has_value());
-        raftors.push_back(std::move(result->raftor));
+        raftors.push_back(std::move(node.raftor));
     }
 
     PollAll(raftors, 500ms);
@@ -441,14 +470,22 @@ TEST_CASE("three_node_leader_failure") {
         {.id = 3, .addr = "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())},
     };
 
-    std::vector<std::unique_ptr<Raftor>> raftors;
+    std::vector<TestNode> test_nodes;
+    test_nodes.reserve(peers.size());
 
-    for (auto peer : peers) {
+    std::vector<std::unique_ptr<Raftor>> raftors;
+    raftors.reserve(peers.size());
+
+    for (const auto& peer : peers) {
         auto result = CreateTestNode(peer.id, peer.addr, peers);
         REQUIRE(result.has_value());
-        auto start_result = result->raftor->Start();
+        test_nodes.push_back(std::move(*result));
+    }
+
+    for (auto& node : test_nodes) {
+        auto start_result = node.raftor->Start();
         REQUIRE(start_result.has_value());
-        raftors.push_back(std::move(result->raftor));
+        raftors.push_back(std::move(node.raftor));
     }
 
     PollAll(raftors, 500ms);
@@ -487,7 +524,9 @@ TEST_CASE("five_node_cluster_propose") {
         SPDLOG_INFO("  ID: {}, addr: {}", peer.id, peer.addr);
     }
 
-    std::vector<std::unique_ptr<Raftor>> raftors;
+    std::vector<TestNode> test_nodes;
+    test_nodes.reserve(peers.size());
+
     std::vector<MockStateMachine*> state_machines;
     state_machines.reserve(peers.size());
 
@@ -495,9 +534,16 @@ TEST_CASE("five_node_cluster_propose") {
         auto result = CreateTestNode(peer.id, peer.addr, peers);
         REQUIRE(result.has_value());
         state_machines.push_back(result->state_machine);
-        auto start_result = result->raftor->Start();
+        test_nodes.push_back(std::move(*result));
+    }
+
+    std::vector<std::unique_ptr<Raftor>> raftors;
+    raftors.reserve(test_nodes.size());
+
+    for (auto& node : test_nodes) {
+        auto start_result = node.raftor->Start();
         REQUIRE(start_result.has_value());
-        raftors.push_back(std::move(result->raftor));
+        raftors.push_back(std::move(node.raftor));
     }
 
     // Wait for leader election (5 nodes need more time)
