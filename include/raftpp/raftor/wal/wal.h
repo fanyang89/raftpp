@@ -124,7 +124,7 @@ class WAL {
 
     // Write buffer for batching
     std::vector<uint8_t> write_buffer_;
-    size_t write_buffer_used_;
+    size_t write_buffer_used_ = 0;
 
     struct PendingEntry {
         uint64_t index;
