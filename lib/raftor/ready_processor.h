@@ -95,6 +95,7 @@ class ReadyProcessor {
         uint64_t index = 0;
         std::string ctx;
     };
+
     std::vector<PendingRead> pending_reads_;
 };
 
