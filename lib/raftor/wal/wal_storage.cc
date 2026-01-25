@@ -4,7 +4,10 @@
 
 namespace raftpp::raftor::wal {
 
-WALStorage::WALStorage() : snapshot_(capnp_util::make<msg::Snapshot>()) {}
+WALStorage::WALStorage()
+    : snapshot_(capnp_util::make<msg::Snapshot>()),
+      effective_io_backend_(WALIoBackend::Auto),
+      io_backend_note_() {}
 
 WALStorage::~WALStorage() = default;
 
@@ -18,7 +21,23 @@ Result<std::shared_ptr<WALStorage>> WALStorage::Open(const WALConfig& config) {
 
     storage->wal_ = std::move(*wal);
 
+    {
+        std::lock_guard lock(storage->mutex_);
+        storage->effective_io_backend_ = storage->wal_->EffectiveIoBackend();
+        storage->io_backend_note_ = std::string(storage->wal_->IoBackendNote());
+    }
+
     return storage;
+}
+
+WALIoBackend WALStorage::EffectiveIoBackend() const {
+    std::lock_guard lock(mutex_);
+    return effective_io_backend_;
+}
+
+std::string_view WALStorage::IoBackendNote() const {
+    std::lock_guard lock(mutex_);
+    return io_backend_note_;
 }
 
 Result<RaftState> WALStorage::InitialState() {

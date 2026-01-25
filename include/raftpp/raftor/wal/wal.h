@@ -4,11 +4,13 @@
 #include <optional>
 #include <shared_mutex>
 #include <span>
+#include <string>
+#include <string_view>
 #include <vector>
 
-#include "raftpp/core/raft.h"
 #include "raftpp/core/types.h"
 #include "raftpp/raftor/wal/metadata_store.h"
+#include "raftpp/raftor/wal/record.h"
 #include "raftpp/raftor/wal/segment_manager.h"
 #include "raftpp/raftor/wal/wal_config.h"
 #include "raftpp/raftor/wal/wal_index.h"
@@ -61,6 +63,12 @@ class WAL {
 
     // Get approximate WAL size in bytes
     [[nodiscard]] uint64_t LogSizeBytes() const;
+
+    // Get the effective IO backend selected for this WAL instance.
+    [[nodiscard]] WALIoBackend EffectiveIoBackend() const;
+
+    // Human-readable note explaining backend selection/fallback.
+    [[nodiscard]] std::string_view IoBackendNote() const;
 
     // Compact the log by removing entries before compact_index
     [[nodiscard]] Result<void> Compact(uint64_t compact_index);
@@ -117,6 +125,9 @@ class WAL {
     std::unique_ptr<SegmentManager> segment_manager_;
     std::unique_ptr<MetadataStore> metadata_store_;
     WALIndex index_;
+
+    WALIoBackend effective_io_backend_ = WALIoBackend::Auto;
+    std::string io_backend_note_;
 
     // Current state
     HardState hard_state_;
