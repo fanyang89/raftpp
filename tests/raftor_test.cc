@@ -35,6 +35,9 @@ class TempDirCleanup {
     ~TempDirCleanup() {
         std::error_code ec;
         std::filesystem::remove_all(path_, ec);
+        if (ec) {
+            SPDLOG_WARN("Failed to remove temp directory {}: {}", path_.string(), ec.message());
+        }
     }
 
   private:
