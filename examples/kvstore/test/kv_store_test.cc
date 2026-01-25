@@ -77,10 +77,12 @@ TEST_CASE("kv_store: update existing key") {
     KvStoreStateMachine sm;
 
     auto put1_json = nlohmann::json{{"op", "put"}, {"key", "key3"}, {"value", "value1"}}.dump();
-    sm.Apply(CreateTestEntry(put1_json));
+    auto put1_result = sm.Apply(CreateTestEntry(put1_json));
+    CHECK(put1_result.has_value());
 
     auto put2_json = nlohmann::json{{"op", "put"}, {"key", "key3"}, {"value", "value2"}}.dump();
-    sm.Apply(CreateTestEntry(put2_json));
+    auto put2_result = sm.Apply(CreateTestEntry(put2_json));
+    CHECK(put2_result.has_value());
 
     auto get_result = sm.Get("key3");
     CHECK(get_result.has_value());
@@ -92,11 +94,13 @@ TEST_CASE("kv_store: snapshot and restore") {
 
     auto put1_json =
         nlohmann::json{{"op", "put"}, {"key", "snap_key1"}, {"value", "snap_value1"}}.dump();
-    sm.Apply(CreateTestEntry(put1_json));
+    auto put1_result = sm.Apply(CreateTestEntry(put1_json));
+    CHECK(put1_result.has_value());
 
     auto put2_json =
         nlohmann::json{{"op", "put"}, {"key", "snap_key2"}, {"value", "snap_value2"}}.dump();
-    sm.Apply(CreateTestEntry(put2_json));
+    auto put2_result = sm.Apply(CreateTestEntry(put2_json));
+    CHECK(put2_result.has_value());
 
     auto snapshot_result = sm.TakeSnapshot(2, 1, CreateTestConfState());
     CHECK(snapshot_result.has_value());
@@ -109,6 +113,51 @@ TEST_CASE("kv_store: snapshot and restore") {
     CHECK(*sm2.Get("snap_key1") == "snap_value1");
     CHECK(sm2.Get("snap_key2").has_value());
     CHECK(*sm2.Get("snap_key2") == "snap_value2");
+}
+
+TEST_CASE("kv_store: restore corrupted snapshot fails and preserves state") {
+    KvStoreStateMachine sm;
+
+    auto put1_json =
+        nlohmann::json{{"op", "put"}, {"key", "snap_key1"}, {"value", "snap_value1"}}.dump();
+    auto put1_result = sm.Apply(CreateTestEntry(put1_json));
+    CHECK(put1_result.has_value());
+
+    auto put2_json =
+        nlohmann::json{{"op", "put"}, {"key", "snap_key2"}, {"value", "snap_value2"}}.dump();
+    auto put2_result = sm.Apply(CreateTestEntry(put2_json));
+    CHECK(put2_result.has_value());
+
+    auto snapshot_result = sm.TakeSnapshot(2, 1, CreateTestConfState());
+    CHECK(snapshot_result.has_value());
+
+    snapshot_result->data = std::vector<uint8_t>{'{'};
+
+    KvStoreStateMachine sm2;
+
+    auto pre_put1_json =
+        nlohmann::json{{"op", "put"}, {"key", "snap_key1"}, {"value", "local_value"}}.dump();
+    auto pre_put1_result = sm2.Apply(CreateTestEntry(pre_put1_json));
+    CHECK(pre_put1_result.has_value());
+
+    auto pre_put2_json =
+        nlohmann::json{{"op", "put"}, {"key", "pre_key"}, {"value", "pre_value"}}.dump();
+    auto pre_put2_result = sm2.Apply(CreateTestEntry(pre_put2_json));
+    CHECK(pre_put2_result.has_value());
+
+    CHECK(sm2.Get("snap_key1").has_value());
+    CHECK(*sm2.Get("snap_key1") == "local_value");
+    CHECK(sm2.Get("pre_key").has_value());
+    CHECK(*sm2.Get("pre_key") == "pre_value");
+
+    auto restore_result = sm2.RestoreSnapshot(*snapshot_result);
+    CHECK(!restore_result.has_value());
+
+    CHECK(sm2.Get("snap_key1").has_value());
+    CHECK(*sm2.Get("snap_key1") == "local_value");
+    CHECK(sm2.Get("pre_key").has_value());
+    CHECK(*sm2.Get("pre_key") == "pre_value");
+    CHECK(!sm2.Get("snap_key2").has_value());
 }
 
 TEST_SUITE_END();

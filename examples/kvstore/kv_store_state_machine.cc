@@ -37,12 +37,18 @@ std::string serializeData(const std::map<std::string, std::string>& data) {
     return j.dump();
 }
 
-std::map<std::string, std::string> deserializeData(const std::string& data_str) {
+raftpp::Result<std::map<std::string, std::string>> deserializeData(const std::string& data_str) {
     try {
         auto j = nlohmann::json::parse(data_str);
         return j.get<std::map<std::string, std::string>>();
     } catch (const nlohmann::json::exception& e) {
-        return {};
+        return std::unexpected(
+            raftpp::RaftError(
+                raftpp::StorageErrorOther{
+                    std::string("kvstore snapshot parse failed: ") + e.what(),
+                }
+            )
+        );
     }
 }
 
@@ -123,8 +129,13 @@ raftpp::Result<void> KvStoreStateMachine::RestoreSnapshot(
     const raftpp::raftor::SnapshotData& snapshot
 ) {
     std::string data_str(snapshot.data.begin(), snapshot.data.end());
+    auto data_result = deserializeData(data_str);
+    if (!data_result) {
+        return std::unexpected(data_result.error());
+    }
+
     std::lock_guard lock(mutex_);
-    data_ = deserializeData(data_str);
+    data_ = std::move(*data_result);
     return {};
 }
 
