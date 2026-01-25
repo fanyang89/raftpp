@@ -10,6 +10,7 @@
 #include <kj/array.h>
 
 #include "raftpp/core/memory_storage.h"
+#include "raftpp/raftor/mock_state_machine.h"
 #include "raftpp/raftor/proposal_tracker.h"
 #include "raftpp/raftor/raftor_config.h"
 #include "raftpp/raftor/rpc/transport.h"
@@ -21,133 +22,6 @@ using namespace raftpp;
 using namespace raftpp::raftor;
 
 TEST_SUITE_BEGIN("raftor");
-
-// =============================================================================
-// Mock StateMachine for testing
-// =============================================================================
-
-class TestStateMachine : public StateMachine {
-  public:
-    Result<ApplyResult> Apply(const Entry& entry) override {
-        std::lock_guard lock(mutex_);
-        auto reader = EntryReader(entry);
-        auto data = reader.getData();
-        applied_entries_.push_back(
-            std::string(reinterpret_cast<const char*>(data.begin()), data.size())
-        );
-        apply_count_++;
-        if (should_fail_apply_) {
-            return std::unexpected(RaftError(RaftErrorCode::ProposalDropped));
-        }
-        return ApplyResult{.response = "OK:" + applied_entries_.back()};
-    }
-
-    Result<SnapshotData> TakeSnapshot(
-        uint64_t applied_index, uint64_t applied_term, const ConfState& conf_state
-    ) override {
-        std::lock_guard lock(mutex_);
-        snapshot_count_++;
-        SnapshotData data;
-        data.data = std::vector<uint8_t>{'s', 'n', 'a', 'p'};
-        data.metadata = capnp_util::make<msg::SnapshotMetadata>();
-        auto meta_builder = capnp_util::builder<msg::SnapshotMetadata>(data.metadata);
-        meta_builder.setIndex(applied_index);
-        meta_builder.setTerm(applied_term);
-        meta_builder.setConfState(capnp_util::reader<msg::ConfState>(conf_state));
-        return data;
-    }
-
-    Result<void> RestoreSnapshot(const SnapshotData& snapshot) override {
-        std::lock_guard lock(mutex_);
-        restore_count_++;
-        last_restored_index_ =
-            capnp_util::reader<msg::SnapshotMetadata>(snapshot.metadata).getIndex();
-        return {};
-    }
-
-    void OnLeadershipChange(bool is_leader, uint64_t term, uint64_t leader_id) override {
-        std::lock_guard lock(mutex_);
-        is_leader_ = is_leader;
-        current_term_ = term;
-        current_leader_ = leader_id;
-        leadership_change_count_++;
-    }
-
-    void OnPeerUnreachable(uint64_t peer_id) override {
-        std::lock_guard lock(mutex_);
-        unreachable_peers_.push_back(peer_id);
-    }
-
-    // Test accessors
-    size_t ApplyCount() const {
-        std::lock_guard lock(mutex_);
-        return apply_count_;
-    }
-
-    size_t SnapshotCount() const {
-        std::lock_guard lock(mutex_);
-        return snapshot_count_;
-    }
-
-    size_t RestoreCount() const {
-        std::lock_guard lock(mutex_);
-        return restore_count_;
-    }
-
-    size_t LeadershipChangeCount() const {
-        std::lock_guard lock(mutex_);
-        return leadership_change_count_;
-    }
-
-    bool IsLeader() const {
-        std::lock_guard lock(mutex_);
-        return is_leader_;
-    }
-
-    uint64_t CurrentTerm() const {
-        std::lock_guard lock(mutex_);
-        return current_term_;
-    }
-
-    uint64_t CurrentLeader() const {
-        std::lock_guard lock(mutex_);
-        return current_leader_;
-    }
-
-    std::vector<std::string> AppliedEntries() const {
-        std::lock_guard lock(mutex_);
-        return applied_entries_;
-    }
-
-    std::vector<uint64_t> UnreachablePeers() const {
-        std::lock_guard lock(mutex_);
-        return unreachable_peers_;
-    }
-
-    uint64_t LastRestoredIndex() const {
-        std::lock_guard lock(mutex_);
-        return last_restored_index_;
-    }
-
-    void SetShouldFailApply(bool fail) {
-        std::lock_guard lock(mutex_);
-        should_fail_apply_ = fail;
-    }
-
-  private:
-    mutable std::mutex mutex_;
-    size_t apply_count_ = 0;
-    size_t snapshot_count_ = 0;
-    size_t restore_count_ = 0;
-    size_t leadership_change_count_ = 0;
-    bool is_leader_ = false;
-    uint64_t current_term_ = 0;
-    uint64_t current_leader_ = 0;
-    uint64_t last_restored_index_ = 0;
-    bool should_fail_apply_ = false;
-    std::vector<std::string> applied_entries_;
-    std::vector<uint64_t> unreachable_peers_;
-};
 
 // =============================================================================
 // Mock Transport for testing
@@ -568,7 +442,7 @@ TEST_CASE("raftor_config: to_raft_config") {
 // =============================================================================
 
 TEST_CASE("mock_state_machine: apply entry") {
-    TestStateMachine sm;
+    MockStateMachine sm;
 
     Entry entry = capnp_util::make<msg::Entry>();
     auto builder = capnp_util::builder<msg::Entry>(entry);
@@ -586,7 +460,7 @@ TEST_CASE("mock_state_machine: apply entry") {
 }
 
 TEST_CASE("mock_state_machine: apply entry failure") {
-    TestStateMachine sm;
+    MockStateMachine sm;
     sm.SetShouldFailApply(true);
 
     Entry entry = capnp_util::make<msg::Entry>();
@@ -600,7 +474,7 @@ TEST_CASE("mock_state_machine: apply entry failure") {
 }
 
 TEST_CASE("mock_state_machine: take snapshot") {
-    TestStateMachine sm;
+    MockStateMachine sm;
 
     ConfState conf_state = capnp_util::make<msg::ConfState>();
     auto conf_builder = capnp_util::builder<msg::ConfState>(conf_state);
@@ -618,7 +492,7 @@ TEST_CASE("mock_state_machine: take snapshot") {
 }
 
 TEST_CASE("mock_state_machine: restore snapshot") {
-    TestStateMachine sm;
+    MockStateMachine sm;
 
     SnapshotData snapshot;
     snapshot.metadata = capnp_util::make<msg::SnapshotMetadata>();
@@ -632,7 +506,7 @@ TEST_CASE("mock_state_machine: restore snapshot") {
 }
 
 TEST_CASE("mock_state_machine: leadership change") {
-    TestStateMachine sm;
+    MockStateMachine sm;
 
     CHECK(sm.LeadershipChangeCount() == 0);
     CHECK_FALSE(sm.IsLeader());
@@ -653,7 +527,7 @@ TEST_CASE("mock_state_machine: leadership change") {
 }
 
 TEST_CASE("mock_state_machine: peer unreachable") {
-    TestStateMachine sm;
+    MockStateMachine sm;
 
     sm.OnPeerUnreachable(2);
     sm.OnPeerUnreachable(3);
@@ -888,7 +762,7 @@ class SingleNodeRaftorFixture {
 
         storage_->SetHardState(std::move(hard_state));
 
-        sm_ = std::make_unique<TestStateMachine>();
+        sm_ = std::make_unique<MockStateMachine>();
         transport_ = std::make_unique<MockTransport>();
 
         auto create_result =
@@ -929,7 +803,7 @@ class SingleNodeRaftorFixture {
     RaftorConfig config_;
     wal::WALConfig wal_config_;
     std::shared_ptr<wal::WALStorage> storage_;
-    std::unique_ptr<TestStateMachine> sm_;
+    std::unique_ptr<MockStateMachine> sm_;
     std::unique_ptr<MockTransport> transport_;
     std::unique_ptr<Raftor> raftor_;
 };
@@ -1055,7 +929,7 @@ TEST_CASE("raftor: single node tests") {
 //     config.election_tick = 10;
 //     config.heartbeat_tick = 2;
 //
-//     auto result = Raftor::Create(config, std::make_unique<TestStateMachine>());
+//     auto result = Raftor::Create(config, std::make_unique<MockStateMachine>());
 //     REQUIRE(result.has_value());
 //     auto raftor = std::move(*result);
 //
