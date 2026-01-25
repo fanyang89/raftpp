@@ -1,5 +1,7 @@
 #include "ready_processor.h"
 
+#include <algorithm>
+
 #include <spdlog/spdlog.h>
 
 namespace raftpp::raftor {
@@ -51,9 +53,7 @@ Result<bool> ReadyProcessor::Process() {
     }
 
     // 6. Process read states
-    for (const auto& rs : rd.read_states) {
-        proposal_tracker_.CompleteRead(rs.request_ctx);
-    }
+    EnqueueReadStates(rd.read_states);
 
     // 7. Advance and get light ready
     LightReady light_rd = raw_node_.Advance(rd);
@@ -126,6 +126,7 @@ Result<void> ReadyProcessor::ApplySnapshot(const Ready& rd) {
     }
 
     applied_index_ = snap_meta.getIndex();
+    MaybeCompletePendingReads();
 
     return {};
 }
@@ -150,6 +151,7 @@ Result<void> ReadyProcessor::ApplyCommittedEntries(const std::vector<Entry>& ent
         }
         applied_index_ = capnp_util::reader<msg::Entry>(entry).getIndex();
     }
+    MaybeCompletePendingReads();
     return {};
 }
 
@@ -268,11 +270,46 @@ void ReadyProcessor::ProcessLightReady(const LightReady& light_rd) {
         }
         applied_index_ = capnp_util::reader<msg::Entry>(entry).getIndex();
     }
+    MaybeCompletePendingReads();
 
     // Update applied index
     if (!light_rd.committed_entries.empty()) {
         raw_node_.AdvanceApply();
     }
+}
+
+void ReadyProcessor::EnqueueReadStates(const std::vector<ReadState>& read_states) {
+    if (read_states.empty()) {
+        return;
+    }
+
+    pending_reads_.reserve(pending_reads_.size() + read_states.size());
+    for (const auto& rs : read_states) {
+        pending_reads_.push_back(PendingRead{rs.index, rs.request_ctx});
+    }
+    MaybeCompletePendingReads();
+}
+
+void ReadyProcessor::MaybeCompletePendingReads() {
+    if (pending_reads_.empty()) {
+        return;
+    }
+
+    // This is on a hot path: avoid allocating a new vector on every invocation.
+    const auto applied_index = applied_index_;
+    auto new_end = std::remove_if(
+        pending_reads_.begin(), pending_reads_.end(), [&](const PendingRead& pending) {
+            if (!proposal_tracker_.IsReadPending(pending.ctx)) {
+                return true;
+            }
+            if (applied_index >= pending.index) {
+                proposal_tracker_.CompleteRead(pending.ctx);
+                return true;
+            }
+            return false;
+        }
+    );
+    pending_reads_.erase(new_end, pending_reads_.end());
 }
 
 void ReadyProcessor::CheckLeadershipChange(const Ready& rd) {

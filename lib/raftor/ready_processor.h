@@ -1,6 +1,8 @@
 #pragma once
 
 #include <memory>
+#include <string>
+#include <vector>
 
 #include "raftpp/core/error.h"
 #include "raftpp/core/raft_core.h"
@@ -63,6 +65,12 @@ class ReadyProcessor {
     /// Process light ready (after Advance)
     void ProcessLightReady(const LightReady& light_rd);
 
+    /// Record read states from Ready
+    void EnqueueReadStates(const std::vector<ReadState>& read_states);
+
+    /// Complete pending reads whose index has been applied
+    void MaybeCompletePendingReads();
+
     /// Check for leadership changes and notify state machine
     void CheckLeadershipChange(const Ready& rd);
 
@@ -82,6 +90,13 @@ class ReadyProcessor {
 
     // Track applied index
     uint64_t applied_index_ = 0;
+
+    struct PendingRead {
+        uint64_t index = 0;
+        std::string ctx;
+    };
+
+    std::vector<PendingRead> pending_reads_;
 };
 
 }  // namespace raftpp::raftor

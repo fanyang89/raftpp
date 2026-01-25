@@ -752,6 +752,85 @@ TEST_CASE("raw_node: read index to old leader") {
     CHECK_EQ(msg1_reader.getTo(), 3);
 }
 
+TEST_CASE("raw_node: read index dropped when no leader") {
+    auto storage = std::make_shared<MemoryStorage>();
+
+    ConfState cs = capnp_util::make<msg::ConfState>();
+    auto cs_builder = capnp_util::builder<msg::ConfState>(cs);
+    auto voters = cs_builder.initVoters(1);
+    voters.set(0, 1);
+    storage->SetConfState(cs);
+
+    Config config = Network::DefaultConfig();
+    config.id = 1;
+    Interface r = NewTestRaftWithConfig(config, storage);
+
+    // No leader known at startup.
+    CHECK_EQ(r->soft_state().leader_id, 0);
+
+    Message m = NewMessage(1, 1, MessageType::MSG_READ_INDEX, 1);
+    r.Step(m).value();
+    CHECK(r.msgs().empty());
+}
+
+TEST_CASE("raw_node: ignore read index resp from non-leader") {
+    const std::string request_ctx = "testdata";
+
+    auto storage1 = std::make_shared<MemoryStorage>();
+    auto storage2 = std::make_shared<MemoryStorage>();
+    auto storage3 = std::make_shared<MemoryStorage>();
+
+    Config config = DefaultConfig();
+    config.election_tick = 10;
+    config.heartbeat_tick = 1;
+
+    ConfState cs = capnp_util::make<msg::ConfState>();
+    auto cs_builder = capnp_util::builder<msg::ConfState>(cs);
+    auto voters_builder = cs_builder.initVoters(3);
+    voters_builder.set(0, 1);
+    voters_builder.set(1, 2);
+    voters_builder.set(2, 3);
+    HardState hs = capnp_util::make<msg::HardState>();
+    capnp_util::builder<msg::HardState>(hs).setCommit(0);
+    storage1->SetRaftState(MakeRaftState(hs, cs));
+    storage2->SetRaftState(MakeRaftState(hs, cs));
+    storage3->SetRaftState(MakeRaftState(hs, cs));
+
+    config.id = 1;
+    auto r1 = std::make_unique<Raft>(config, storage1);
+    config.id = 2;
+    auto r2 = std::make_unique<Raft>(config, storage2);
+    config.id = 3;
+    auto r3 = std::make_unique<Raft>(config, storage3);
+
+    std::vector<std::unique_ptr<Interface>> ifaces;
+    ifaces.push_back(std::make_unique<Interface>(std::move(r1), storage1));
+    ifaces.push_back(std::make_unique<Interface>(std::move(r2), storage2));
+    ifaces.push_back(std::make_unique<Interface>(std::move(r3), storage3));
+    Network network = Network::Create(std::move(ifaces));
+
+    // Elect r1 as leader.
+    network.Send(MakeEntryVec(NewMessage(1, 1, MessageType::MSG_HUP)));
+    CHECK_EQ((*network.GetPeer(2))->soft_state().leader_id, 1);
+
+    Entry test_entry = capnp_util::make<msg::Entry>();
+    auto entry_builder = capnp_util::builder<msg::Entry>(test_entry);
+    entry_builder.setData(
+        kj::arrayPtr(reinterpret_cast<const kj::byte*>(request_ctx.data()), request_ctx.size())
+    );
+
+    Message resp = NewMessageWithEntries(
+        3, 2, MessageType::MSG_READ_INDEX_RESP, MakeEntryVec(CloneEntry(test_entry))
+    );
+    auto resp_builder = capnp_util::builder<msg::Message>(resp);
+    resp_builder.setTerm(network.GetPeer(2)->term());
+    resp_builder.setIndex(1);
+
+    CHECK((*network.GetPeer(2))->read_states().empty());
+    network.GetPeer(2)->Step(resp).value();
+    CHECK((*network.GetPeer(2))->read_states().empty());
+}
+
 /// Test configuration change mechanism.
 TEST_CASE("raw_node: propose and conf change - simple add node") {
     auto storage = std::make_shared<MemoryStorage>();

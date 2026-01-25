@@ -358,6 +358,82 @@ TEST_CASE("three_node_proposal_after_bootstrap") {
     );
 }
 
+TEST_CASE("three_node_read_index_from_follower_completes") {
+    std::vector<PeerConfig> peers = {
+        {.id = 1, .addr = "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())},
+        {.id = 2, .addr = "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())},
+        {.id = 3, .addr = "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())},
+    };
+
+    std::vector<TestNode> test_nodes;
+    test_nodes.reserve(peers.size());
+
+    std::vector<std::unique_ptr<Raftor>> raftors;
+    raftors.reserve(peers.size());
+
+    for (auto peer : peers) {
+        auto result = CreateTestNode(peer.id, peer.addr, peers);
+        REQUIRE(result.has_value());
+        auto start_result = result->raftor->Start();
+        REQUIRE(start_result.has_value());
+        raftors.push_back(std::move(result->raftor));
+        test_nodes.push_back(std::move(*result));
+    }
+
+    REQUIRE_MESSAGE(WaitForStableLeader(raftors, 2s), "No leader was elected");
+    const uint64_t leader_id = GetLeaderId(raftors);
+    REQUIRE_NE(leader_id, 0);
+
+    // Ensure there is a committed entry in the current term.
+    std::promise<bool> proposal_completed;
+    auto proposal_future = proposal_completed.get_future();
+    raftors[leader_id - 1]->Propose(
+        "readindex_warmup", [&proposal_completed](Result<std::string> r) {
+            proposal_completed.set_value(r.has_value());
+        }
+    );
+    PollAll(raftors, 500ms);
+    REQUIRE(proposal_future.wait_for(100ms) == std::future_status::ready);
+    REQUIRE(proposal_future.get());
+
+    // Pick a follower (non-leader) to issue ReadIndex.
+    size_t follower_idx = 0;
+    bool found_follower = false;
+    for (size_t i = 0; i < raftors.size(); ++i) {
+        if (raftors[i]->GetStatus().role != StateRole::Leader) {
+            follower_idx = i;
+            found_follower = true;
+            break;
+        }
+    }
+    REQUIRE_MESSAGE(found_follower, "Expected at least one follower");
+
+    auto promise = std::make_shared<std::promise<Result<void>>>();
+    auto future = promise->get_future();
+    auto completed = std::make_shared<std::atomic<bool>>(false);
+
+    std::string ctx =
+        "readindex_from_follower:" + std::to_string(raftors[follower_idx]->GetStatus().id);
+    raftors[follower_idx]->ReadIndex(std::move(ctx), [promise, completed](Result<void> r) {
+        if (completed->exchange(true)) {
+            return;
+        }
+        promise->set_value(std::move(r));
+    });
+
+    auto deadline = std::chrono::steady_clock::now() + 2s;
+    while (future.wait_for(0ms) != std::future_status::ready &&
+           std::chrono::steady_clock::now() < deadline) {
+        PollAll(raftors, 25ms);
+    }
+
+    REQUIRE_MESSAGE(
+        future.wait_for(0ms) == std::future_status::ready, "ReadIndex did not complete"
+    );
+    const auto result = future.get();
+    REQUIRE_MESSAGE(result.has_value(), "ReadIndex failed: {}", result.error().ToString());
+}
+
 TEST_CASE("three_node_leader_failure") {
     std::vector<PeerConfig> peers = {
         {.id = 1, .addr = "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())},

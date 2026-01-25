@@ -80,6 +80,9 @@ class ProposalTracker {
     /// Get the number of pending reads
     [[nodiscard]] size_t PendingReadCount() const;
 
+    /// Check if a read index request is still pending
+    [[nodiscard]] bool IsReadPending(const std::string& ctx) const;
+
     /// Expire pending proposals/reads that exceeded their timeout
     void ExpireTimeouts(std::chrono::steady_clock::time_point now);
 

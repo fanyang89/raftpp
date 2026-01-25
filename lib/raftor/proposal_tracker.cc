@@ -127,6 +127,11 @@ size_t ProposalTracker::PendingReadCount() const {
     return reads_.size();
 }
 
+bool ProposalTracker::IsReadPending(const std::string& ctx) const {
+    std::lock_guard lock(mutex_);
+    return reads_.contains(ctx);
+}
+
 void ProposalTracker::ExpireTimeouts(std::chrono::steady_clock::time_point now) {
     std::vector<ProposalCallback> proposal_callbacks;
     std::vector<ReadIndexCallback> read_callbacks;

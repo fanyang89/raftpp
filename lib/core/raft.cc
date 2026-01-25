@@ -857,6 +857,14 @@ Result<void> Raft::StepFollower(Message& m) {
             break;
 
         case MessageType::MSG_READ_INDEX_RESP: {
+            // Only accept read index responses from the current leader.
+            if (leader_id_ == kInvalidId || m_reader.getFrom() != leader_id_) {
+                SPDLOG_DEBUG(
+                    "ignored MsgReadIndexResp from {}: leader_id={}", m_reader.getFrom(), leader_id_
+                );
+                return {};
+            }
+
             auto entries = m_reader.getEntries();
             if (entries.size() != 1) {
                 SPDLOG_ERROR(
@@ -930,11 +938,12 @@ void Raft::HandleHeartbeatResponse(const Message& m) {
     }
 
     std::string ctx_str(reinterpret_cast<const char*>(context.begin()), context.size());
-    if (auto acks = read_only_.RecvACK(m_reader.getFrom(), ctx_str); !acks) {
+    const auto acks = read_only_.RecvACK(m_reader.getFrom(), ctx_str);
+    if (!acks) {
         return;
-    } else {
-        // FIXME(fanyang)
-        if (progress_tracker_.HasQuorum(*acks)) {}
+    }
+    if (!progress_tracker_.HasQuorum(*acks)) {
+        return;
     }
 
     for (const auto& rs : read_only_.Advance(ctx_str)) {
