@@ -4,12 +4,38 @@
 #include <filesystem>
 #include <memory>
 #include <span>
+#include <string>
 #include <vector>
 
 #include "raftpp/core/error.h"
-#include "raftpp/raftor/wal/record.h"
+#include "raftpp/raftor/wal/wal_config.h"
 
 namespace raftpp::raftor::wal {
+
+class SegmentIo {
+  public:
+    virtual ~SegmentIo() = default;
+
+    virtual Result<void> PWrite(int fd, uint64_t offset, std::span<const uint8_t> data) = 0;
+    virtual Result<void> PRead(int fd, uint64_t offset, std::span<uint8_t> data) = 0;
+    virtual Result<void> Sync(int fd) = 0;
+};
+
+class SegmentIoFactory {
+  public:
+    virtual ~SegmentIoFactory() = default;
+
+    [[nodiscard]] virtual std::unique_ptr<SegmentIo> Create() const = 0;
+};
+
+struct SegmentIoBackendSelection {
+    std::shared_ptr<SegmentIoFactory> io_factory;
+    WALIoBackend effective_backend = WALIoBackend::Auto;
+    std::string note;
+};
+
+// Select the effective I/O backend and create its factory.
+[[nodiscard]] Result<SegmentIoBackendSelection> SelectSegmentIoBackend(const WALConfig& config);
 
 // Represents a single WAL segment file
 class Segment {
@@ -27,11 +53,14 @@ class Segment {
     // Create a new segment file
     [[nodiscard]] static Result<std::unique_ptr<Segment>> Create(
         const std::filesystem::path& path, uint64_t segment_id, uint64_t first_index,
-        bool preallocate = true, uint64_t preallocate_size = 64 * 1024 * 1024
+        bool preallocate = true, uint64_t preallocate_size = 64 * 1024 * 1024,
+        std::unique_ptr<SegmentIo> io = nullptr
     );
 
     // Open an existing segment file for reading and appending
-    [[nodiscard]] static Result<std::unique_ptr<Segment>> Open(const std::filesystem::path& path);
+    [[nodiscard]] static Result<std::unique_ptr<Segment>> Open(
+        const std::filesystem::path& path, std::unique_ptr<SegmentIo> io = nullptr
+    );
 
     // Append data to the segment
     [[nodiscard]] Result<void> Append(std::span<const uint8_t> data);
@@ -77,6 +106,8 @@ class Segment {
     uint64_t write_offset_ = 0;
     uint64_t file_size_ = 0;
     std::filesystem::path path_;
+
+    std::unique_ptr<SegmentIo> io_;
 };
 
 }  // namespace raftpp::raftor::wal

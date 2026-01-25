@@ -6,8 +6,11 @@
 
 namespace raftpp::raftor::wal {
 
-SegmentManager::SegmentManager(const std::filesystem::path& dir, const WALConfig& config)
-    : dir_(dir), config_(config) {}
+SegmentManager::SegmentManager(
+    const std::filesystem::path& dir, const WALConfig& config,
+    std::shared_ptr<SegmentIoFactory> io_factory
+)
+    : dir_(dir), config_(config), io_factory_(std::move(io_factory)) {}
 
 Result<void> SegmentManager::Initialize() {
     // Create directory if it doesn't exist
@@ -43,7 +46,8 @@ Result<void> SegmentManager::Initialize() {
 
     // Open all segments
     for (const auto& path : segment_paths) {
-        auto segment = Segment::Open(path);
+        std::unique_ptr<SegmentIo> io = io_factory_ ? io_factory_->Create() : nullptr;
+        auto segment = Segment::Open(path, std::move(io));
         if (!segment) {
             // Log warning but continue - we might be able to recover partial data
             SPDLOG_WARN("failed to open segment {}: {}", path.string(), segment.error().ToString());
@@ -94,8 +98,9 @@ Result<Segment*> SegmentManager::RollToNewSegment(uint64_t first_index) {
     uint64_t new_segment_id = current_segment_id_ + 1;
     auto path = dir_ / Segment::MakeSegmentFilename(new_segment_id);
 
+    std::unique_ptr<SegmentIo> io = io_factory_ ? io_factory_->Create() : nullptr;
     auto segment = Segment::Create(
-        path, new_segment_id, first_index, config_.preallocate, config_.segment_size
+        path, new_segment_id, first_index, config_.preallocate, config_.segment_size, std::move(io)
     );
     if (!segment) {
         return segment.error();

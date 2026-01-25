@@ -2,6 +2,8 @@
 
 #include <memory>
 #include <mutex>
+#include <string>
+#include <string_view>
 
 #include "raftpp/core/storage.h"
 #include "raftpp/raftor/wal/wal.h"
@@ -59,15 +61,25 @@ class WALStorage final : public Storage {
     // Get all entries (for testing)
     [[nodiscard]] std::vector<Entry> AllEntries();
 
-    // Check if storage has been initialized with a cluster configuration
-    // @return true if ConfState contains at least one voter
+    // Check if storage has been initialized with a cluster configuration.
+    // @return true if ConfState contains at least one voter.
     [[nodiscard]] bool IsInitialized() const;
+
+    // Get the effective IO backend selected for this WAL instance.
+    [[nodiscard]] WALIoBackend EffectiveIoBackend() const;
+
+    // Human-readable note explaining backend selection/fallback.
+    [[nodiscard]] std::string_view IoBackendNote() const;
 
   private:
     WALStorage();
 
     std::unique_ptr<WAL> wal_;
     mutable std::mutex mutex_;
+
+    // Protected by mutex_.
+    WALIoBackend effective_io_backend_;
+    std::string io_backend_note_;
 
     // Snapshot data (stored in memory, persisted separately)
     Snapshot snapshot_;

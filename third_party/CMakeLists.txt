@@ -39,3 +39,35 @@ CPMAddPackage(
     "BUILD_TESTING OFF"
     "WITH_OPENSSL OFF"
 )
+
+if(RAFTPP_WITH_LIBURING)
+  if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    include(ExternalProject)
+    set(LIBURING_INSTALL_DIR "${CMAKE_BINARY_DIR}/_deps/liburing-install")
+    ExternalProject_Add(
+      liburing_ep
+      GIT_REPOSITORY "https://github.com/axboe/liburing.git"
+      GIT_TAG "liburing-2.12"
+      CONFIGURE_COMMAND
+        ${CMAKE_COMMAND} -E env CC=${CMAKE_C_COMPILER} ./configure
+        --prefix=${LIBURING_INSTALL_DIR} --disable-shared --enable-static
+      BUILD_COMMAND make
+      INSTALL_COMMAND make install
+      BUILD_IN_SOURCE 1
+    )
+    add_library(uring::uring STATIC IMPORTED)
+    set_target_properties(
+      uring::uring
+      PROPERTIES
+        IMPORTED_LOCATION "${LIBURING_INSTALL_DIR}/lib/liburing.a"
+        INTERFACE_INCLUDE_DIRECTORIES "${LIBURING_INSTALL_DIR}/include"
+    )
+    add_dependencies(uring::uring liburing_ep)
+  else()
+    message(
+      WARNING
+        "RAFTPP_WITH_LIBURING is ON but liburing is Linux-only; disabling."
+    )
+    set(RAFTPP_WITH_LIBURING OFF CACHE BOOL "Enable liburing" FORCE)
+  endif()
+endif()

@@ -17,3 +17,10 @@ target_link_libraries(raftor-wal PRIVATE
   spdlog::spdlog
   absl::flat_hash_map
   absl::flat_hash_set)
+
+if(RAFTPP_WITH_LIBURING AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND TARGET uring::uring)
+  target_link_libraries(raftor-wal PRIVATE uring::uring)
+  target_compile_definitions(raftor-wal PRIVATE RAFTPP_HAS_LIBURING=1)
+else()
+  target_compile_definitions(raftor-wal PRIVATE RAFTPP_HAS_LIBURING=0)
+endif()

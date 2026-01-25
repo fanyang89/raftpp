@@ -22,7 +22,10 @@ struct SegmentInfo {
 // Manages the lifecycle of WAL segment files
 class SegmentManager {
   public:
-    explicit SegmentManager(const std::filesystem::path& dir, const WALConfig& config);
+    SegmentManager(
+        const std::filesystem::path& dir, const WALConfig& config,
+        std::shared_ptr<SegmentIoFactory> io_factory
+    );
 
     // Initialize by scanning existing segments
     [[nodiscard]] Result<void> Initialize();
@@ -70,6 +73,7 @@ class SegmentManager {
   private:
     std::filesystem::path dir_;
     WALConfig config_;
+    std::shared_ptr<SegmentIoFactory> io_factory_;
     std::map<uint64_t, std::unique_ptr<Segment>> segments_;  // segment_id -> Segment
     uint64_t current_segment_id_ = 0;
 };

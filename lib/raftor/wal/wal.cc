@@ -26,6 +26,14 @@ Result<std::unique_ptr<WAL>> WAL::Open(const WALConfig& config) {
 Result<void> WAL::Initialize(const WALConfig& config) {
     config_ = config;
 
+    auto selection = SelectSegmentIoBackend(config_);
+    if (!selection) {
+        return selection.error();
+    }
+
+    effective_io_backend_ = selection->effective_backend;
+    io_backend_note_ = std::move(selection->note);
+
     // Allocate write buffer
     write_buffer_.resize(config_.write_buffer_size);
     write_buffer_used_ = 0;
@@ -38,7 +46,8 @@ Result<void> WAL::Initialize(const WALConfig& config) {
     }
 
     // Initialize segment manager
-    segment_manager_ = std::make_unique<SegmentManager>(config_.dir, config_);
+    segment_manager_ =
+        std::make_unique<SegmentManager>(config_.dir, config_, std::move(selection->io_factory));
     auto seg_result = segment_manager_->Initialize();
     if (!seg_result) {
         return seg_result;
@@ -610,6 +619,16 @@ uint64_t WAL::LogSizeBytes() const {
         return 0;
     }
     return segment_manager_->TotalSizeBytes() + metadata_store_->SizeBytes();
+}
+
+WALIoBackend WAL::EffectiveIoBackend() const {
+    std::shared_lock lock(mutex_);
+    return effective_io_backend_;
+}
+
+std::string_view WAL::IoBackendNote() const {
+    std::shared_lock lock(mutex_);
+    return io_backend_note_;
 }
 
 Result<void> WAL::Compact(uint64_t compact_index) {

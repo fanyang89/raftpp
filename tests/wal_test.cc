@@ -432,6 +432,65 @@ TEST_SUITE("wal") {
         CHECK(*last == 2);
     }
 
+    TEST_CASE("wal_storage: io backend selection") {
+        {
+            TempDir temp_dir;
+
+            WALConfig config;
+            config.dir = temp_dir.path();
+            config.sync_on_write = false;
+            config.io_backend = WALIoBackend::Posix;
+
+            auto storage = WALStorage::Open(config);
+            REQUIRE(storage.has_value());
+            CHECK((*storage)->EffectiveIoBackend() == WALIoBackend::Posix);
+            CHECK((*storage)->IoBackendNote().empty());
+        }
+
+        {
+            TempDir temp_dir;
+
+            WALConfig config;
+            config.dir = temp_dir.path();
+            config.sync_on_write = false;
+            config.io_backend = WALIoBackend::Auto;
+
+            auto storage = WALStorage::Open(config);
+            REQUIRE(storage.has_value());
+
+            auto backend = (*storage)->EffectiveIoBackend();
+            CHECK((backend == WALIoBackend::Posix || backend == WALIoBackend::IoUring));
+
+            if (backend == WALIoBackend::Posix) {
+                CHECK(!(*storage)->IoBackendNote().empty());
+            } else {
+                CHECK((*storage)->IoBackendNote().empty());
+            }
+        }
+
+        {
+            TempDir temp_dir;
+
+            WALConfig config;
+            config.dir = temp_dir.path();
+            config.sync_on_write = false;
+            config.io_backend = WALIoBackend::IoUring;
+
+            auto storage = WALStorage::Open(config);
+            if (storage) {
+                CHECK((*storage)->EffectiveIoBackend() == WALIoBackend::IoUring);
+                CHECK((*storage)->IoBackendNote().empty());
+            } else {
+                const auto& err = storage.error();
+                bool matched = err.Is(StorageErrorCode::IoUringNotBuilt) ||
+                    err.Is(StorageErrorCode::IoUringNotLinux) ||
+                    err.Is(StorageErrorCode::IoUringInitFailed) ||
+                    err.Is(StorageErrorCode::IoUringProbeMissingOp);
+                CHECK(matched);
+            }
+        }
+    }
+
     TEST_CASE("wal_storage: set hard state") {
         TempDir temp_dir;
 

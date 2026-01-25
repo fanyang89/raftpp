@@ -41,6 +41,16 @@ enum class StorageErrorCode {
     /// Segment header validation failed
     InvalidSegmentHeader,
 
+    // io_uring errors
+    /// io_uring support not built into this binary
+    IoUringNotBuilt,
+    /// io_uring is not supported on this platform
+    IoUringNotLinux,
+    /// io_uring initialization failed
+    IoUringInitFailed,
+    /// io_uring probe missing required operation
+    IoUringProbeMissingOp,
+
     // WAL errors
     /// WAL entry record is corrupted (CRC mismatch)
     CorruptEntryRecord,
@@ -80,6 +90,14 @@ constexpr std::string_view format_as(StorageErrorCode ec) {
             return "SegmentNotOpen";
         case StorageErrorCode::InvalidSegmentHeader:
             return "InvalidSegmentHeader";
+        case StorageErrorCode::IoUringNotBuilt:
+            return "IoUringNotBuilt";
+        case StorageErrorCode::IoUringNotLinux:
+            return "IoUringNotLinux";
+        case StorageErrorCode::IoUringInitFailed:
+            return "IoUringInitFailed";
+        case StorageErrorCode::IoUringProbeMissingOp:
+            return "IoUringProbeMissingOp";
         case StorageErrorCode::CorruptEntryRecord:
             return "CorruptEntryRecord";
         case StorageErrorCode::EntryParseError:
