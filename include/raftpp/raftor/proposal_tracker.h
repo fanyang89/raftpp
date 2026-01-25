@@ -32,7 +32,11 @@ class ProposalTracker {
     /// Register a proposal with its callback
     /// @param ctx The context string used as proposal identifier
     /// @param callback The callback to invoke when proposal completes
-    void Track(const std::string& ctx, ProposalCallback callback);
+    /// @param timeout Time before failing with timeout (0 to disable)
+    void Track(
+        const std::string& ctx, ProposalCallback callback,
+        std::chrono::milliseconds timeout = std::chrono::milliseconds{0}
+    );
 
     /// Complete a proposal with success
     /// @param ctx The context string identifying the proposal
@@ -48,10 +52,18 @@ class ProposalTracker {
     /// @param error The error to report to all pending proposals
     void FailAll(RaftError error);
 
+    /// Fail all pending reads (e.g., on shutdown or leadership loss)
+    /// @param error The error to report to all pending reads
+    void FailAllReads(RaftError error);
+
     /// Register a read index request
     /// @param ctx The context string used as read identifier
     /// @param callback The callback to invoke when read is safe
-    void TrackRead(const std::string& ctx, ReadIndexCallback callback);
+    /// @param timeout Time before failing with timeout (0 to disable)
+    void TrackRead(
+        const std::string& ctx, ReadIndexCallback callback,
+        std::chrono::milliseconds timeout = std::chrono::milliseconds{0}
+    );
 
     /// Complete a read index request
     /// @param ctx The context string identifying the read
@@ -68,10 +80,23 @@ class ProposalTracker {
     /// Get the number of pending reads
     [[nodiscard]] size_t PendingReadCount() const;
 
+    /// Expire pending proposals/reads that exceeded their timeout
+    void ExpireTimeouts(std::chrono::steady_clock::time_point now);
+
   private:
+    struct PendingProposal {
+        ProposalCallback callback;
+        std::chrono::steady_clock::time_point deadline;
+    };
+
+    struct PendingRead {
+        ReadIndexCallback callback;
+        std::chrono::steady_clock::time_point deadline;
+    };
+
     mutable std::mutex mutex_;
-    absl::flat_hash_map<std::string, ProposalCallback> proposals_;
-    absl::flat_hash_map<std::string, ReadIndexCallback> reads_;
+    absl::flat_hash_map<std::string, PendingProposal> proposals_;
+    absl::flat_hash_map<std::string, PendingRead> reads_;
 };
 
 /// Thread-safe queue for cross-thread proposal submission
@@ -85,9 +110,21 @@ class ProposalQueue {
     /// @param callback The callback to invoke when complete
     void Push(std::string data, ProposalCallback callback);
 
+    /// Submit a proposal with an explicit timeout
+    void Push(std::string data, ProposalCallback callback, std::chrono::milliseconds timeout);
+
     /// Try to pop a proposal (non-blocking)
     /// @return The proposal data and callback, or nullopt if queue is empty
     [[nodiscard]] std::optional<std::pair<std::string, ProposalCallback>> TryPop();
+
+    /// Try to pop a proposal with timeout details (non-blocking)
+    struct ProposalQueueItem {
+        std::string data;
+        ProposalCallback callback;
+        std::optional<std::chrono::milliseconds> timeout;
+    };
+
+    [[nodiscard]] std::optional<ProposalQueueItem> TryPopWithTimeout();
 
     /// Check if the queue is empty
     [[nodiscard]] bool Empty() const;
@@ -97,7 +134,7 @@ class ProposalQueue {
 
   private:
     mutable std::mutex mutex_;
-    std::deque<std::pair<std::string, ProposalCallback>> queue_;
+    std::deque<ProposalQueueItem> queue_;
 };
 
 /// Thread-safe queue for cross-thread read index submission
@@ -106,15 +143,27 @@ class ReadIndexQueue {
     /// Submit a read index request from any thread
     void Push(std::string ctx, ReadIndexCallback callback);
 
+    /// Submit a read index request with an explicit timeout
+    void Push(std::string ctx, ReadIndexCallback callback, std::chrono::milliseconds timeout);
+
     /// Try to pop a read request (non-blocking)
     [[nodiscard]] std::optional<std::pair<std::string, ReadIndexCallback>> TryPop();
+
+    /// Try to pop a read request with timeout details (non-blocking)
+    struct ReadIndexQueueItem {
+        std::string ctx;
+        ReadIndexCallback callback;
+        std::optional<std::chrono::milliseconds> timeout;
+    };
+
+    [[nodiscard]] std::optional<ReadIndexQueueItem> TryPopWithTimeout();
 
     /// Check if the queue is empty
     [[nodiscard]] bool Empty() const;
 
   private:
     mutable std::mutex mutex_;
-    std::deque<std::pair<std::string, ReadIndexCallback>> queue_;
+    std::deque<ReadIndexQueueItem> queue_;
 };
 
 }  // namespace raftpp::raftor

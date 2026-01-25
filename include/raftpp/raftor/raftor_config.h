@@ -66,6 +66,21 @@ struct RaftorConfig {
     /// Network connection timeout (default: 5s)
     std::chrono::milliseconds connect_timeout{5000};
 
+    /// Default timeout for async proposals (0 to disable, default: 5s)
+    std::chrono::milliseconds proposal_timeout{5000};
+
+    /// Default timeout for async read index requests (0 to disable, default: 5s)
+    std::chrono::milliseconds read_index_timeout{5000};
+
+    /// Auto snapshot when applied_index - snapshot_index >= threshold (0 to disable)
+    uint64_t snapshot_entries_threshold = 0;
+
+    /// Auto snapshot when WAL directory size reaches threshold in bytes (0 to disable)
+    uint64_t snapshot_log_size_bytes = 0;
+
+    /// Auto snapshot at fixed time interval (0 to disable)
+    std::chrono::milliseconds snapshot_interval{0};
+
     /// Validate the configuration
     /// @return void on success, or error describing what's invalid
     [[nodiscard]] Result<void> Validate() const;

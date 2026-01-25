@@ -1,12 +1,42 @@
 #include "raftpp/raftor/proposal_tracker.h"
 
+#include <vector>
+
 namespace raftpp::raftor {
 
 // === ProposalTracker ===
 
-void ProposalTracker::Track(const std::string& ctx, ProposalCallback callback) {
+namespace {
+
+std::chrono::steady_clock::time_point DeadlineFromTimeout(std::chrono::milliseconds timeout) {
+    if (timeout.count() <= 0) {
+        return std::chrono::steady_clock::time_point::max();
+    }
+    return std::chrono::steady_clock::now() + timeout;
+}
+
+template <typename Map>
+void FailAllPending(Map& pending, std::mutex& mutex, const RaftError& error) {
+    Map callbacks;
+    {
+        std::lock_guard lock(mutex);
+        callbacks = std::move(pending);
+        pending.clear();
+    }
+    for (auto& [ctx, entry] : callbacks) {
+        if (entry.callback) {
+            entry.callback(std::unexpected(error));
+        }
+    }
+}
+
+}  // namespace
+
+void ProposalTracker::Track(
+    const std::string& ctx, ProposalCallback callback, std::chrono::milliseconds timeout
+) {
     std::lock_guard lock(mutex_);
-    proposals_[ctx] = std::move(callback);
+    proposals_[ctx] = PendingProposal{std::move(callback), DeadlineFromTimeout(timeout)};
 }
 
 void ProposalTracker::Complete(const std::string& ctx, const std::string& response) {
@@ -17,7 +47,7 @@ void ProposalTracker::Complete(const std::string& ctx, const std::string& respon
         if (it == proposals_.end()) {
             return;  // Already completed or not tracked
         }
-        callback = std::move(it->second);
+        callback = std::move(it->second.callback);
         proposals_.erase(it);
     }
     if (callback) {
@@ -33,7 +63,7 @@ void ProposalTracker::Fail(const std::string& ctx, RaftError error) {
         if (it == proposals_.end()) {
             return;  // Already completed or not tracked
         }
-        callback = std::move(it->second);
+        callback = std::move(it->second.callback);
         proposals_.erase(it);
     }
     if (callback) {
@@ -42,23 +72,18 @@ void ProposalTracker::Fail(const std::string& ctx, RaftError error) {
 }
 
 void ProposalTracker::FailAll(RaftError error) {
-    absl::flat_hash_map<std::string, ProposalCallback> callbacks;
-    {
-        std::lock_guard lock(mutex_);
-        callbacks = std::move(proposals_);
-        proposals_.clear();
-    }
-    // Use the actual error for all failures
-    for (auto& [ctx, callback] : callbacks) {
-        if (callback) {
-            callback(std::unexpected(error));
-        }
-    }
+    FailAllPending(proposals_, mutex_, error);
 }
 
-void ProposalTracker::TrackRead(const std::string& ctx, ReadIndexCallback callback) {
+void ProposalTracker::FailAllReads(RaftError error) {
+    FailAllPending(reads_, mutex_, error);
+}
+
+void ProposalTracker::TrackRead(
+    const std::string& ctx, ReadIndexCallback callback, std::chrono::milliseconds timeout
+) {
     std::lock_guard lock(mutex_);
-    reads_[ctx] = std::move(callback);
+    reads_[ctx] = PendingRead{std::move(callback), DeadlineFromTimeout(timeout)};
 }
 
 void ProposalTracker::CompleteRead(const std::string& ctx) {
@@ -69,7 +94,7 @@ void ProposalTracker::CompleteRead(const std::string& ctx) {
         if (it == reads_.end()) {
             return;
         }
-        callback = std::move(it->second);
+        callback = std::move(it->second.callback);
         reads_.erase(it);
     }
     if (callback) {
@@ -85,7 +110,7 @@ void ProposalTracker::FailRead(const std::string& ctx, RaftError error) {
         if (it == reads_.end()) {
             return;
         }
-        callback = std::move(it->second);
+        callback = std::move(it->second.callback);
         reads_.erase(it);
     }
     if (callback) {
@@ -103,14 +128,78 @@ size_t ProposalTracker::PendingReadCount() const {
     return reads_.size();
 }
 
+void ProposalTracker::ExpireTimeouts(std::chrono::steady_clock::time_point now) {
+    std::vector<ProposalCallback> proposal_callbacks;
+    std::vector<ReadIndexCallback> read_callbacks;
+
+    auto collect_expired = [&](auto& pending, auto& callbacks) {
+        absl::erase_if(pending, [&](auto& entry) {
+            if (entry.second.deadline > now) {
+                return false;
+            }
+            callbacks.push_back(std::move(entry.second.callback));
+            return true;
+        });
+    };
+
+    {
+        std::lock_guard lock(mutex_);
+        collect_expired(proposals_, proposal_callbacks);
+        collect_expired(reads_, read_callbacks);
+    }
+
+    if (proposal_callbacks.empty() && read_callbacks.empty()) {
+        return;
+    }
+
+    for (auto& callback : proposal_callbacks) {
+        if (callback) {
+            callback(std::unexpected(RaftError(RpcErrorCode::Timeout)));
+        }
+    }
+
+    for (auto& callback : read_callbacks) {
+        if (callback) {
+            callback(std::unexpected(RaftError(RpcErrorCode::Timeout)));
+        }
+    }
+}
+
 // === ProposalQueue ===
 
 void ProposalQueue::Push(std::string data, ProposalCallback callback) {
     std::lock_guard lock(mutex_);
-    queue_.emplace_back(std::move(data), std::move(callback));
+    queue_.push_back(
+        ProposalQueueItem{
+            .data = std::move(data),
+            .callback = std::move(callback),
+            .timeout = std::nullopt,
+        }
+    );
+}
+
+void ProposalQueue::Push(
+    std::string data, ProposalCallback callback, std::chrono::milliseconds timeout
+) {
+    std::lock_guard lock(mutex_);
+    queue_.push_back(
+        ProposalQueueItem{
+            .data = std::move(data),
+            .callback = std::move(callback),
+            .timeout = timeout,
+        }
+    );
 }
 
 std::optional<std::pair<std::string, ProposalCallback>> ProposalQueue::TryPop() {
+    auto item = TryPopWithTimeout();
+    if (!item) {
+        return std::nullopt;
+    }
+    return std::make_pair(std::move(item->data), std::move(item->callback));
+}
+
+std::optional<ProposalQueue::ProposalQueueItem> ProposalQueue::TryPopWithTimeout() {
     std::lock_guard lock(mutex_);
     if (queue_.empty()) {
         return std::nullopt;
@@ -134,10 +223,37 @@ size_t ProposalQueue::Size() const {
 
 void ReadIndexQueue::Push(std::string ctx, ReadIndexCallback callback) {
     std::lock_guard lock(mutex_);
-    queue_.emplace_back(std::move(ctx), std::move(callback));
+    queue_.push_back(
+        ReadIndexQueueItem{
+            .ctx = std::move(ctx),
+            .callback = std::move(callback),
+            .timeout = std::nullopt,
+        }
+    );
+}
+
+void ReadIndexQueue::Push(
+    std::string ctx, ReadIndexCallback callback, std::chrono::milliseconds timeout
+) {
+    std::lock_guard lock(mutex_);
+    queue_.push_back(
+        ReadIndexQueueItem{
+            .ctx = std::move(ctx),
+            .callback = std::move(callback),
+            .timeout = timeout,
+        }
+    );
 }
 
 std::optional<std::pair<std::string, ReadIndexCallback>> ReadIndexQueue::TryPop() {
+    auto item = TryPopWithTimeout();
+    if (!item) {
+        return std::nullopt;
+    }
+    return std::make_pair(std::move(item->ctx), std::move(item->callback));
+}
+
+std::optional<ReadIndexQueue::ReadIndexQueueItem> ReadIndexQueue::TryPopWithTimeout() {
     std::lock_guard lock(mutex_);
     if (queue_.empty()) {
         return std::nullopt;

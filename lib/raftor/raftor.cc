@@ -15,6 +15,11 @@
 
 namespace raftpp::raftor {
 
+namespace {
+constexpr auto kLogSizeCheckMinInterval = std::chrono::seconds{1};
+constexpr auto kSnapshotRetryMinInterval = std::chrono::seconds{1};
+}  // namespace
+
 // === RaftorConfig implementation ===
 
 Result<void> RaftorConfig::Validate() const {
@@ -93,11 +98,16 @@ class RaftorImpl : public Raftor {
     void EventLoop();
     void ProcessProposalQueue();
     void ProcessReadIndexQueue();
+    void ProcessTimeouts();
     bool ShouldTick();
+    void MaybeAutoSnapshot();
     void OnMessage(Message msg);
     void OnPeerError(uint64_t peer_id, std::string error);
     std::string GenerateProposalContext();
     void RefreshStatus();
+    void InitializeSnapshotState();
+    [[nodiscard]] uint64_t GetWalDirSizeBytes() const;
+    void ProcessRaftWork();
 
     RaftorConfig config_;
     std::unique_ptr<StateMachine> state_machine_;
@@ -122,6 +132,12 @@ class RaftorImpl : public Raftor {
     // Cache status for thread-safe access from non-event-loop threads.
     mutable std::mutex status_mutex_;
     NodeStatus cached_status_{};
+
+    // Auto snapshot tracking
+    uint64_t last_snapshot_attempt_index_ = 0;
+    std::chrono::steady_clock::time_point last_snapshot_attempt_time_{};
+    std::chrono::steady_clock::time_point last_snapshot_time_{};
+    std::chrono::steady_clock::time_point last_log_size_check_{};
 };
 
 RaftorImpl::RaftorImpl(
@@ -174,6 +190,7 @@ Result<void> RaftorImpl::Start() {
 
     running_ = true;
     last_tick_ = std::chrono::steady_clock::now();
+    InitializeSnapshotState();
 
     spdlog::info("Raftor node {} started, listening on {}", config_.node_id, config_.listen_addr);
     return {};
@@ -195,6 +212,7 @@ void RaftorImpl::Stop() {
 
     // Fail all pending proposals
     proposal_tracker_.FailAll(RaftError(RaftErrorCode::ShuttingDown));
+    proposal_tracker_.FailAllReads(RaftError(RaftErrorCode::ShuttingDown));
 
     // Stop transport
     transport_->Stop();
@@ -218,18 +236,7 @@ void RaftorImpl::EventLoop() {
             last_tick_ = std::chrono::steady_clock::now();
         }
 
-        // 3. Process pending proposals from queue
-        ProcessProposalQueue();
-
-        // 4. Process pending read index requests
-        ProcessReadIndexQueue();
-
-        // 5. Process Ready if available
-        if (auto result = ready_processor_->Process(); !result) {
-            spdlog::error("Ready processing failed: {}", result.error().ToString());
-        }
-
-        RefreshStatus();
+        ProcessRaftWork();
     }
 }
 
@@ -241,28 +248,14 @@ void RaftorImpl::Poll(std::chrono::milliseconds timeout) {
         last_tick_ = std::chrono::steady_clock::now();
     }
 
-    ProcessProposalQueue();
-    ProcessReadIndexQueue();
-
-    if (auto result = ready_processor_->Process(); !result) {
-        spdlog::error("Ready processing failed: {}", result.error().ToString());
-    }
-
-    RefreshStatus();
+    ProcessRaftWork();
 }
 
 bool RaftorImpl::Tick() {
     bool ticked = raw_node_->Tick();
     last_tick_ = std::chrono::steady_clock::now();
 
-    ProcessProposalQueue();
-    ProcessReadIndexQueue();
-
-    if (auto result = ready_processor_->Process(); !result) {
-        spdlog::error("Ready processing failed: {}", result.error().ToString());
-    }
-
-    RefreshStatus();
+    ProcessRaftWork();
     return ticked;
 }
 
@@ -271,15 +264,122 @@ bool RaftorImpl::ShouldTick() {
     return (now - last_tick_) >= config_.tick_interval;
 }
 
+void RaftorImpl::InitializeSnapshotState() {
+    last_snapshot_time_ = std::chrono::steady_clock::now();
+    last_snapshot_attempt_time_ = std::chrono::steady_clock::time_point{};
+    last_log_size_check_ = std::chrono::steady_clock::time_point{};
+
+    auto first_index_result = storage_->FirstIndex();
+    if (first_index_result) {
+        const uint64_t first_index = *first_index_result;
+        last_snapshot_attempt_index_ = first_index > 0 ? first_index - 1 : 0;
+        return;
+    }
+
+    spdlog::warn(
+        "Snapshot init failed to read first index: {}", first_index_result.error().ToString()
+    );
+    last_snapshot_attempt_index_ = 0;
+}
+
+uint64_t RaftorImpl::GetWalDirSizeBytes() const {
+    return storage_ ? storage_->LogSizeBytes() : 0;
+}
+
+void RaftorImpl::ProcessRaftWork() {
+    ProcessProposalQueue();
+    ProcessReadIndexQueue();
+
+    if (auto result = ready_processor_->Process(); !result) {
+        spdlog::error("Ready processing failed: {}", result.error().ToString());
+    }
+
+    ProcessTimeouts();
+    MaybeAutoSnapshot();
+    RefreshStatus();
+}
+
+void RaftorImpl::MaybeAutoSnapshot() {
+    if (config_.snapshot_entries_threshold == 0 && config_.snapshot_log_size_bytes == 0 &&
+        config_.snapshot_interval.count() == 0) {
+        return;
+    }
+
+    const uint64_t applied_index = ready_processor_->GetAppliedIndex();
+    if (applied_index == 0) {
+        return;
+    }
+
+    auto first_index_result = storage_->FirstIndex();
+    if (!first_index_result) {
+        spdlog::error(
+            "Auto snapshot skipped: failed to read first index: {}",
+            first_index_result.error().ToString()
+        );
+        return;
+    }
+
+    const uint64_t first_index = *first_index_result;
+    const uint64_t snapshot_index = first_index > 0 ? first_index - 1 : 0;
+    if (applied_index <= snapshot_index) {
+        return;
+    }
+
+    const auto now = std::chrono::steady_clock::now();
+    bool should_snapshot = false;
+    const char* reason = nullptr;
+
+    if (config_.snapshot_entries_threshold > 0 &&
+        applied_index - snapshot_index >= config_.snapshot_entries_threshold) {
+        should_snapshot = true;
+        reason = "entries";
+    } else if (config_.snapshot_interval.count() > 0 &&
+               now - last_snapshot_time_ >= config_.snapshot_interval) {
+        should_snapshot = true;
+        reason = "time";
+    } else if (config_.snapshot_log_size_bytes > 0) {
+        if (now - last_log_size_check_ >= kLogSizeCheckMinInterval) {
+            last_log_size_check_ = now;
+            const uint64_t wal_size = GetWalDirSizeBytes();
+            if (wal_size >= config_.snapshot_log_size_bytes) {
+                should_snapshot = true;
+                reason = "log_size";
+            }
+        }
+    }
+
+    if (!should_snapshot) {
+        return;
+    }
+
+    if (applied_index <= last_snapshot_attempt_index_ &&
+        now - last_snapshot_attempt_time_ < kSnapshotRetryMinInterval) {
+        return;
+    }
+
+    last_snapshot_attempt_index_ = applied_index;
+    last_snapshot_attempt_time_ = now;
+    spdlog::info(
+        "Auto snapshot triggered (reason={}, applied_index={}, snapshot_index={})",
+        reason ? reason : "unknown", applied_index, snapshot_index
+    );
+
+    if (auto result = TakeSnapshot(); !result) {
+        spdlog::error("Auto snapshot failed: {}", result.error().ToString());
+    }
+}
+
 void RaftorImpl::ProcessProposalQueue() {
-    while (auto item = proposal_queue_.TryPop()) {
-        auto& [data, callback] = *item;
+    while (auto item = proposal_queue_.TryPopWithTimeout()) {
+        auto& data = item->data;
+        auto& callback = item->callback;
 
         // Generate a unique context for tracking this proposal
         std::string ctx = GenerateProposalContext();
 
         // Track the proposal
-        proposal_tracker_.Track(ctx, std::move(callback));
+        const auto timeout = item->timeout.value_or(config_.proposal_timeout);
+        proposal_tracker_.Track(ctx, std::move(callback), timeout);
 
         // Submit to Raft
         if (auto result = raw_node_->Propose(ctx, data); !result) {
@@ -289,11 +389,13 @@ void RaftorImpl::ProcessProposalQueue() {
 }
 
 void RaftorImpl::ProcessReadIndexQueue() {
-    while (auto item = read_index_queue_.TryPop()) {
-        auto& [ctx, callback] = *item;
+    while (auto item = read_index_queue_.TryPopWithTimeout()) {
+        auto& ctx = item->ctx;
+        auto& callback = item->callback;
 
         // Track the read
-        proposal_tracker_.TrackRead(ctx, std::move(callback));
+        const auto timeout = item->timeout.value_or(config_.read_index_timeout);
+        proposal_tracker_.TrackRead(ctx, std::move(callback), timeout);
 
         // Submit to Raft
         raw_node_->ReadIndex(ctx);
@@ -303,6 +405,10 @@ void RaftorImpl::ProcessReadIndexQueue() {
 std::string RaftorImpl::GenerateProposalContext() {
     uint64_t counter = proposal_counter_.fetch_add(1);
     return std::to_string(config_.node_id) + ":" + std::to_string(counter);
+}
+
+void RaftorImpl::ProcessTimeouts() {
+    proposal_tracker_.ExpireTimeouts(std::chrono::steady_clock::now());
 }
 
 void RaftorImpl::OnMessage(Message msg) {
@@ -319,18 +425,29 @@ void RaftorImpl::OnPeerError(uint64_t peer_id, std::string error) {
 }
 
 void RaftorImpl::Propose(std::string data, ProposalCallback callback) {
-    proposal_queue_.Push(std::move(data), std::move(callback));
+    proposal_queue_.Push(std::move(data), std::move(callback), config_.proposal_timeout);
 }
 
 Result<std::string> RaftorImpl::ProposeSync(std::string data, std::chrono::milliseconds timeout) {
-    std::promise<Result<std::string>> promise;
-    auto future = promise.get_future();
+    auto promise = std::make_shared<std::promise<Result<std::string>>>();
+    auto future = promise->get_future();
+    auto completed = std::make_shared<std::atomic<bool>>(false);
 
-    Propose(std::move(data), [&promise](Result<std::string> result) {
-        promise.set_value(std::move(result));
-    });
+    proposal_queue_.Push(
+        std::move(data),
+        [promise, completed](Result<std::string> result) {
+            if (completed->exchange(true)) {
+                return;
+            }
+            promise->set_value(std::move(result));
+        },
+        timeout
+    );
 
     if (future.wait_for(timeout) == std::future_status::timeout) {
+        if (completed->exchange(true)) {
+            return future.get();
+        }
         return std::unexpected(RaftError(RpcErrorCode::Timeout));
     }
 
@@ -349,18 +466,29 @@ std::future<Result<std::string>> RaftorImpl::ProposeAsync(std::string data) {
 }
 
 void RaftorImpl::ReadIndex(std::string ctx, ReadIndexCallback callback) {
-    read_index_queue_.Push(std::move(ctx), std::move(callback));
+    read_index_queue_.Push(std::move(ctx), std::move(callback), config_.read_index_timeout);
 }
 
 Result<void> RaftorImpl::ReadIndexSync(std::string ctx, std::chrono::milliseconds timeout) {
-    std::promise<Result<void>> promise;
-    auto future = promise.get_future();
+    auto promise = std::make_shared<std::promise<Result<void>>>();
+    auto future = promise->get_future();
+    auto completed = std::make_shared<std::atomic<bool>>(false);
 
-    ReadIndex(std::move(ctx), [&promise](Result<void> result) {
-        promise.set_value(std::move(result));
-    });
+    read_index_queue_.Push(
+        std::move(ctx),
+        [promise, completed](Result<void> result) {
+            if (completed->exchange(true)) {
+                return;
+            }
+            promise->set_value(std::move(result));
+        },
+        timeout
+    );
 
     if (future.wait_for(timeout) == std::future_status::timeout) {
+        if (completed->exchange(true)) {
+            return future.get();
+        }
         return std::unexpected(RaftError(RpcErrorCode::Timeout));
     }
 
@@ -461,6 +589,8 @@ Result<void> RaftorImpl::TakeSnapshot() {
         return result;
     }
 
+    last_snapshot_time_ = std::chrono::steady_clock::now();
+    last_snapshot_attempt_index_ = applied_index;
     return {};
 }
 

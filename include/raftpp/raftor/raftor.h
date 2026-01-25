@@ -117,7 +117,7 @@ class Raftor {
     /// Stop the Raftor gracefully
     ///
     /// This stops the event loop and closes all connections.
-    /// Pending proposals will be failed with a shutdown error.
+    /// Pending proposals and reads will be failed with a shutdown error.
     virtual void Stop() = 0;
 
     /// Check if the Raftor is running

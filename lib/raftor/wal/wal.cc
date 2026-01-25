@@ -531,6 +531,14 @@ const ConfState& WAL::GetConfState() const {
     return conf_state_;
 }
 
+uint64_t WAL::LogSizeBytes() const {
+    std::shared_lock lock(mutex_);
+    if (!segment_manager_ || !metadata_store_) {
+        return 0;
+    }
+    return segment_manager_->TotalSizeBytes() + metadata_store_->SizeBytes();
+}
+
 Result<void> WAL::Compact(uint64_t compact_index) {
     std::unique_lock lock(mutex_);
 

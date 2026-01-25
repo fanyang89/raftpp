@@ -59,6 +59,9 @@ class WAL {
     // Get the current conf state
     [[nodiscard]] const ConfState& GetConfState() const;
 
+    // Get approximate WAL size in bytes
+    [[nodiscard]] uint64_t LogSizeBytes() const;
+
     // Compact the log by removing entries before compact_index
     [[nodiscard]] Result<void> Compact(uint64_t compact_index);
 
