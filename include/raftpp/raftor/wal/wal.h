@@ -106,6 +106,9 @@ class WAL {
     // Roll to a new segment if needed
     [[nodiscard]] Result<void> MaybeRollSegment();
 
+    [[nodiscard]] Result<Segment*> GetCurrentSegmentForAppend(uint64_t first_index_hint);
+    [[nodiscard]] Result<void> MaybeRollSegmentForAppend(uint64_t first_index, Segment*& segment);
+
     // Internal helpers (no locking, must be called with lock held)
     [[nodiscard]] uint64_t LastIndexUnlocked() const;
     [[nodiscard]] uint64_t FirstIndexUnlocked() const;
@@ -125,6 +128,18 @@ class WAL {
     // Write buffer for batching
     std::vector<uint8_t> write_buffer_;
     size_t write_buffer_used_ = 0;
+
+    struct PendingEntry {
+        uint64_t index;
+        uint64_t term;
+        uint32_t offset_in_buffer;
+        uint32_t record_length;
+    };
+
+    std::vector<PendingEntry> pending_entries_;
+
+    [[nodiscard]] Result<void> FlushWriteBufferIfNeeded();
+    [[nodiscard]] bool ShouldFlushBuffer(Segment* segment) const;
 
     // Thread safety
     mutable std::shared_mutex mutex_;
