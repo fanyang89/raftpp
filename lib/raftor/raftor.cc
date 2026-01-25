@@ -302,11 +302,12 @@ uint64_t RaftorImpl::GetWalDirSizeBytes() const {
 
 void RaftorImpl::ProcessRaftWork() {
     ProcessProposalQueue();
-    ProcessReadIndexQueue();
 
     if (auto result = ready_processor_->Process(); !result) {
         spdlog::error("Ready processing failed: {}", result.error().ToString());
     }
+
+    ProcessReadIndexQueue();
 
     ProcessTimeouts();
     MaybeAutoSnapshot();
@@ -384,15 +385,15 @@ void RaftorImpl::MaybeAutoSnapshot() {
 }
 
 void RaftorImpl::ProcessProposalQueue() {
-    while (auto item = proposal_queue_.TryPopWithTimeout()) {
-        auto& data = item->data;
-        auto& callback = item->callback;
+    while (auto item = proposal_queue_.TryPop()) {
+        auto data = std::move(item->data);
+        auto callback = std::move(item->callback);
+        const auto timeout = item->timeout.value_or(config_.proposal_timeout);
 
         // Generate a unique context for tracking this proposal
         std::string ctx = GenerateProposalContext();
 
         // Track the proposal
-        const auto timeout = item->timeout.value_or(config_.proposal_timeout);
         proposal_tracker_.Track(ctx, std::move(callback), timeout);
 
         // Submit to Raft
@@ -403,12 +404,12 @@ void RaftorImpl::ProcessProposalQueue() {
 }
 
 void RaftorImpl::ProcessReadIndexQueue() {
-    while (auto item = read_index_queue_.TryPopWithTimeout()) {
-        auto& ctx = item->ctx;
-        auto& callback = item->callback;
+    while (auto item = read_index_queue_.TryPop()) {
+        auto ctx = std::move(item->ctx);
+        auto callback = std::move(item->callback);
+        const auto timeout = item->timeout.value_or(config_.read_index_timeout);
 
         // Track the read
-        const auto timeout = item->timeout.value_or(config_.read_index_timeout);
         proposal_tracker_.TrackRead(ctx, std::move(callback), timeout);
 
         // Submit to Raft

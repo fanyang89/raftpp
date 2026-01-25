@@ -978,6 +978,31 @@ TEST_CASE("raftor: single node tests") {
         CHECK(read_callback_called);
         CHECK(read_result.has_value());
     }
+
+    SUBCASE("read index after Campaign does not fail") {
+        SingleNodeRaftorFixture fixture;
+        fixture.SetUp("single_node_read_index_after_campaign");
+        Raftor* raftor = fixture.GetRaftor();
+
+        // Become leader without driving Ready processing yet.
+        auto campaign_result = raftor->Campaign();
+        REQUIRE(campaign_result.has_value());
+
+        std::atomic<bool> read_callback_called{false};
+        Result<void> read_result;
+
+        raftor->ReadIndex("read_ctx_after_campaign", [&](Result<void> result) {
+            read_callback_called = true;
+            read_result = std::move(result);
+        });
+
+        for (int i = 0; i < 50 && !read_callback_called.load(); i++) {
+            raftor->Tick();
+        }
+
+        CHECK(read_callback_called);
+        CHECK(read_result.has_value());
+    }
 }
 
 // Note: This test is disabled because it requires proper WAL initialization

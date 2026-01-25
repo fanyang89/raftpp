@@ -105,6 +105,12 @@ class ProposalTracker {
 /// thread will consume them.
 class ProposalQueue {
   public:
+    struct Item {
+        std::string data;
+        ProposalCallback callback;
+        std::optional<std::chrono::milliseconds> timeout;
+    };
+
     /// Submit a proposal from any thread
     /// @param data The data to propose
     /// @param callback The callback to invoke when complete
@@ -115,16 +121,7 @@ class ProposalQueue {
 
     /// Try to pop a proposal (non-blocking)
     /// @return The proposal data and callback, or nullopt if queue is empty
-    [[nodiscard]] std::optional<std::pair<std::string, ProposalCallback>> TryPop();
-
-    /// Try to pop a proposal with timeout details (non-blocking)
-    struct ProposalQueueItem {
-        std::string data;
-        ProposalCallback callback;
-        std::optional<std::chrono::milliseconds> timeout;
-    };
-
-    [[nodiscard]] std::optional<ProposalQueueItem> TryPopWithTimeout();
+    [[nodiscard]] std::optional<Item> TryPop();
 
     /// Check if the queue is empty
     [[nodiscard]] bool Empty() const;
@@ -134,12 +131,18 @@ class ProposalQueue {
 
   private:
     mutable std::mutex mutex_;
-    std::deque<ProposalQueueItem> queue_;
+    std::deque<Item> queue_;
 };
 
 /// Thread-safe queue for cross-thread read index submission
 class ReadIndexQueue {
   public:
+    struct Item {
+        std::string ctx;
+        ReadIndexCallback callback;
+        std::optional<std::chrono::milliseconds> timeout;
+    };
+
     /// Submit a read index request from any thread
     void Push(std::string ctx, ReadIndexCallback callback);
 
@@ -147,23 +150,14 @@ class ReadIndexQueue {
     void Push(std::string ctx, ReadIndexCallback callback, std::chrono::milliseconds timeout);
 
     /// Try to pop a read request (non-blocking)
-    [[nodiscard]] std::optional<std::pair<std::string, ReadIndexCallback>> TryPop();
-
-    /// Try to pop a read request with timeout details (non-blocking)
-    struct ReadIndexQueueItem {
-        std::string ctx;
-        ReadIndexCallback callback;
-        std::optional<std::chrono::milliseconds> timeout;
-    };
-
-    [[nodiscard]] std::optional<ReadIndexQueueItem> TryPopWithTimeout();
+    [[nodiscard]] std::optional<Item> TryPop();
 
     /// Check if the queue is empty
     [[nodiscard]] bool Empty() const;
 
   private:
     mutable std::mutex mutex_;
-    std::deque<ReadIndexQueueItem> queue_;
+    std::deque<Item> queue_;
 };
 
 }  // namespace raftpp::raftor
