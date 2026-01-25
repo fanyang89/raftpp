@@ -28,9 +28,13 @@ struct TransportConfig {
 };
 
 /// Callback for received messages
+///
+/// Invoked only on the thread that calls Transport::Poll() or Transport::Run().
 using MessageCallback = std::function<void(Message)>;
 
 /// Callback for peer errors
+///
+/// Invoked only on the thread that calls Transport::Poll() or Transport::Run().
 using ErrorCallback = std::function<void(uint64_t peer_id, std::string error)>;
 
 /// Abstract transport interface for Raft message passing
@@ -63,9 +67,15 @@ class Transport {
     virtual void Send(std::span<const Message> messages) = 0;
 
     /// Set callback for received messages
+    ///
+    /// Callbacks must be set before Start() and must not be mutated concurrently
+    /// with Poll() or Run().
     virtual void SetMessageCallback(MessageCallback cb) = 0;
 
     /// Set callback for peer errors
+    ///
+    /// Callbacks must be set before Start() and must not be mutated concurrently
+    /// with Poll() or Run().
     virtual void SetErrorCallback(ErrorCallback cb) = 0;
 
     /// Poll for events with timeout

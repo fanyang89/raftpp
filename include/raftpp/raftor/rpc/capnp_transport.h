@@ -40,7 +40,13 @@ class CapnpTransport : public Transport {
         std::vector<Message> messages;
     };
 
+    struct ErrorEvent {
+        uint64_t peer_id = 0;
+        std::string error;
+    };
+
     void RpcLoop(std::promise<Result<void>> start_promise);
+    void EnqueueError(uint64_t peer_id, std::string error);
 
     TransportConfig config_;
 
@@ -53,6 +59,10 @@ class CapnpTransport : public Transport {
     std::mutex incoming_mutex_;
     std::queue<Message> incoming_queue_;
 
+    std::mutex error_mutex_;
+    std::queue<ErrorEvent> error_queue_;
+
+    std::mutex callback_mutex_;
     MessageCallback on_message_;
     ErrorCallback on_error_;
 
