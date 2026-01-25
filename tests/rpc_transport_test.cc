@@ -1,6 +1,7 @@
 #include <atomic>
 #include <chrono>
 #include <mutex>
+#include <optional>
 #include <thread>
 #include <vector>
 
@@ -388,6 +389,56 @@ TEST_SUITE("rpc::capnp") {
         t2.Stop();
     }
 
+    TEST_CASE("capnp_callbacks_run_on_poll_thread" * doctest::timeout(10)) {
+        auto port1 = PortAllocator::GetNextPort();
+        auto port2 = PortAllocator::GetNextPort();
+
+        TransportConfig cfg1{.listen_addr = fmt::format("127.0.0.1:{}", port1), .node_id = 1};
+        TransportConfig cfg2{.listen_addr = fmt::format("127.0.0.1:{}", port2), .node_id = 2};
+
+        CapnpTransport t1(cfg1);
+        CapnpTransport t2(cfg2);
+
+        std::mutex callback_mutex;
+        std::optional<std::thread::id> callback_thread_id;
+
+        t2.SetMessageCallback([&](Message) {
+            std::lock_guard lock(callback_mutex);
+            callback_thread_id = std::this_thread::get_id();
+        });
+
+        REQUIRE(t1.Start().has_value());
+        REQUIRE(t2.Start().has_value());
+
+        t1.AddPeer(2, fmt::format("127.0.0.1:{}", port2));
+        t2.AddPeer(1, fmt::format("127.0.0.1:{}", port1));
+
+        PollBoth(t1, t2, 500ms);
+
+        auto msg = MakeMessage(1, 2);
+        t1.Send(std::span(&msg, 1));
+
+        auto poll_thread_id = std::this_thread::get_id();
+        bool received = WaitForBoth(
+            t1, t2,
+            [&] {
+                std::lock_guard lock(callback_mutex);
+                return callback_thread_id.has_value();
+            },
+            2s
+        );
+        CHECK(received);
+
+        if (received) {
+            std::lock_guard lock(callback_mutex);
+            CHECK(callback_thread_id.has_value());
+            CHECK(*callback_thread_id == poll_thread_id);
+        }
+
+        t1.Stop();
+        t2.Stop();
+    }
+
     TEST_CASE("capnp_error_callback_invoked" * doctest::timeout(10)) {
         auto port1 = PortAllocator::GetNextPort();
         auto port2 = PortAllocator::GetNextPort();
@@ -423,6 +474,75 @@ TEST_SUITE("rpc::capnp") {
         CHECK(true);
 
         t1.Stop();
+    }
+
+    TEST_CASE("capnp_stop_bounded_with_unreachable_peer" * doctest::timeout(5)) {
+        auto port = PortAllocator::GetNextPort();
+        auto unreachable_port = PortAllocator::GetNextPort();
+
+        TransportConfig config{
+            .listen_addr = fmt::format("127.0.0.1:{}", port),
+            .node_id = 1,
+        };
+
+        CapnpTransport transport(config);
+        REQUIRE(transport.Start().has_value());
+
+        transport.AddPeer(2, fmt::format("127.0.0.1:{}", unreachable_port));
+
+        auto msg = MakeMessage(1, 2);
+        transport.Send(std::span(&msg, 1));
+
+        auto start = std::chrono::steady_clock::now();
+        transport.Stop();
+        auto elapsed = std::chrono::steady_clock::now() - start;
+
+        CHECK(elapsed < 500ms);
+    }
+
+    TEST_CASE("capnp_outgoing_queue_overflow_reports_error" * doctest::timeout(5)) {
+        auto port = PortAllocator::GetNextPort();
+        TransportConfig config{
+            .listen_addr = fmt::format("127.0.0.1:{}", port),
+            .node_id = 1,
+        };
+
+        CapnpTransport transport(config);
+
+        std::mutex callback_mutex;
+        std::optional<std::thread::id> callback_thread_id;
+        std::optional<std::string> callback_error;
+
+        transport.SetErrorCallback([&](uint64_t, std::string error) {
+            std::lock_guard lock(callback_mutex);
+            callback_thread_id = std::this_thread::get_id();
+            callback_error = std::move(error);
+        });
+
+        transport.AddPeer(2, "127.0.0.1:9999");
+
+        for (size_t i = 0; i < 1100; ++i) {
+            auto msg = MakeMessage(1, 2);
+            transport.Send(std::span(&msg, 1));
+        }
+
+        auto poll_thread_id = std::this_thread::get_id();
+        bool received = WaitFor(
+            transport,
+            [&] {
+                std::lock_guard lock(callback_mutex);
+                return callback_error.has_value();
+            },
+            200ms
+        );
+        CHECK(received);
+
+        if (received) {
+            std::lock_guard lock(callback_mutex);
+            CHECK(callback_thread_id.has_value());
+            CHECK(*callback_thread_id == poll_thread_id);
+            CHECK(callback_error->find("outgoing_queue_ overflow") != std::string::npos);
+        }
     }
 
     TEST_CASE("capnp_multiple_peers" * doctest::timeout(10)) {
@@ -471,6 +591,60 @@ TEST_SUITE("rpc::capnp") {
 
         t1.Stop();
         t2.Stop();
+        t3.Stop();
+    }
+
+    TEST_CASE("capnp_peer_address_change_updates_client" * doctest::timeout(10)) {
+        auto port1 = PortAllocator::GetNextPort();
+        auto port2 = PortAllocator::GetNextPort();
+        auto port3 = PortAllocator::GetNextPort();
+
+        TransportConfig cfg1{.listen_addr = fmt::format("127.0.0.1:{}", port1), .node_id = 1};
+        TransportConfig cfg2{.listen_addr = fmt::format("127.0.0.1:{}", port2), .node_id = 2};
+
+        CapnpTransport t1(cfg1);
+        CapnpTransport t2(cfg2);
+
+        MessageCollector collector_old;
+        t2.SetMessageCallback([&](Message m) { collector_old.OnMessage(std::move(m)); });
+
+        REQUIRE(t1.Start().has_value());
+        REQUIRE(t2.Start().has_value());
+
+        t1.AddPeer(2, fmt::format("127.0.0.1:{}", port2));
+        t2.AddPeer(1, fmt::format("127.0.0.1:{}", port1));
+
+        PollBoth(t1, t2, 500ms);
+
+        auto msg = MakeMessage(1, 2);
+        t1.Send(std::span(&msg, 1));
+
+        bool received = WaitForBoth(t1, t2, [&] { return collector_old.Count() >= 1; }, 2s);
+        CHECK(received);
+
+        t2.Stop();
+
+        TransportConfig cfg3{.listen_addr = fmt::format("127.0.0.1:{}", port3), .node_id = 2};
+        CapnpTransport t3(cfg3);
+        MessageCollector collector_new;
+        t3.SetMessageCallback([&](Message m) { collector_new.OnMessage(std::move(m)); });
+
+        REQUIRE(t3.Start().has_value());
+
+        t1.AddPeer(2, fmt::format("127.0.0.1:{}", port3));
+        t3.AddPeer(1, fmt::format("127.0.0.1:{}", port1));
+
+        PollBoth(t1, t3, 500ms);
+
+        auto msg2 = MakeMessage(1, 2);
+        t1.Send(std::span(&msg2, 1));
+
+        bool received_new = WaitForBoth(t1, t3, [&] { return collector_new.Count() >= 1; }, 2s);
+        CHECK(received_new);
+
+        CHECK(collector_old.Count() == 1);
+
+        t1.Stop();
         t3.Stop();
     }
 
