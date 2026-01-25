@@ -294,8 +294,7 @@ Result<void> WAL::Append(std::span<const Entry> entries) {
         }
     }
 
-    // Ensure we have a current segment
-    auto segment_result = segment_manager_->GetCurrentSegment(first_entry_reader.getIndex());
+    auto segment_result = GetCurrentSegmentForAppend(first_entry_reader.getIndex());
     if (!segment_result) {
         return segment_result.error();
     }
@@ -315,19 +314,9 @@ Result<void> WAL::Append(std::span<const Entry> entries) {
 
         auto entry_reader = capnp_util::reader<msg::Entry>(entry);
 
-        // Check if we need to roll segment
-        if (segment->IsFull(config_.segment_size)) {
-            // Flush buffer before rolling
-            auto flush_result = FlushWriteBuffer();
-            if (!flush_result) {
-                return flush_result;
-            }
-
-            auto roll_result = segment_manager_->RollToNewSegment(entry_reader.getIndex());
-            if (!roll_result) {
-                return roll_result.error();
-            }
-            segment = *roll_result;
+        auto roll_result = MaybeRollSegmentForAppend(entry_reader.getIndex(), segment);
+        if (!roll_result) {
+            return roll_result;
         }
 
         // If a single record does not fit into the write buffer, write it directly.
@@ -337,19 +326,11 @@ Result<void> WAL::Append(std::span<const Entry> entries) {
                 return flush_result;
             }
 
-            auto segment_result = segment_manager_->GetCurrentSegment(entry_reader.getIndex());
+            auto segment_result = GetCurrentSegmentForAppend(entry_reader.getIndex());
             if (!segment_result) {
                 return segment_result.error();
             }
             segment = *segment_result;
-
-            if (segment->IsFull(config_.segment_size)) {
-                auto roll_result = segment_manager_->RollToNewSegment(entry_reader.getIndex());
-                if (!roll_result) {
-                    return roll_result.error();
-                }
-                segment = *roll_result;
-            }
 
             uint64_t record_offset = segment->write_offset();
             auto write_result = segment->Append(record);
@@ -408,6 +389,43 @@ Result<void> WAL::Append(std::span<const Entry> entries) {
     return {};
 }
 
+Result<Segment*> WAL::GetCurrentSegmentForAppend(uint64_t first_index_hint) {
+    auto segment_result = segment_manager_->GetCurrentSegment(first_index_hint);
+    if (!segment_result) {
+        return segment_result.error();
+    }
+
+    Segment* segment = *segment_result;
+    auto roll_result = MaybeRollSegmentForAppend(first_index_hint, segment);
+    if (!roll_result) {
+        return roll_result.error();
+    }
+
+    return segment;
+}
+
+Result<void> WAL::MaybeRollSegmentForAppend(uint64_t first_index, Segment*& segment) {
+    if (segment == nullptr) {
+        return RaftError(StorageErrorCode::CurrentSegmentNotFound);
+    }
+
+    if (!segment->IsFull(config_.segment_size)) {
+        return {};
+    }
+
+    auto flush_result = FlushWriteBuffer();
+    if (!flush_result) {
+        return flush_result;
+    }
+
+    auto roll_result = segment_manager_->RollToNewSegment(first_index);
+    if (!roll_result) {
+        return roll_result.error();
+    }
+    segment = *roll_result;
+    return {};
+}
+
 Result<void> WAL::SaveHardState(const HardState& hs) {
     std::unique_lock lock(mutex_);
 
@@ -421,37 +439,21 @@ Result<void> WAL::SaveHardState(const HardState& hs) {
     );
     auto record = builder.Build();
 
-    // If a single record does not fit into the write buffer, write it directly.
-    if (record.size() > write_buffer_.size()) {
-        auto flush_result = FlushWriteBuffer();
-        if (!flush_result) {
-            return flush_result;
-        }
+    // HardState is persisted immediately for clarity and correctness.
+    // Flush any buffered writes first to preserve write order.
+    auto flush_result = FlushWriteBuffer();
+    if (!flush_result) {
+        return flush_result;
+    }
 
-        auto segment_result = segment_manager_->GetCurrentSegment(first_index_);
-        if (!segment_result) {
-            return segment_result.error();
-        }
+    auto segment_result = GetCurrentSegmentForAppend(first_index_);
+    if (!segment_result) {
+        return segment_result.error();
+    }
 
-        auto write_result = (*segment_result)->Append(record);
-        if (!write_result) {
-            return write_result;
-        }
-    } else {
-        if (write_buffer_used_ + record.size() > write_buffer_.size()) {
-            auto flush_result = FlushWriteBuffer();
-            if (!flush_result) {
-                return flush_result;
-            }
-        }
-
-        std::memcpy(write_buffer_.data() + write_buffer_used_, record.data(), record.size());
-        write_buffer_used_ += record.size();
-
-        auto flush_result = FlushWriteBuffer();
-        if (!flush_result) {
-            return flush_result;
-        }
+    auto write_result = (*segment_result)->Append(record);
+    if (!write_result) {
+        return write_result;
     }
 
     // Save to metadata file for durability

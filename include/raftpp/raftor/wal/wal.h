@@ -106,6 +106,9 @@ class WAL {
     // Roll to a new segment if needed
     [[nodiscard]] Result<void> MaybeRollSegment();
 
+    [[nodiscard]] Result<Segment*> GetCurrentSegmentForAppend(uint64_t first_index_hint);
+    [[nodiscard]] Result<void> MaybeRollSegmentForAppend(uint64_t first_index, Segment*& segment);
+
     // Internal helpers (no locking, must be called with lock held)
     [[nodiscard]] uint64_t LastIndexUnlocked() const;
     [[nodiscard]] uint64_t FirstIndexUnlocked() const;
