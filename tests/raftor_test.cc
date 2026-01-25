@@ -358,7 +358,8 @@ TEST_CASE("five_node_cluster_propose") {
 
     std::vector<PeerConfig> peers;
     for (uint64_t i = 1; i <= 5; ++i) {
-        peers.push_back({.id = i, .addr = "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())}
+        peers.push_back(
+            {.id = i, .addr = "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())}
         );
     }
 
@@ -446,8 +447,7 @@ TEST_CASE("five_node_cluster_propose") {
     PollAll(raftors, 1000ms);
 
     auto apply_deadline = std::chrono::steady_clock::now() + 1s;
-    while (state_machines[leader_id - 1]->ApplyCount() <
-               static_cast<size_t>(kNumProposals + 1) &&
+    while (state_machines[leader_id - 1]->ApplyCount() < static_cast<size_t>(kNumProposals + 1) &&
            std::chrono::steady_clock::now() < apply_deadline) {
         PollAll(raftors, 50ms);
     }
@@ -455,7 +455,8 @@ TEST_CASE("five_node_cluster_propose") {
     // Verify the leader has applied all entries
     std::cout << "Checking applied indices..." << std::endl;
     auto leader_status = raftors[leader_id - 1]->GetStatus();
-    std::cout << "Leader (Node " << leader_status.id << "): applied_index=" << leader_status.applied_index
+    std::cout << "Leader (Node " << leader_status.id
+              << "): applied_index=" << leader_status.applied_index
               << ", commit_index=" << leader_status.commit_index << std::endl;
 
     // Leader should have applied the no-op entry + all our proposals
@@ -492,8 +493,8 @@ TEST_CASE("five_node_cluster_propose") {
     // At least a majority (3 out of 5) should have applied the entries
     REQUIRE_MESSAGE(
         caught_up_count >= 3,
-        "At least 3 nodes should have applied {} entries, got {} nodes caught up",
-        kNumProposals, caught_up_count
+        "At least 3 nodes should have applied {} entries, got {} nodes caught up", kNumProposals,
+        caught_up_count
     );
 }
 
