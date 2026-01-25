@@ -1,12 +1,16 @@
 #include "raftpp/raftor/raftor.h"
 
+#include <unistd.h>
+
 #include <atomic>
 #include <chrono>
 #include <filesystem>
 #include <memory>
+#include <system_error>
 #include <thread>
 
 #include <doctest/doctest.h>
+#include <spdlog/spdlog.h>
 
 #include "raftpp/core/capnp_util.h"
 #include "raftpp/core/memory_storage.h"
@@ -58,8 +62,9 @@ class MockStateMachine : public StateMachine {
     void OnLeadershipChange(bool is_leader, uint64_t term, uint64_t leader_id) override {
         std::lock_guard lock(mutex_);
         leadership_changes_.push_back({is_leader, term, leader_id});
-        std::cout << "Leadership change: is_leader=" << is_leader << ", term=" << term
-                  << ", leader_id=" << leader_id << std::endl;
+        SPDLOG_INFO(
+            "Leadership change: is_leader={}, term={}, leader_id={}", is_leader, term, leader_id
+        );
     }
 
     size_t ApplyCount() const {
@@ -97,14 +102,17 @@ Result<TestNode> CreateTestNode(
 ) {
     TestNode node;
 
+    const auto pid = static_cast<uint64_t>(::getpid());
     node.temp_dir = std::filesystem::temp_directory_path() /
-        ("raftpp_test_" + std::to_string(node_id) + "_" + std::to_string(std::time(nullptr)));
+        ("raftpp_test_" + std::to_string(pid) + "_" + std::to_string(node_id));
+    std::error_code ec;
+    std::filesystem::remove_all(node.temp_dir, ec);
     std::filesystem::create_directories(node.temp_dir);
 
     node.config.node_id = node_id;
     node.config.listen_addr = listen_addr;
     node.config.data_dir = node.temp_dir;
-    node.config.election_tick = 3;
+    node.config.election_tick = 10;
     node.config.heartbeat_tick = 1;
     node.config.tick_interval = 10ms;
     node.config.pre_vote = true;
@@ -157,6 +165,48 @@ bool WaitForLeader(
     return HasLeader(raftors);
 }
 
+bool HasStableLeader(const std::vector<std::unique_ptr<Raftor>>& raftors) {
+    uint64_t leader_id = 0;
+    int leader_count = 0;
+
+    for (const auto& r : raftors) {
+        auto status = r->GetStatus();
+        if (status.role == StateRole::Leader) {
+            leader_count++;
+            leader_id = status.id;
+        }
+    }
+
+    if (leader_count != 1 || leader_id == 0) {
+        return false;
+    }
+
+    for (const auto& r : raftors) {
+        auto status = r->GetStatus();
+        if (status.role == StateRole::Candidate || status.role == StateRole::PreCandidate) {
+            return false;
+        }
+        if (status.leader_id != leader_id) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool WaitForStableLeader(
+    std::vector<std::unique_ptr<Raftor>>& raftors, std::chrono::milliseconds timeout,
+    std::chrono::milliseconds step = 25ms
+) {
+    auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (std::chrono::steady_clock::now() < deadline) {
+        PollAll(raftors, step);
+        if (HasStableLeader(raftors)) {
+            return true;
+        }
+    }
+    return HasStableLeader(raftors);
+}
+
 uint64_t GetLeaderId(const std::vector<std::unique_ptr<Raftor>>& raftors) {
     for (const auto& r : raftors) {
         auto status = r->GetStatus();
@@ -172,7 +222,7 @@ uint64_t GetLeaderId(const std::vector<std::unique_ptr<Raftor>>& raftors) {
 TEST_SUITE_BEGIN("raftor_bootstrap");
 
 TEST_CASE("three_node_cluster_bootstrap") {
-    std::cout << "Creating 3-node cluster..." << std::endl;
+    SPDLOG_INFO("Creating 3-node cluster...");
 
     std::vector<PeerConfig> peers = {
         {.id = 1, .addr = "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())},
@@ -180,9 +230,9 @@ TEST_CASE("three_node_cluster_bootstrap") {
         {.id = 3, .addr = "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())},
     };
 
-    std::cout << "Peers configured:" << std::endl;
+    SPDLOG_INFO("Peers configured:");
     for (const auto& peer : peers) {
-        std::cout << "  ID: " << peer.id << ", addr: " << peer.addr << std::endl;
+        SPDLOG_INFO("  ID: {}, addr: {}", peer.id, peer.addr);
     }
 
     std::vector<TestNode> test_nodes;
@@ -190,8 +240,7 @@ TEST_CASE("three_node_cluster_bootstrap") {
     for (auto peer : peers) {
         auto result = CreateTestNode(peer.id, peer.addr, peers);
         if (!result) {
-            std::cout << "Error creating node " << peer.id << ": " << result.error().ToString()
-                      << std::endl;
+            SPDLOG_ERROR("Error creating node {}: {}", peer.id, result.error().ToString());
         }
         REQUIRE(result.has_value());
         test_nodes.push_back(std::move(*result));
@@ -201,32 +250,24 @@ TEST_CASE("three_node_cluster_bootstrap") {
     for (auto& node : test_nodes) {
         auto start_result = node.raftor->Start();
         if (!start_result) {
-            std::cout << "Error starting node: " << start_result.error().ToString() << std::endl;
+            SPDLOG_ERROR("Error starting node: {}", start_result.error().ToString());
         }
         REQUIRE(start_result.has_value());
         raftors.push_back(std::move(node.raftor));
     }
 
-    std::cout << "Polling for 500ms..." << std::endl;
-    PollAll(raftors, 500ms);
+    SPDLOG_INFO("Polling for leader election (up to 2s)...");
+    REQUIRE_MESSAGE(WaitForStableLeader(raftors, 2s), "No leader was elected");
 
     for (size_t i = 0; i < raftors.size(); ++i) {
         auto status = raftors[i]->GetStatus();
-        std::cout << "Node " << status.id << ": role=" << static_cast<int>(status.role)
-                  << ", term=" << status.term << ", leader_id=" << status.leader_id << std::endl;
+        SPDLOG_INFO(
+            "Node {}: role={}, term={}, leader_id={}", status.id, static_cast<int>(status.role),
+            status.term, status.leader_id
+        );
     }
 
-    bool leader_found = false;
-    uint64_t leader_id = 0;
-    for (size_t i = 0; i < raftors.size(); ++i) {
-        auto status = raftors[i]->GetStatus();
-        if (status.role == StateRole::Leader) {
-            leader_found = true;
-            leader_id = status.id;
-            break;
-        }
-    }
-    REQUIRE_MESSAGE(leader_found, "No leader was elected");
+    uint64_t leader_id = GetLeaderId(raftors);
     REQUIRE_MESSAGE(leader_id != 0, "Leader ID should not be zero");
 
     int leader_count = 0;
@@ -279,7 +320,8 @@ TEST_CASE("three_node_proposal_after_bootstrap") {
     for (auto peer : peers) {
         auto result = CreateTestNode(peer.id, peer.addr, peers);
         REQUIRE(result.has_value());
-        result->raftor->Start();
+        auto start_result = result->raftor->Start();
+        REQUIRE(start_result.has_value());
         raftors.push_back(std::move(result->raftor));
     }
 
@@ -328,7 +370,8 @@ TEST_CASE("three_node_leader_failure") {
     for (auto peer : peers) {
         auto result = CreateTestNode(peer.id, peer.addr, peers);
         REQUIRE(result.has_value());
-        result->raftor->Start();
+        auto start_result = result->raftor->Start();
+        REQUIRE(start_result.has_value());
         raftors.push_back(std::move(result->raftor));
     }
 
@@ -346,7 +389,7 @@ TEST_CASE("three_node_leader_failure") {
         }
     }
 
-    REQUIRE(WaitForLeader(remaining_raftors, 2s));
+    REQUIRE(WaitForStableLeader(remaining_raftors, 2s));
     uint64_t second_leader_id = GetLeaderId(remaining_raftors);
 
     REQUIRE_MESSAGE(second_leader_id != first_leader_id, "A new leader should be elected");
@@ -354,7 +397,7 @@ TEST_CASE("three_node_leader_failure") {
 }
 
 TEST_CASE("five_node_cluster_propose") {
-    std::cout << "Creating 5-node cluster..." << std::endl;
+    SPDLOG_INFO("Creating 5-node cluster...");
 
     std::vector<PeerConfig> peers;
     for (uint64_t i = 1; i <= 5; ++i) {
@@ -363,9 +406,9 @@ TEST_CASE("five_node_cluster_propose") {
         );
     }
 
-    std::cout << "Peers configured:" << std::endl;
+    SPDLOG_INFO("Peers configured:");
     for (const auto& peer : peers) {
-        std::cout << "  ID: " << peer.id << ", addr: " << peer.addr << std::endl;
+        SPDLOG_INFO("  ID: {}, addr: {}", peer.id, peer.addr);
     }
 
     std::vector<std::unique_ptr<Raftor>> raftors;
@@ -382,19 +425,21 @@ TEST_CASE("five_node_cluster_propose") {
     }
 
     // Wait for leader election (5 nodes need more time)
-    std::cout << "Polling for leader election (up to 2s)..." << std::endl;
-    REQUIRE_MESSAGE(WaitForLeader(raftors, 2s), "Leader should be elected in 5-node cluster");
+    SPDLOG_INFO("Polling for leader election (up to 2s)...");
+    REQUIRE_MESSAGE(WaitForStableLeader(raftors, 2s), "Leader should be elected in 5-node cluster");
     uint64_t leader_id = GetLeaderId(raftors);
     REQUIRE_NE(leader_id, 0);
     REQUIRE_MESSAGE(leader_id <= state_machines.size(), "Leader ID out of range");
 
-    std::cout << "Leader elected: node " << leader_id << std::endl;
+    SPDLOG_INFO("Leader elected: node {}", leader_id);
 
     // Print cluster status
     for (const auto& r : raftors) {
         auto status = r->GetStatus();
-        std::cout << "Node " << status.id << ": role=" << static_cast<int>(status.role)
-                  << ", term=" << status.term << ", leader_id=" << status.leader_id << std::endl;
+        SPDLOG_INFO(
+            "Node {}: role={}, term={}, leader_id={}", status.id, static_cast<int>(status.role),
+            status.term, status.leader_id
+        );
     }
 
     // Verify exactly one leader
@@ -411,7 +456,7 @@ TEST_CASE("five_node_cluster_propose") {
     std::atomic<int> completed_count{0};
     std::atomic<int> success_count{0};
 
-    std::cout << "Submitting " << kNumProposals << " proposals..." << std::endl;
+    SPDLOG_INFO("Submitting {} proposals...", kNumProposals);
 
     for (int i = 0; i < kNumProposals; ++i) {
         std::string data = "proposal_" + std::to_string(i);
@@ -419,10 +464,9 @@ TEST_CASE("five_node_cluster_propose") {
             completed_count++;
             if (result.has_value()) {
                 success_count++;
-                std::cout << "Proposal " << i << " succeeded: " << *result << std::endl;
+                SPDLOG_INFO("Proposal {} succeeded: {}", i, *result);
             } else {
-                std::cout << "Proposal " << i << " failed: " << result.error().ToString()
-                          << std::endl;
+                SPDLOG_WARN("Proposal {} failed: {}", i, result.error().ToString());
             }
         });
     }
@@ -436,8 +480,9 @@ TEST_CASE("five_node_cluster_propose") {
         std::this_thread::sleep_for(1ms);
     }
 
-    std::cout << "Completed: " << completed_count << "/" << kNumProposals
-              << ", Success: " << success_count << std::endl;
+    SPDLOG_INFO(
+        "Completed: {}/{}, Success: {}", completed_count.load(), kNumProposals, success_count.load()
+    );
 
     REQUIRE_MESSAGE(completed_count == kNumProposals, "All proposals should complete");
     REQUIRE_MESSAGE(success_count == kNumProposals, "All proposals should succeed");
@@ -453,11 +498,12 @@ TEST_CASE("five_node_cluster_propose") {
     }
 
     // Verify the leader has applied all entries
-    std::cout << "Checking applied indices..." << std::endl;
+    SPDLOG_INFO("Checking applied indices...");
     auto leader_status = raftors[leader_id - 1]->GetStatus();
-    std::cout << "Leader (Node " << leader_status.id
-              << "): applied_index=" << leader_status.applied_index
-              << ", commit_index=" << leader_status.commit_index << std::endl;
+    SPDLOG_INFO(
+        "Leader (Node {}): applied_index={}, commit_index={}", leader_status.id,
+        leader_status.applied_index, leader_status.commit_index
+    );
 
     // Leader should have applied the no-op entry + all our proposals
     REQUIRE_MESSAGE(
@@ -483,8 +529,10 @@ TEST_CASE("five_node_cluster_propose") {
     int caught_up_count = 0;
     for (const auto& r : raftors) {
         auto status = r->GetStatus();
-        std::cout << "Node " << status.id << ": applied_index=" << status.applied_index
-                  << ", commit_index=" << status.commit_index << std::endl;
+        SPDLOG_INFO(
+            "Node {}: applied_index={}, commit_index={}", status.id, status.applied_index,
+            status.commit_index
+        );
         if (status.applied_index >= static_cast<uint64_t>(kNumProposals)) {
             caught_up_count++;
         }
