@@ -86,7 +86,6 @@ cmake --preset=dev -DRAFTPP_SANITIZE=address
 9. **RPC Transport** (`raftor/rpc/`) - Network layer with pluggable transports:
    - `Transport` - Abstract interface for message passing
    - `CapnpTransport` - Cap'n Proto RPC implementation
-   - `RpclibTransport` - rpclib-based RPC implementation
    - `Codec` - Message encoding/decoding
    - `PeerManager` - Peer connection management
 
