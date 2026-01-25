@@ -110,7 +110,9 @@ class IoUringEngine {
             return RaftError(StorageErrorCode::IoUringInitFailed);
         }
 
-        auto engine = std::shared_ptr<IoUringEngine>(new IoUringEngine());
+        struct EnableMakeShared final : public IoUringEngine {};
+
+        auto engine = std::make_shared<EnableMakeShared>();
         const int rc = io_uring_queue_init(queue_depth, &engine->ring_, 0);
         if (rc < 0) {
             return RaftError(StorageErrorCode::IoUringInitFailed);
@@ -167,11 +169,15 @@ class IoUringEngine {
         return SubmitAndWaitLocked("fsync", std::nullopt);
     }
 
-  private:
+  protected:
     IoUringEngine() = default;
 
+  private:
     Result<void> SubmitAndWaitLocked(const char* op, std::optional<size_t> expected) {
-        const int submit_rc = io_uring_submit(&ring_);
+        int submit_rc = 0;
+        do {
+            submit_rc = io_uring_submit(&ring_);
+        } while (submit_rc == -EINTR);
         if (submit_rc < 0) {
             return RaftError(
                 StorageErrorOther{fmt::format("io_uring_submit failed: {}", strerror(-submit_rc))}
@@ -179,7 +185,10 @@ class IoUringEngine {
         }
 
         io_uring_cqe* cqe = nullptr;
-        const int wait_rc = io_uring_wait_cqe(&ring_, &cqe);
+        int wait_rc = 0;
+        do {
+            wait_rc = io_uring_wait_cqe(&ring_, &cqe);
+        } while (wait_rc == -EINTR);
         if (wait_rc < 0) {
             return RaftError(
                 StorageErrorOther{fmt::format("io_uring_wait_cqe failed: {}", strerror(-wait_rc))}
