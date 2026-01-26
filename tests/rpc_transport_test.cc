@@ -222,27 +222,6 @@ TEST_SUITE("rpc::capnp") {
         CHECK(!result.has_value());
     }
 
-    // Skip: EzRpcServer may use SO_REUSEPORT, allowing multiple binds to same port
-    TEST_CASE("capnp_start_port_already_in_use" * doctest::timeout(5) * doctest::skip()) {
-        auto port = PortAllocator::GetNextPort();
-        TransportConfig config{
-            .listen_addr = fmt::format("127.0.0.1:{}", port),
-            .node_id = 1,
-        };
-
-        CapnpTransport t1(config);
-        CapnpTransport t2(config);
-
-        auto r1 = t1.Start();
-        REQUIRE(r1.has_value());
-
-        // Second transport on same port should fail
-        auto r2 = t2.Start();
-        CHECK(!r2.has_value());
-
-        t1.Stop();
-    }
-
     TEST_CASE("capnp_add_remove_peer" * doctest::timeout(5)) {
         auto port = PortAllocator::GetNextPort();
         TransportConfig config{
