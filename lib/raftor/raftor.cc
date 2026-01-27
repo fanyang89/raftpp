@@ -11,10 +11,17 @@
 #include "raftpp/logging.h"
 #include "raftpp/raftor/rpc/capnp_transport.h"
 #include "raftpp/raftor/telemetry.h"
+#if defined(RAFTPP_WITH_RDMA) && RAFTPP_WITH_RDMA
+#include "raftpp/raftor/rpc/rdma_transport.h"
+#endif
 #include "raftpp/raftor/wal/wal_storage.h"
 #include "ready_processor.h"
 
 namespace raftpp::raftor {
+
+#ifndef RAFTPP_WITH_RDMA
+#define RAFTPP_WITH_RDMA 0
+#endif
 
 namespace {
 constexpr auto kLogSizeCheckMinInterval = std::chrono::seconds{1};
@@ -35,6 +42,18 @@ Result<void> RaftorConfig::Validate() const {
     }
     if (election_tick <= heartbeat_tick) {
         return std::unexpected(RaftError(ConfigErrorCode::ElectionTickTooSmall));
+    }
+    if (transport_kind == TransportKind::Rdma) {
+        if (rdma.recv_buffer_count == 0 || rdma.send_buffer_count == 0 || rdma.buffer_size == 0 ||
+            rdma.cq_depth == 0 || rdma.qp_depth == 0) {
+            return std::unexpected(RaftError(ConfigErrorCode::RdmaConfigInvalid));
+        }
+        if (rdma.recv_buffer_count > rdma.qp_depth || rdma.send_buffer_count > rdma.qp_depth) {
+            return std::unexpected(RaftError(ConfigErrorCode::RdmaConfigInvalid));
+        }
+        if (rdma.buffer_size < max_size_per_message) {
+            return std::unexpected(RaftError(ConfigErrorCode::RdmaConfigInvalid));
+        }
     }
     return {};
 }
@@ -841,13 +860,26 @@ Result<std::unique_ptr<Raftor>> Raftor::Create(
         RAFTPP_LOG_INFO("WAL already initialized, ignoring initial_peers");
     }
 
-    // Create TCP transport
+    // Create RPC transport
     rpc::TransportConfig transport_config;
     transport_config.listen_addr = config.listen_addr;
     transport_config.node_id = config.node_id;
     transport_config.connect_timeout = config.connect_timeout;
+    transport_config.max_message_size = config.max_size_per_message;
 
-    auto transport = std::make_unique<rpc::CapnpTransport>(transport_config);
+    std::unique_ptr<rpc::Transport> transport;
+    switch (config.transport_kind) {
+        case TransportKind::Capnp:
+            transport = std::make_unique<rpc::CapnpTransport>(transport_config);
+            break;
+        case TransportKind::Rdma:
+#if RAFTPP_WITH_RDMA
+            transport = std::make_unique<rpc::RdmaTransport>(transport_config, config.rdma);
+#else
+            return std::unexpected(RaftError(ConfigErrorCode::RdmaNotEnabled));
+#endif
+            break;
+    }
 
     return Create(config, std::move(state_machine), std::move(storage), std::move(transport));
 }

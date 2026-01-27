@@ -252,6 +252,10 @@ enum class ConfigErrorCode {
     DataDirectoryEmpty,
     /// Node ID must be included in initial_peers list
     NodeIdNotInInitialPeers,
+    /// RDMA configuration is invalid
+    RdmaConfigInvalid,
+    /// RDMA transport is not enabled at build time
+    RdmaNotEnabled,
 };
 
 constexpr std::string_view format_as(ConfigErrorCode ec) {
@@ -272,6 +276,10 @@ constexpr std::string_view format_as(ConfigErrorCode ec) {
             return "DataDirectoryEmpty";
         case ConfigErrorCode::NodeIdNotInInitialPeers:
             return "NodeIdNotInInitialPeers";
+        case ConfigErrorCode::RdmaConfigInvalid:
+            return "RdmaConfigInvalid";
+        case ConfigErrorCode::RdmaNotEnabled:
+            return "RdmaNotEnabled";
     }
     return "Unknown";
 }

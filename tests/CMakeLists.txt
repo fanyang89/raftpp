@@ -18,6 +18,7 @@ add_executable(
   wal_test.cc
   rpc_test.cc
   rpc_transport_test.cc
+  rdma_transport_test.cc
   raftor_test.cc)
 
 target_link_libraries(raftpp-tests PRIVATE raftpp-test-harness)

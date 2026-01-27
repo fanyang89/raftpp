@@ -56,6 +56,22 @@ tasks:
       - gh pr comment --body "@codex review"
       - gh pr comment --body "@gemini-code-assist review"
 
+  rdma-test:
+    desc: Run RDMA transport tests (set RDMA_ADDR1/RDMA_ADDR2)
+    deps:
+      - build
+    preconditions:
+      - sh: test -n "{{.RDMA_ADDR1}}"
+        msg: "Set RDMA_ADDR1, e.g. task rdma-test RDMA_ADDR1=10.0.0.1:19100 RDMA_ADDR2=10.0.0.2:19101"
+      - sh: test -n "{{.RDMA_ADDR2}}"
+        msg: "Set RDMA_ADDR2, e.g. task rdma-test RDMA_ADDR1=10.0.0.1:19100 RDMA_ADDR2=10.0.0.2:19101"
+    env:
+      RAFTPP_RDMA_TEST: "1"
+      RAFTPP_RDMA_ADDR1: "{{.RDMA_ADDR1}}"
+      RAFTPP_RDMA_ADDR2: "{{.RDMA_ADDR2}}"
+    cmds:
+      - ./build/tests/raftpp-tests "rpc::rdma*"
+
   clean:
     desc: Clear the default build directory
     cmds:

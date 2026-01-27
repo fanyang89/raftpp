@@ -9,6 +9,33 @@ task build
 task test
 ```
 
+## RDMA transport
+
+Enable the rdma-core transport at build time:
+
+```bash
+cmake -DRAFTPP_WITH_RDMA=ON ...
+```
+
+Requires rdma-core user-space libraries (`libibverbs`, `librdmacm`).
+
+Select it at runtime via `RaftorConfig`:
+
+```cpp
+raftpp::raftor::RaftorConfig config;
+config.transport_kind = raftpp::raftor::TransportKind::Rdma;
+config.rdma.buffer_size = 1024 * 1024;
+```
+
+RDMA transport tests are opt-in:
+
+```bash
+RAFTPP_RDMA_TEST=1 \
+RAFTPP_RDMA_ADDR1=10.0.0.1:19100 \
+RAFTPP_RDMA_ADDR2=10.0.0.2:19101 \
+task test
+```
+
 ## Raftor (high-level API)
 
 `Raftor` is the ready-to-use orchestration layer on top of the core Raft state machine. It is designed to be driven by an external event loop.
