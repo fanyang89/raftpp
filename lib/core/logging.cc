@@ -105,19 +105,17 @@ std::string AttributeToString(const opentelemetry::common::AttributeValue& value
             } else if constexpr (std::is_arithmetic_v<ValueType>) {
                 return fmt::format("{}", v);
             } else if constexpr (std::is_same_v<ValueType, SpanBool>) {
-                return format_span(
-                    v, [](std::string& out, bool item) { out.append(item ? "true" : "false"); }
-                );
-            } else if constexpr (
-                std::is_same_v<ValueType, SpanInt32> ||
-                std::is_same_v<ValueType, SpanInt64> ||
-                std::is_same_v<ValueType, SpanUInt32> ||
-                std::is_same_v<ValueType, SpanDouble> ||
-                std::is_same_v<ValueType, SpanUInt64>) {
-                return format_span(
-                    v,
-                    [](std::string& out, const auto& item) { out.append(fmt::format("{}", item)); }
-                );
+                return format_span(v, [](std::string& out, bool item) {
+                    out.append(item ? "true" : "false");
+                });
+            } else if constexpr (std::is_same_v<ValueType, SpanInt32> ||
+                                 std::is_same_v<ValueType, SpanInt64> ||
+                                 std::is_same_v<ValueType, SpanUInt32> ||
+                                 std::is_same_v<ValueType, SpanDouble> ||
+                                 std::is_same_v<ValueType, SpanUInt64>) {
+                return format_span(v, [](std::string& out, const auto& item) {
+                    out.append(fmt::format("{}", item));
+                });
             } else if constexpr (std::is_same_v<ValueType, SpanStringView>) {
                 return format_span(v, [](std::string& out, opentelemetry::nostd::string_view item) {
                     out.append("\"");
@@ -172,8 +170,7 @@ class SpdlogLogRecord final : public opentelemetry::logs::LogRecord {
         AddAttribute("otel.time_unix_nano", fmt::format("{}", nanos));
     }
 
-    void
-    SetObservedTimestamp(opentelemetry::common::SystemTimestamp timestamp) noexcept override {
+    void SetObservedTimestamp(opentelemetry::common::SystemTimestamp timestamp) noexcept override {
         const auto nanos = timestamp.time_since_epoch().count();
         if (nanos == 0) {
             return;
