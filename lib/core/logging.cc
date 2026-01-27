@@ -240,13 +240,15 @@ bool ShouldLog(opentelemetry::logs::Severity severity) {
 }
 
 opentelemetry::nostd::shared_ptr<opentelemetry::logs::Logger> GetLogger() {
-    static std::once_flag once;
-    static opentelemetry::nostd::shared_ptr<opentelemetry::logs::Logger> logger;
-    std::call_once(once, [] {
-        EnsureProviderInstalled();
-        auto provider = opentelemetry::logs::Provider::GetLoggerProvider();
+    EnsureProviderInstalled();
+    auto provider = opentelemetry::logs::Provider::GetLoggerProvider();
+    thread_local opentelemetry::nostd::shared_ptr<opentelemetry::logs::LoggerProvider>
+        cached_provider;
+    thread_local opentelemetry::nostd::shared_ptr<opentelemetry::logs::Logger> logger;
+    if (!logger || cached_provider.get() != provider.get()) {
+        cached_provider = provider;
         logger = provider->GetLogger("raftpp", "raftpp", "0.1.0");
-    });
+    }
     return logger;
 }
 
