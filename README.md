@@ -24,7 +24,8 @@ Select it at runtime via `RaftorConfig`:
 ```cpp
 raftpp::raftor::RaftorConfig config;
 config.transport_kind = raftpp::raftor::TransportKind::Rdma;
-config.rdma.buffer_size = 1024 * 1024;
+config.rdma.buffer_size = 1024 * 1024 + raftpp::raftor::rpc::Codec::MessageOverhead()
+    + raftpp::raftor::rpc::Codec::FrameOverhead();
 ```
 
 RDMA transport tests are opt-in:

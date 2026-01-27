@@ -1262,17 +1262,31 @@ void RdmaTransport::Impl::HandleRecv(RecvBuffer& buffer, size_t len) {
     }
 
     if (magic == Codec::kMagic) {
+        auto* conn = buffer.conn;
+        if (!conn || !conn->handshake_done) {
+            EnqueueError(conn ? conn->peer_id : 0, "message received before handshake");
+            if (conn) {
+                QueueDisconnect(*conn);
+            }
+            return;
+        }
         auto result = Codec::Decode(payload, config_.max_message_size);
         if (!result) {
-            EnqueueError(buffer.conn ? buffer.conn->peer_id : 0, "message decode failed");
+            EnqueueError(conn ? conn->peer_id : 0, "message decode failed");
             return;
         }
 
         if (result->bytes_consumed != len) {
-            EnqueueError(buffer.conn ? buffer.conn->peer_id : 0, "message size mismatch");
+            EnqueueError(conn ? conn->peer_id : 0, "message size mismatch");
             return;
         }
 
+        auto msg_reader = capnp_util::reader<msg::Message>(result->message);
+        if (msg_reader.getFrom() != conn->peer_id) {
+            EnqueueError(conn->peer_id, "message from mismatch");
+            QueueDisconnect(*conn);
+            return;
+        }
         EnqueueMessage(std::move(result->message));
         return;
     }
