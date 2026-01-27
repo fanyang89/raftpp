@@ -5,13 +5,12 @@
 #include <type_traits>
 #include <utility>
 
-#include <spdlog/cfg/env.h>
-#include <spdlog/spdlog.h>
-
 #include <opentelemetry/common/attribute_value.h>
 #include <opentelemetry/logs/logger.h>
 #include <opentelemetry/logs/noop.h>
 #include <opentelemetry/nostd/variant.h>
+#include <spdlog/cfg/env.h>
+#include <spdlog/spdlog.h>
 
 namespace raftpp::logging {
 namespace {
