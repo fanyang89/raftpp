@@ -445,9 +445,7 @@ void RaftorImpl::ProcessProposalQueue() {
         if (auto result = raw_node_->Propose(ctx, data); !result) {
             proposal_tracker_.Fail(ctx, result.error());
             telemetry::RecordErrorIf(span.span(), result);
-            RAFTPP_LOG_ERROR(
-                "Proposal {} failed: {}", ctx, result.error().ToString()
-            );
+            RAFTPP_LOG_ERROR("Proposal {} failed: {}", ctx, result.error().ToString());
         }
     }
 }
@@ -631,9 +629,7 @@ Result<void> RaftorImpl::AddNode(uint64_t id, const std::string& addr) {
     std::string ctx = GenerateProposalContext();
     if (auto result = raw_node_->ProposeConfChange(ctx, cc); !result) {
         telemetry::RecordErrorIf(span.span(), result);
-        RAFTPP_LOG_ERROR(
-            "Add node {} failed: {}", id, result.error().ToString()
-        );
+        RAFTPP_LOG_ERROR("Add node {} failed: {}", id, result.error().ToString());
         return result.error();
     }
 

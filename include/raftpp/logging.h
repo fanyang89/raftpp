@@ -119,10 +119,10 @@ inline void LogWithLocation(
                 ::opentelemetry::logs::Severity::kError, __FILE__, __LINE__, __VA_ARGS__ \
             );                                                                           \
     } while (0)
-#define RAFTPP_LOG_CRITICAL(...)                                                          \
-    do {                                                                                  \
-        if (::raftpp::logging::ShouldLog(::opentelemetry::logs::Severity::kFatal))        \
-            ::raftpp::logging::LogWithLocation(                                           \
-                ::opentelemetry::logs::Severity::kFatal, __FILE__, __LINE__, __VA_ARGS__  \
-            );                                                                            \
+#define RAFTPP_LOG_CRITICAL(...)                                                         \
+    do {                                                                                 \
+        if (::raftpp::logging::ShouldLog(::opentelemetry::logs::Severity::kFatal))       \
+            ::raftpp::logging::LogWithLocation(                                          \
+                ::opentelemetry::logs::Severity::kFatal, __FILE__, __LINE__, __VA_ARGS__ \
+            );                                                                           \
     } while (0)
