@@ -1,5 +1,7 @@
 #include "raftpp/logging.h"
 
+#include <array>
+#include <chrono>
 #include <memory>
 #include <mutex>
 #include <type_traits>
@@ -10,6 +12,9 @@
 #include <opentelemetry/logs/logger.h>
 #include <opentelemetry/logs/noop.h>
 #include <opentelemetry/nostd/variant.h>
+#include <opentelemetry/trace/span_id.h>
+#include <opentelemetry/trace/trace_flags.h>
+#include <opentelemetry/trace/trace_id.h>
 #include <spdlog/cfg/env.h>
 #include <spdlog/spdlog.h>
 
@@ -131,12 +136,50 @@ std::string AttributeToString(const opentelemetry::common::AttributeValue& value
     );
 }
 
+std::string TraceIdToHex(const opentelemetry::trace::TraceId& trace_id) {
+    std::array<char, opentelemetry::trace::TraceId::kSize * 2> buffer{};
+    trace_id.ToLowerBase16(
+        opentelemetry::nostd::span<char, opentelemetry::trace::TraceId::kSize * 2>(
+            buffer.data(), buffer.size()
+        )
+    );
+    return std::string(buffer.data(), buffer.size());
+}
+
+std::string SpanIdToHex(const opentelemetry::trace::SpanId& span_id) {
+    std::array<char, opentelemetry::trace::SpanId::kSize * 2> buffer{};
+    span_id.ToLowerBase16(
+        opentelemetry::nostd::span<char, opentelemetry::trace::SpanId::kSize * 2>(
+            buffer.data(), buffer.size()
+        )
+    );
+    return std::string(buffer.data(), buffer.size());
+}
+
+std::string TraceFlagsToHex(const opentelemetry::trace::TraceFlags& flags) {
+    std::array<char, 2> buffer{};
+    flags.ToLowerBase16(opentelemetry::nostd::span<char, 2>(buffer.data(), buffer.size()));
+    return std::string(buffer.data(), buffer.size());
+}
+
 class SpdlogLogRecord final : public opentelemetry::logs::LogRecord {
   public:
-    void SetTimestamp(opentelemetry::common::SystemTimestamp /*timestamp*/) noexcept override {}
+    void SetTimestamp(opentelemetry::common::SystemTimestamp timestamp) noexcept override {
+        const auto nanos = timestamp.time_since_epoch().count();
+        if (nanos == 0) {
+            return;
+        }
+        AddAttribute("otel.time_unix_nano", fmt::format("{}", nanos));
+    }
 
     void
-    SetObservedTimestamp(opentelemetry::common::SystemTimestamp /*timestamp*/) noexcept override {}
+    SetObservedTimestamp(opentelemetry::common::SystemTimestamp timestamp) noexcept override {
+        const auto nanos = timestamp.time_since_epoch().count();
+        if (nanos == 0) {
+            return;
+        }
+        AddAttribute("otel.observed_time_unix_nano", fmt::format("{}", nanos));
+    }
 
     void SetSeverity(opentelemetry::logs::Severity severity) noexcept override {
         severity_ = severity;
@@ -149,16 +192,36 @@ class SpdlogLogRecord final : public opentelemetry::logs::LogRecord {
     void SetAttribute(
         opentelemetry::nostd::string_view key, const opentelemetry::common::AttributeValue& value
     ) noexcept override {
-        attributes_.emplace_back(std::string(key.data(), key.size()), AttributeToString(value));
+        AddAttribute(std::string(key.data(), key.size()), AttributeToString(value));
     }
 
-    void SetEventId(int64_t /*id*/, opentelemetry::nostd::string_view /*name*/) noexcept override {}
+    void SetEventId(int64_t id, opentelemetry::nostd::string_view name) noexcept override {
+        AddAttribute("otel.event_id", fmt::format("{}", id));
+        if (!name.empty()) {
+            AddAttribute("otel.event_name", std::string(name.data(), name.size()));
+        }
+    }
 
-    void SetTraceId(const opentelemetry::trace::TraceId& /*trace_id*/) noexcept override {}
+    void SetTraceId(const opentelemetry::trace::TraceId& trace_id) noexcept override {
+        if (!trace_id.IsValid()) {
+            return;
+        }
+        AddAttribute("otel.trace_id", TraceIdToHex(trace_id));
+    }
 
-    void SetSpanId(const opentelemetry::trace::SpanId& /*span_id*/) noexcept override {}
+    void SetSpanId(const opentelemetry::trace::SpanId& span_id) noexcept override {
+        if (!span_id.IsValid()) {
+            return;
+        }
+        AddAttribute("otel.span_id", SpanIdToHex(span_id));
+    }
 
-    void SetTraceFlags(const opentelemetry::trace::TraceFlags& /*trace_flags*/) noexcept override {}
+    void SetTraceFlags(const opentelemetry::trace::TraceFlags& trace_flags) noexcept override {
+        if (trace_flags.flags() == 0) {
+            return;
+        }
+        AddAttribute("otel.trace_flags", TraceFlagsToHex(trace_flags));
+    }
 
     [[nodiscard]] opentelemetry::logs::Severity severity() const { return severity_; }
 
@@ -169,6 +232,10 @@ class SpdlogLogRecord final : public opentelemetry::logs::LogRecord {
     }
 
   private:
+    void AddAttribute(std::string key, std::string value) {
+        attributes_.emplace_back(std::move(key), std::move(value));
+    }
+
     opentelemetry::logs::Severity severity_ = opentelemetry::logs::Severity::kInfo;
     std::string body_;
     std::vector<std::pair<std::string, std::string>> attributes_;
