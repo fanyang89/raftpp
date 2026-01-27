@@ -57,9 +57,40 @@ spdlog::level::level_enum ToSpdlogLevel(Severity severity) {
 }
 
 std::string AttributeToString(const opentelemetry::common::AttributeValue& value) {
+    constexpr size_t kMaxAttributeArrayItems = 16;
+    auto format_span = [](auto span, auto append_value) {
+        std::string out = "[";
+        size_t count = 0;
+        for (const auto& item : span) {
+            if (count >= kMaxAttributeArrayItems) {
+                if (count > 0) {
+                    out.append(",");
+                }
+                out.append("...");
+                break;
+            }
+            if (count > 0) {
+                out.append(",");
+            }
+            append_value(out, item);
+            ++count;
+        }
+        out.append("]");
+        return out;
+    };
     return opentelemetry::nostd::visit(
-        [](auto&& v) -> std::string {
+        [format_span](auto&& v) -> std::string {
             using ValueType = std::decay_t<decltype(v)>;
+            using SpanBool = opentelemetry::nostd::span<const bool>;
+            using SpanInt32 = opentelemetry::nostd::span<const int32_t>;
+            using SpanInt64 = opentelemetry::nostd::span<const int64_t>;
+            using SpanUInt32 = opentelemetry::nostd::span<const uint32_t>;
+            using SpanDouble = opentelemetry::nostd::span<const double>;
+            using SpanStringView =
+                opentelemetry::nostd::span<const opentelemetry::nostd::string_view>;
+            using SpanUInt64 = opentelemetry::nostd::span<const uint64_t>;
+            using SpanUInt8 = opentelemetry::nostd::span<const uint8_t>;
+
             if constexpr (std::is_same_v<ValueType, const char*>) {
                 return v ? std::string(v) : std::string();
             } else if constexpr (std::is_same_v<ValueType, opentelemetry::nostd::string_view>) {
@@ -68,6 +99,30 @@ std::string AttributeToString(const opentelemetry::common::AttributeValue& value
                 return v ? "true" : "false";
             } else if constexpr (std::is_arithmetic_v<ValueType>) {
                 return fmt::format("{}", v);
+            } else if constexpr (std::is_same_v<ValueType, SpanBool>) {
+                return format_span(
+                    v, [](std::string& out, bool item) { out.append(item ? "true" : "false"); }
+                );
+            } else if constexpr (
+                std::is_same_v<ValueType, SpanInt32> ||
+                std::is_same_v<ValueType, SpanInt64> ||
+                std::is_same_v<ValueType, SpanUInt32> ||
+                std::is_same_v<ValueType, SpanDouble> ||
+                std::is_same_v<ValueType, SpanUInt64>) {
+                return format_span(
+                    v,
+                    [](std::string& out, const auto& item) { out.append(fmt::format("{}", item)); }
+                );
+            } else if constexpr (std::is_same_v<ValueType, SpanStringView>) {
+                return format_span(v, [](std::string& out, opentelemetry::nostd::string_view item) {
+                    out.append("\"");
+                    out.append(item.data(), item.size());
+                    out.append("\"");
+                });
+            } else if constexpr (std::is_same_v<ValueType, SpanUInt8>) {
+                return format_span(v, [](std::string& out, uint8_t item) {
+                    out.append(fmt::format("{}", static_cast<unsigned int>(item)));
+                });
             } else {
                 return "<array>";
             }
