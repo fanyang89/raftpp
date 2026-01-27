@@ -2,6 +2,7 @@
 
 #include <fcntl.h>
 #include <netdb.h>
+#include <netinet/in.h>
 #include <poll.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -40,6 +41,40 @@ constexpr size_t kMaxPendingErrorEvents = 1024;
 constexpr size_t kMaxPollBatch = 32;
 constexpr int kListenBacklog = 128;
 constexpr auto kCmPollInterval = std::chrono::milliseconds(10);
+
+bool CopySockaddr(const sockaddr* addr, sockaddr_storage* storage) {
+    if (!addr || !storage) {
+        return false;
+    }
+    if (addr->sa_family == AF_INET) {
+        std::memcpy(storage, addr, sizeof(sockaddr_in));
+        return true;
+    }
+    if (addr->sa_family == AF_INET6) {
+        std::memcpy(storage, addr, sizeof(sockaddr_in6));
+        return true;
+    }
+    return false;
+}
+
+bool SockaddrEqual(const sockaddr_storage& left, const sockaddr_storage& right) {
+    if (left.ss_family != right.ss_family) {
+        return false;
+    }
+    if (left.ss_family == AF_INET) {
+        auto laddr = reinterpret_cast<const sockaddr_in*>(&left);
+        auto raddr = reinterpret_cast<const sockaddr_in*>(&right);
+        return laddr->sin_port == raddr->sin_port &&
+            std::memcmp(&laddr->sin_addr, &raddr->sin_addr, sizeof(in_addr)) == 0;
+    }
+    if (left.ss_family == AF_INET6) {
+        auto laddr = reinterpret_cast<const sockaddr_in6*>(&left);
+        auto raddr = reinterpret_cast<const sockaddr_in6*>(&right);
+        return laddr->sin6_port == raddr->sin6_port &&
+            std::memcmp(&laddr->sin6_addr, &raddr->sin6_addr, sizeof(in6_addr)) == 0;
+    }
+    return false;
+}
 
 struct AddrInfoDeleter {
     void operator()(addrinfo* info) const {
@@ -137,6 +172,8 @@ struct RdmaTransport::Impl {
     bool PostSend(Connection& conn, std::span<const uint8_t> payload);
     void HandleRecv(RecvBuffer& buffer, size_t len);
     void ReleaseSendBuffer(Connection& conn, SendBuffer* buffer);
+    bool HasIncomingCapacity();
+    bool IsAllowedIncoming(rdma_cm_id* id);
 
     bool ShouldDial(uint64_t peer_id) const;
     bool ConnectPeer(uint64_t peer_id, const std::string& addr);
@@ -174,6 +211,7 @@ struct RdmaTransport::Impl {
     MessageCallback on_message_;
     ErrorCallback on_error_;
 
+    std::mutex lifecycle_mutex_;
     std::atomic<bool> running_{false};
     std::atomic<bool> stopped_{false};
     std::thread rdma_thread_;
@@ -188,12 +226,13 @@ struct RdmaTransport::Impl {
 };
 
 Result<void> RdmaTransport::Impl::Start() {
-    if (running_) {
-        return {};
-    }
-
     if (config_.listen_addr.empty()) {
         return std::unexpected(RaftError(ConfigErrorCode::ListenAddressEmpty));
+    }
+
+    std::lock_guard lock(lifecycle_mutex_);
+    if (running_) {
+        return {};
     }
 
     running_ = true;
@@ -220,6 +259,7 @@ Result<void> RdmaTransport::Impl::Start() {
 }
 
 void RdmaTransport::Impl::Stop() {
+    std::lock_guard lock(lifecycle_mutex_);
     if (!running_ || stopped_) {
         return;
     }
@@ -405,6 +445,8 @@ void RdmaTransport::Impl::RdmaLoop(std::promise<Result<void>> start_promise) {
 }
 
 Result<void> RdmaTransport::Impl::SetupListener() {
+    TeardownListener();
+
     event_channel_ = rdma_create_event_channel();
     if (!event_channel_) {
         SPDLOG_ERROR("rdma_create_event_channel failed: {}", strerror(errno));
@@ -420,21 +462,25 @@ Result<void> RdmaTransport::Impl::SetupListener() {
 
     if (rdma_create_id(event_channel_, &listener_, nullptr, RDMA_PS_TCP) != 0) {
         SPDLOG_ERROR("rdma_create_id failed: {}", strerror(errno));
+        TeardownListener();
         return std::unexpected(RaftError(RpcErrorCode::BindFailed));
     }
 
     auto addr_result = ResolveSockaddr(config_.listen_addr);
     if (!addr_result) {
+        TeardownListener();
         return std::unexpected(addr_result.error());
     }
 
     if (rdma_bind_addr(listener_, reinterpret_cast<sockaddr*>(&addr_result.value())) != 0) {
         SPDLOG_ERROR("rdma_bind_addr failed: {}", strerror(errno));
+        TeardownListener();
         return std::unexpected(RaftError(RpcErrorCode::BindFailed));
     }
 
     if (rdma_listen(listener_, kListenBacklog) != 0) {
         SPDLOG_ERROR("rdma_listen failed: {}", strerror(errno));
+        TeardownListener();
         return std::unexpected(RaftError(RpcErrorCode::ListenFailed));
     }
 
@@ -516,6 +562,26 @@ void RdmaTransport::Impl::HandleCmEvent(const rdma_cm_event& event) {
 }
 
 void RdmaTransport::Impl::HandleConnectRequest(rdma_cm_id* id, const rdma_conn_param& param) {
+    if (!id) {
+        return;
+    }
+    if (!HasIncomingCapacity()) {
+        SPDLOG_WARN("rdma reject incoming request: capacity exceeded");
+        if (rdma_reject(id, nullptr, 0) != 0) {
+            SPDLOG_WARN("rdma_reject failed for incoming request: {}", strerror(errno));
+        }
+        rdma_destroy_id(id);
+        return;
+    }
+    if (!IsAllowedIncoming(id)) {
+        SPDLOG_WARN("rdma reject incoming request: unknown peer");
+        if (rdma_reject(id, nullptr, 0) != 0) {
+            SPDLOG_WARN("rdma_reject failed for incoming request: {}", strerror(errno));
+        }
+        rdma_destroy_id(id);
+        return;
+    }
+
     auto conn = std::make_unique<Connection>();
     conn->id = id;
     conn->is_active = false;
@@ -542,6 +608,52 @@ void RdmaTransport::Impl::HandleConnectRequest(rdma_cm_id* id, const rdma_conn_p
     }
 
     connections_.emplace(id, std::move(conn));
+}
+
+bool RdmaTransport::Impl::HasIncomingCapacity() {
+    std::lock_guard lock(peers_mutex_);
+    size_t peer_count = peer_manager_.Size();
+    if (peer_count == 0) {
+        return false;
+    }
+    size_t max_connections = peer_count * 2;
+    return connections_.size() < max_connections;
+}
+
+bool RdmaTransport::Impl::IsAllowedIncoming(rdma_cm_id* id) {
+    const sockaddr* peer_addr = rdma_get_peer_addr(id);
+    sockaddr_storage remote{};
+    if (!CopySockaddr(peer_addr, &remote)) {
+        return false;
+    }
+
+    std::vector<std::string> addrs;
+    {
+        std::lock_guard lock(peers_mutex_);
+        auto ids = peer_manager_.GetAllPeerIds();
+        addrs.reserve(ids.size());
+        for (auto peer_id : ids) {
+            const auto* peer = peer_manager_.GetPeer(peer_id);
+            if (!peer || peer->addr.empty()) {
+                continue;
+            }
+            addrs.push_back(peer->addr);
+        }
+    }
+    if (addrs.empty()) {
+        return false;
+    }
+
+    for (const auto& addr : addrs) {
+        auto resolved = ResolveSockaddr(addr);
+        if (!resolved) {
+            continue;
+        }
+        if (SockaddrEqual(remote, resolved.value())) {
+            return true;
+        }
+    }
+    return false;
 }
 
 void RdmaTransport::Impl::HandleAddrResolved(rdma_cm_id* id) {
