@@ -165,9 +165,7 @@ TEST_CASE("RaftorConfig RDMA validation") {
 
     auto result = config.Validate();
     REQUIRE_MESSAGE(!result, "expected Validate to fail for RDMA config");
-    CHECK_MESSAGE(
-        result.error().Is(ConfigErrorCode::RdmaConfigInvalid), result.error().ToString()
-    );
+    CHECK_MESSAGE(result.error().Is(ConfigErrorCode::RdmaConfigInvalid), result.error().ToString());
 }
 
 void PollAll(std::vector<std::unique_ptr<Raftor>>& raftors, std::chrono::milliseconds duration) {
