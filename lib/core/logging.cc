@@ -208,6 +208,14 @@ void ConfigureFromEnv(LogLevel default_level) {
     spdlog::cfg::load_env_levels();
 }
 
+bool ShouldLog(opentelemetry::logs::Severity severity) {
+    auto backend = spdlog::default_logger();
+    if (!backend) {
+        return false;
+    }
+    return backend->should_log(ToSpdlogLevel(severity));
+}
+
 opentelemetry::nostd::shared_ptr<opentelemetry::logs::Logger> GetLogger() {
     static std::once_flag once;
     static opentelemetry::nostd::shared_ptr<opentelemetry::logs::Logger> logger;

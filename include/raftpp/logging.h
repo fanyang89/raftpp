@@ -28,12 +28,16 @@ void SetLogLevel(LogLevel level);
 void ConfigureFromEnv(LogLevel default_level = LogLevel::kWarn);
 
 opentelemetry::nostd::shared_ptr<opentelemetry::logs::Logger> GetLogger();
+bool ShouldLog(opentelemetry::logs::Severity severity);
 
 template <typename... Args>
 inline void LogWithLocation(
     opentelemetry::logs::Severity severity, const char* file, int line, fmt::string_view format,
     Args&&... args
 ) {
+    if (!ShouldLog(severity)) {
+        return;
+    }
     auto message = fmt::vformat(format, fmt::make_format_args(args...));
     auto logger = GetLogger();
     if (!logger) {
@@ -51,6 +55,9 @@ inline void LogWithLocation(
 inline void LogWithLocation(
     opentelemetry::logs::Severity severity, const char* file, int line, std::string_view message
 ) {
+    if (!ShouldLog(severity)) {
+        return;
+    }
     auto logger = GetLogger();
     if (!logger) {
         return;

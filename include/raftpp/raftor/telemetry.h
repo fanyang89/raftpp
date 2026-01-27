@@ -6,6 +6,7 @@
 #include <string_view>
 
 #include <opentelemetry/nostd/shared_ptr.h>
+#include <opentelemetry/nostd/string_view.h>
 #include <opentelemetry/trace/provider.h>
 #include <opentelemetry/trace/scope.h>
 #include <opentelemetry/trace/span.h>
@@ -70,7 +71,10 @@ inline void RecordError(
     if (!span) {
         return;
     }
-    span->SetStatus(opentelemetry::trace::StatusCode::kError, message.data());
+    span->SetStatus(
+        opentelemetry::trace::StatusCode::kError,
+        opentelemetry::nostd::string_view{message.data(), message.size()}
+    );
     span->SetAttribute("error", true);
     span->SetAttribute("error.message", std::string(message));
 }
