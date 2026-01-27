@@ -138,8 +138,13 @@ class SpdlogLogger final : public opentelemetry::logs::Logger {
         opentelemetry::nostd::unique_ptr<opentelemetry::logs::LogRecord>&& record
     ) noexcept override {
         auto* spdlog_record = dynamic_cast<SpdlogLogRecord*>(record.get());
+        if (!spdlog_record) {
+            spdlog::error("OpenTelemetry log record type mismatch for logger {}", name_);
+            return;
+        }
         auto backend = spdlog::default_logger();
-        if (!spdlog_record || !backend) {
+        if (!backend) {
+            spdlog::error("OpenTelemetry log backend unavailable for logger {}", name_);
             return;
         }
 

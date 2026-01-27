@@ -189,6 +189,7 @@ Result<void> RaftorImpl::Start() {
 
     if (started_.exchange(true)) {
         telemetry::RecordError(span.span(), "already started");
+        RAFTPP_LOG_WARN("Start ignored: Raftor {} already started", config_.node_id);
         return std::unexpected(RaftError(RaftErrorCode::AlreadyStarted));
     }
 
@@ -196,6 +197,9 @@ Result<void> RaftorImpl::Start() {
     if (auto result = transport_->Start(); !result) {
         started_ = false;
         telemetry::RecordErrorIf(span.span(), result);
+        RAFTPP_LOG_ERROR(
+            "Failed to start transport for node {}: {}", config_.node_id, result.error().ToString()
+        );
         return result;
     }
 
@@ -441,6 +445,9 @@ void RaftorImpl::ProcessProposalQueue() {
         if (auto result = raw_node_->Propose(ctx, data); !result) {
             proposal_tracker_.Fail(ctx, result.error());
             telemetry::RecordErrorIf(span.span(), result);
+            RAFTPP_LOG_ERROR(
+                "Proposal {} failed: {}", ctx, result.error().ToString()
+            );
         }
     }
 }
@@ -624,6 +631,9 @@ Result<void> RaftorImpl::AddNode(uint64_t id, const std::string& addr) {
     std::string ctx = GenerateProposalContext();
     if (auto result = raw_node_->ProposeConfChange(ctx, cc); !result) {
         telemetry::RecordErrorIf(span.span(), result);
+        RAFTPP_LOG_ERROR(
+            "Add node {} failed: {}", id, result.error().ToString()
+        );
         return result.error();
     }
 
@@ -646,6 +656,9 @@ Result<void> RaftorImpl::RemoveNode(uint64_t id) {
     std::string ctx = GenerateProposalContext();
     auto result = raw_node_->ProposeConfChange(ctx, cc);
     telemetry::RecordErrorIf(span.span(), result);
+    if (!result) {
+        RAFTPP_LOG_ERROR("Remove node {} failed: {}", id, result.error().ToString());
+    }
     return result;
 }
 
@@ -661,6 +674,9 @@ Result<void> RaftorImpl::Campaign() {
 
     auto result = raw_node_->Campaign();
     telemetry::RecordErrorIf(span.span(), result);
+    if (!result) {
+        RAFTPP_LOG_ERROR("Campaign failed: {}", result.error().ToString());
+    }
     return result;
 }
 
@@ -693,12 +709,19 @@ Result<void> RaftorImpl::TakeSnapshot() {
     // Get current conf state from storage
     auto initial_state = storage_->InitialState();
     if (telemetry::RecordErrorIf(span.span(), initial_state)) {
+        RAFTPP_LOG_ERROR(
+            "Snapshot failed to read initial state: {}", initial_state.error().ToString()
+        );
         return initial_state.error();
     }
 
     // Get term of applied entry
     auto term_result = storage_->Term(applied_index);
     if (telemetry::RecordErrorIf(span.span(), term_result)) {
+        RAFTPP_LOG_ERROR(
+            "Snapshot failed to read term at index {}: {}", applied_index,
+            term_result.error().ToString()
+        );
         return term_result.error();
     }
 
@@ -706,6 +729,10 @@ Result<void> RaftorImpl::TakeSnapshot() {
     auto snapshot_result =
         state_machine_->TakeSnapshot(applied_index, *term_result, initial_state->conf_state);
     if (telemetry::RecordErrorIf(span.span(), snapshot_result)) {
+        RAFTPP_LOG_ERROR(
+            "Snapshot failed to build state at index {}: {}", applied_index,
+            snapshot_result.error().ToString()
+        );
         return snapshot_result.error();
     }
 
@@ -723,6 +750,9 @@ Result<void> RaftorImpl::TakeSnapshot() {
     // Apply to storage (this will compact the log)
     if (auto result = storage_->ApplySnapshot(snapshot); !result) {
         telemetry::RecordErrorIf(span.span(), result);
+        RAFTPP_LOG_ERROR(
+            "Snapshot apply failed at index {}: {}", applied_index, result.error().ToString()
+        );
         return result;
     }
 
