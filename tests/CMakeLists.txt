@@ -18,7 +18,6 @@ add_executable(
   wal_test.cc
   rpc_test.cc
   rpc_transport_test.cc
-  rdma_transport_test.cc
   raftor_test.cc)
 
 target_link_libraries(raftpp-tests PRIVATE raftpp-test-harness)
@@ -27,3 +26,7 @@ target_link_libraries(raftpp-tests PRIVATE raftor)
 target_link_libraries(raftpp-tests PRIVATE doctest)
 target_compile_definitions(raftpp-tests PUBLIC DOCTEST_CONFIG_USE_STD_HEADERS=1)
 target_compile_definitions(raftpp-tests PUBLIC DOCTEST_CONFIG_SUPER_FAST_ASSERTS=1)
+
+if (RAFTPP_WITH_RDMA)
+  target_sources(raftpp-tests PRIVATE rdma_transport_test.cc)
+endif ()

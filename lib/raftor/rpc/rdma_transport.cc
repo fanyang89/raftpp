@@ -15,6 +15,7 @@
 #include <future>
 #include <mutex>
 #include <queue>
+#include <unordered_set>
 #include <thread>
 #include <unordered_map>
 #include <utility>
@@ -88,6 +89,7 @@ struct RdmaTransport::Impl {
         bool established = false;
         bool handshake_done = false;
         size_t inflight_sends = 0;
+        std::unordered_set<SendBuffer*> send_buffers;
         std::vector<std::unique_ptr<RecvBuffer>> recv_buffers;
     };
 
@@ -131,6 +133,7 @@ struct RdmaTransport::Impl {
     bool PostRecv(Connection& conn, RecvBuffer& buffer);
     bool PostSend(Connection& conn, std::span<const uint8_t> payload);
     void HandleRecv(RecvBuffer& buffer, size_t len);
+    void ReleaseSendBuffer(Connection& conn, SendBuffer* buffer);
 
     bool ShouldDial(uint64_t peer_id) const;
     bool ConnectPeer(uint64_t peer_id, const std::string& addr);
@@ -610,13 +613,17 @@ void RdmaTransport::Impl::HandleDisconnected(rdma_cm_id* id) {
 }
 
 void RdmaTransport::Impl::HandleConnectError(rdma_cm_id* id, const char* reason) {
+    if (!id) {
+        SPDLOG_WARN("RDMA connect error (peer=0, reason={})", reason);
+        return;
+    }
     auto* conn = static_cast<Connection*>(id->context);
     uint64_t peer_id = conn ? conn->peer_id : 0;
     SPDLOG_WARN("RDMA connect error (peer={}, reason={})", peer_id, reason);
 
     if (conn) {
         RemoveConnection(*conn);
-    } else if (id) {
+    } else {
         rdma_destroy_id(id);
     }
 
@@ -689,6 +696,15 @@ void RdmaTransport::Impl::CleanupConnection(Connection& conn) {
     if (conn.id) {
         rdma_destroy_qp(conn.id);
     }
+
+    for (auto* buffer : conn.send_buffers) {
+        if (buffer->mr) {
+            ibv_dereg_mr(buffer->mr);
+            buffer->mr = nullptr;
+        }
+        delete buffer;
+    }
+    conn.send_buffers.clear();
 
     for (auto& buffer : conn.recv_buffers) {
         if (buffer && buffer->mr) {
@@ -832,6 +848,11 @@ void RdmaTransport::Impl::PollCompletions() {
                         "RDMA completion error (peer={}, status={})", conn.peer_id,
                         static_cast<int>(completion.status)
                     );
+                    if (completion.opcode == IBV_WC_SEND) {
+                        auto* buffer = reinterpret_cast<SendBuffer*>(completion.wr_id);
+                        ReleaseSendBuffer(conn, buffer);
+                    }
+                    QueueDisconnect(conn);
                     continue;
                 }
 
@@ -847,14 +868,7 @@ void RdmaTransport::Impl::PollCompletions() {
                     if (!buffer) {
                         continue;
                     }
-                    if (conn.inflight_sends > 0) {
-                        --conn.inflight_sends;
-                    }
-                    if (buffer->mr) {
-                        ibv_dereg_mr(buffer->mr);
-                        buffer->mr = nullptr;
-                    }
-                    delete buffer;
+                    ReleaseSendBuffer(conn, buffer);
                 }
             }
         }
@@ -898,6 +912,7 @@ bool RdmaTransport::Impl::PostSend(Connection& conn, std::span<const uint8_t> pa
     buffer->size = payload.size();
     buffer->storage = std::make_unique<uint8_t[]>(buffer->size);
     std::memcpy(buffer->storage.get(), payload.data(), payload.size());
+    buffer->conn = &conn;
 
     buffer->mr = ibv_reg_mr(conn.pd, buffer->storage.get(), buffer->size, IBV_ACCESS_LOCAL_WRITE);
     if (!buffer->mr) {
@@ -930,7 +945,23 @@ bool RdmaTransport::Impl::PostSend(Connection& conn, std::span<const uint8_t> pa
     }
 
     ++conn.inflight_sends;
+    conn.send_buffers.insert(buffer);
     return true;
+}
+
+void RdmaTransport::Impl::ReleaseSendBuffer(Connection& conn, SendBuffer* buffer) {
+    if (!buffer) {
+        return;
+    }
+    if (conn.inflight_sends > 0) {
+        --conn.inflight_sends;
+    }
+    conn.send_buffers.erase(buffer);
+    if (buffer->mr) {
+        ibv_dereg_mr(buffer->mr);
+        buffer->mr = nullptr;
+    }
+    delete buffer;
 }
 
 void RdmaTransport::Impl::HandleRecv(RecvBuffer& buffer, size_t len) {
