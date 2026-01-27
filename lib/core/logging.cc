@@ -153,7 +153,7 @@ class SpdlogLogger final : public opentelemetry::logs::Logger {
             return;
         }
         if (spdlog_record->attributes().empty()) {
-            backend->log(level, spdlog_record->body());
+            backend->log(level, "{}", spdlog_record->body());
             return;
         }
 
@@ -164,7 +164,7 @@ class SpdlogLogger final : public opentelemetry::logs::Logger {
             message.append("=");
             message.append(value);
         }
-        backend->log(level, message);
+        backend->log(level, "{}", message);
     }
 
   private:
