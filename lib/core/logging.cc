@@ -50,9 +50,9 @@ spdlog::level::level_enum ToSpdlogLevel(Severity severity) {
         case Severity::kFatal4:
             return spdlog::level::critical;
         case Severity::kInvalid:
-            return spdlog::level::info;
+            return spdlog::level::debug;
     }
-    return spdlog::level::info;
+    return spdlog::level::debug;
 }
 
 std::string AttributeToString(const opentelemetry::common::AttributeValue& value) {
