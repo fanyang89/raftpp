@@ -94,9 +94,7 @@ class SpdlogLogRecord final : public opentelemetry::logs::LogRecord {
     void SetAttribute(
         opentelemetry::nostd::string_view key, const opentelemetry::common::AttributeValue& value
     ) noexcept override {
-        attributes_.emplace_back(
-            std::string(key.data(), key.size()), AttributeToString(value)
-        );
+        attributes_.emplace_back(std::string(key.data(), key.size()), AttributeToString(value));
     }
 
     void SetEventId(int64_t /*id*/, opentelemetry::nostd::string_view /*name*/) noexcept override {}
@@ -110,6 +108,7 @@ class SpdlogLogRecord final : public opentelemetry::logs::LogRecord {
     [[nodiscard]] opentelemetry::logs::Severity severity() const { return severity_; }
 
     [[nodiscard]] const std::string& body() const { return body_; }
+
     [[nodiscard]] const std::vector<std::pair<std::string, std::string>>& attributes() const {
         return attributes_;
     }
