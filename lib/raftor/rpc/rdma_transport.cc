@@ -1,5 +1,11 @@
 #include "raftpp/raftor/rpc/rdma_transport.h"
 
+#include <fcntl.h>
+#include <netdb.h>
+#include <poll.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
 #include <array>
 #include <atomic>
 #include <cerrno>
@@ -14,13 +20,7 @@
 #include <utility>
 #include <vector>
 
-#include <fcntl.h>
-#include <netdb.h>
-#include <poll.h>
 #include <rdma/rdma_cma.h>
-#include <sys/socket.h>
-#include <unistd.h>
-
 #include <spdlog/fmt/fmt.h>
 #include <spdlog/spdlog.h>
 
@@ -371,8 +371,7 @@ void RdmaTransport::Impl::RdmaLoop(std::promise<Result<void>> start_promise) {
     }
     set_start({});
 
-    while (running_.load(std::memory_order_acquire) &&
-           !stopped_.load(std::memory_order_acquire)) {
+    while (running_.load(std::memory_order_acquire) && !stopped_.load(std::memory_order_acquire)) {
         DrainRemovals();
         DrainDisconnects();
         PollCmEvents(kCmPollInterval);
@@ -637,7 +636,8 @@ bool RdmaTransport::Impl::SetupConnectionResources(Connection& conn) {
         return false;
     }
 
-    conn.cq = ibv_create_cq(conn.id->verbs, static_cast<int>(rdma_config_.cq_depth), nullptr, nullptr, 0);
+    conn.cq =
+        ibv_create_cq(conn.id->verbs, static_cast<int>(rdma_config_.cq_depth), nullptr, nullptr, 0);
     if (!conn.cq) {
         SPDLOG_ERROR("ibv_create_cq failed: {}", strerror(errno));
         CleanupConnection(conn);
@@ -667,9 +667,8 @@ bool RdmaTransport::Impl::SetupConnectionResources(Connection& conn) {
         auto buffer = std::make_unique<RecvBuffer>();
         buffer->size = rdma_config_.buffer_size;
         buffer->storage = std::make_unique<uint8_t[]>(buffer->size);
-        buffer->mr = ibv_reg_mr(
-            conn.pd, buffer->storage.get(), buffer->size, IBV_ACCESS_LOCAL_WRITE
-        );
+        buffer->mr =
+            ibv_reg_mr(conn.pd, buffer->storage.get(), buffer->size, IBV_ACCESS_LOCAL_WRITE);
         if (!buffer->mr) {
             SPDLOG_ERROR("ibv_reg_mr failed: {}", strerror(errno));
             CleanupConnection(conn);
@@ -900,9 +899,7 @@ bool RdmaTransport::Impl::PostSend(Connection& conn, std::span<const uint8_t> pa
     buffer->storage = std::make_unique<uint8_t[]>(buffer->size);
     std::memcpy(buffer->storage.get(), payload.data(), payload.size());
 
-    buffer->mr = ibv_reg_mr(
-        conn.pd, buffer->storage.get(), buffer->size, IBV_ACCESS_LOCAL_WRITE
-    );
+    buffer->mr = ibv_reg_mr(conn.pd, buffer->storage.get(), buffer->size, IBV_ACCESS_LOCAL_WRITE);
     if (!buffer->mr) {
         SPDLOG_WARN("ibv_reg_mr failed for send: {}", strerror(errno));
         delete buffer;
@@ -1084,8 +1081,10 @@ bool RdmaTransport::Impl::ConnectPeer(uint64_t peer_id, const std::string& addr)
         return false;
     }
 
-    if (rdma_resolve_addr(id, nullptr, reinterpret_cast<sockaddr*>(&addr_result.value()),
-                          static_cast<int>(config_.connect_timeout.count())) != 0) {
+    if (rdma_resolve_addr(
+            id, nullptr, reinterpret_cast<sockaddr*>(&addr_result.value()),
+            static_cast<int>(config_.connect_timeout.count())
+        ) != 0) {
         SPDLOG_WARN("rdma_resolve_addr failed: {}", strerror(errno));
         rdma_destroy_id(id);
         return false;

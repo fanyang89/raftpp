@@ -1,3 +1,5 @@
+#include "raftpp/raftor/rpc/rdma_transport.h"
+
 #include <atomic>
 #include <chrono>
 #include <cstdlib>
@@ -9,7 +11,6 @@
 #include <doctest/doctest.h>
 
 #include "raftpp/core/capnp_util.h"
-#include "raftpp/raftor/rpc/rdma_transport.h"
 
 #if RAFTPP_WITH_RDMA
 #include <infiniband/verbs.h>
