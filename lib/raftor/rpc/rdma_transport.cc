@@ -120,6 +120,7 @@ struct RdmaTransport::Impl {
     void HandleConnectError(rdma_cm_id* id, const char* reason);
 
     bool SetupConnectionResources(Connection& conn);
+    void ReleaseConnectionResources(Connection& conn);
     void CleanupConnection(Connection& conn);
     void RemoveConnection(Connection& conn);
     void DisconnectConnection(Connection& conn);
@@ -522,6 +523,7 @@ void RdmaTransport::Impl::HandleConnectRequest(rdma_cm_id* id, const rdma_conn_p
 
     if (!SetupConnectionResources(*conn)) {
         rdma_reject(id, nullptr, 0);
+        CleanupConnection(*conn);
         return;
     }
 
@@ -637,7 +639,7 @@ bool RdmaTransport::Impl::SetupConnectionResources(Connection& conn) {
         ibv_create_cq(conn.id->verbs, static_cast<int>(rdma_config_.cq_depth), nullptr, nullptr, 0);
     if (!conn.cq) {
         SPDLOG_ERROR("ibv_create_cq failed: {}", strerror(errno));
-        CleanupConnection(conn);
+        ReleaseConnectionResources(conn);
         return false;
     }
 
@@ -653,7 +655,7 @@ bool RdmaTransport::Impl::SetupConnectionResources(Connection& conn) {
 
     if (rdma_create_qp(conn.id, conn.pd, &qp_attr) != 0) {
         SPDLOG_ERROR("rdma_create_qp failed: {}", strerror(errno));
-        CleanupConnection(conn);
+        ReleaseConnectionResources(conn);
         return false;
     }
 
@@ -668,12 +670,12 @@ bool RdmaTransport::Impl::SetupConnectionResources(Connection& conn) {
             ibv_reg_mr(conn.pd, buffer->storage.get(), buffer->size, IBV_ACCESS_LOCAL_WRITE);
         if (!buffer->mr) {
             SPDLOG_ERROR("ibv_reg_mr failed: {}", strerror(errno));
-            CleanupConnection(conn);
+            ReleaseConnectionResources(conn);
             return false;
         }
         buffer->conn = &conn;
         if (!PostRecv(conn, *buffer)) {
-            CleanupConnection(conn);
+            ReleaseConnectionResources(conn);
             return false;
         }
         conn.recv_buffers.push_back(std::move(buffer));
@@ -682,9 +684,10 @@ bool RdmaTransport::Impl::SetupConnectionResources(Connection& conn) {
     return true;
 }
 
-void RdmaTransport::Impl::CleanupConnection(Connection& conn) {
-    if (conn.id) {
+void RdmaTransport::Impl::ReleaseConnectionResources(Connection& conn) {
+    if (conn.qp && conn.id) {
         rdma_destroy_qp(conn.id);
+        conn.qp = nullptr;
     }
 
     for (auto* buffer : conn.send_buffers) {
@@ -713,6 +716,10 @@ void RdmaTransport::Impl::CleanupConnection(Connection& conn) {
         ibv_dealloc_pd(conn.pd);
         conn.pd = nullptr;
     }
+}
+
+void RdmaTransport::Impl::CleanupConnection(Connection& conn) {
+    ReleaseConnectionResources(conn);
 
     if (conn.id) {
         rdma_destroy_id(conn.id);
