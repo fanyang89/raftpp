@@ -36,9 +36,6 @@ inline void LogWithLocation(
     opentelemetry::logs::Severity severity, const char* file, int line, fmt::string_view format,
     Args&&... args
 ) {
-    if (!ShouldLog(severity)) {
-        return;
-    }
     auto logger = GetLogger();
     if (!logger) {
         return;
@@ -73,9 +70,6 @@ inline void LogWithLocation(
 inline void LogWithLocation(
     opentelemetry::logs::Severity severity, const char* file, int line, std::string_view message
 ) {
-    if (!ShouldLog(severity)) {
-        return;
-    }
     auto logger = GetLogger();
     if (!logger) {
         return;
