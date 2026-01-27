@@ -90,6 +90,8 @@ struct RdmaTransport::Impl {
         bool handshake_done = false;
         size_t inflight_sends = 0;
         std::unordered_set<SendBuffer*> send_buffers;
+        std::vector<std::unique_ptr<SendBuffer>> send_buffer_pool;
+        std::vector<SendBuffer*> free_send_buffers;
         std::vector<std::unique_ptr<RecvBuffer>> recv_buffers;
     };
 
@@ -681,6 +683,24 @@ bool RdmaTransport::Impl::SetupConnectionResources(Connection& conn) {
         conn.recv_buffers.push_back(std::move(buffer));
     }
 
+    conn.send_buffer_pool.reserve(rdma_config_.send_buffer_count);
+    conn.free_send_buffers.reserve(rdma_config_.send_buffer_count);
+    for (size_t i = 0; i < rdma_config_.send_buffer_count; ++i) {
+        auto buffer = std::make_unique<SendBuffer>();
+        buffer->size = rdma_config_.buffer_size;
+        buffer->storage = std::make_unique<uint8_t[]>(buffer->size);
+        buffer->mr =
+            ibv_reg_mr(conn.pd, buffer->storage.get(), buffer->size, IBV_ACCESS_LOCAL_WRITE);
+        if (!buffer->mr) {
+            SPDLOG_ERROR("ibv_reg_mr failed: {}", strerror(errno));
+            ReleaseConnectionResources(conn);
+            return false;
+        }
+        buffer->conn = &conn;
+        conn.free_send_buffers.push_back(buffer.get());
+        conn.send_buffer_pool.push_back(std::move(buffer));
+    }
+
     return true;
 }
 
@@ -690,14 +710,15 @@ void RdmaTransport::Impl::ReleaseConnectionResources(Connection& conn) {
         conn.qp = nullptr;
     }
 
-    for (auto* buffer : conn.send_buffers) {
-        if (buffer->mr) {
+    conn.send_buffers.clear();
+    conn.free_send_buffers.clear();
+    for (auto& buffer : conn.send_buffer_pool) {
+        if (buffer && buffer->mr) {
             ibv_dereg_mr(buffer->mr);
             buffer->mr = nullptr;
         }
-        delete buffer;
     }
-    conn.send_buffers.clear();
+    conn.send_buffer_pool.clear();
 
     for (auto& buffer : conn.recv_buffers) {
         if (buffer && buffer->mr) {
@@ -905,22 +926,21 @@ bool RdmaTransport::Impl::PostRecv(Connection& conn, RecvBuffer& buffer) {
 }
 
 bool RdmaTransport::Impl::PostSend(Connection& conn, std::span<const uint8_t> payload) {
-    auto* buffer = new SendBuffer();
-    buffer->size = payload.size();
-    buffer->storage = std::make_unique<uint8_t[]>(buffer->size);
-    std::memcpy(buffer->storage.get(), payload.data(), payload.size());
-    buffer->conn = &conn;
-
-    buffer->mr = ibv_reg_mr(conn.pd, buffer->storage.get(), buffer->size, IBV_ACCESS_LOCAL_WRITE);
-    if (!buffer->mr) {
-        SPDLOG_WARN("ibv_reg_mr failed for send: {}", strerror(errno));
-        delete buffer;
+    if (payload.size() > rdma_config_.buffer_size) {
+        SPDLOG_WARN("rdma send payload too large: {}", payload.size());
         return false;
     }
+    if (conn.free_send_buffers.empty()) {
+        SPDLOG_WARN("rdma send buffer pool exhausted");
+        return false;
+    }
+    auto* buffer = conn.free_send_buffers.back();
+    conn.free_send_buffers.pop_back();
+    std::memcpy(buffer->storage.get(), payload.data(), payload.size());
 
     ibv_sge sge{};
     sge.addr = reinterpret_cast<uint64_t>(buffer->storage.get());
-    sge.length = static_cast<uint32_t>(buffer->size);
+    sge.length = static_cast<uint32_t>(payload.size());
     sge.lkey = buffer->mr->lkey;
 
     ibv_send_wr wr{};
@@ -929,15 +949,14 @@ bool RdmaTransport::Impl::PostSend(Connection& conn, std::span<const uint8_t> pa
     wr.num_sge = 1;
     wr.opcode = IBV_WR_SEND;
     wr.send_flags = IBV_SEND_SIGNALED;
-    if (rdma_config_.max_inline_data > 0 && buffer->size <= rdma_config_.max_inline_data) {
+    if (rdma_config_.max_inline_data > 0 && payload.size() <= rdma_config_.max_inline_data) {
         wr.send_flags |= IBV_SEND_INLINE;
     }
 
     ibv_send_wr* bad = nullptr;
     if (ibv_post_send(conn.qp, &wr, &bad) != 0) {
         SPDLOG_WARN("ibv_post_send failed: {}", strerror(errno));
-        ibv_dereg_mr(buffer->mr);
-        delete buffer;
+        conn.free_send_buffers.push_back(buffer);
         return false;
     }
 
@@ -954,11 +973,7 @@ void RdmaTransport::Impl::ReleaseSendBuffer(Connection& conn, SendBuffer* buffer
         --conn.inflight_sends;
     }
     conn.send_buffers.erase(buffer);
-    if (buffer->mr) {
-        ibv_dereg_mr(buffer->mr);
-        buffer->mr = nullptr;
-    }
-    delete buffer;
+    conn.free_send_buffers.push_back(buffer);
 }
 
 void RdmaTransport::Impl::HandleRecv(RecvBuffer& buffer, size_t len) {
