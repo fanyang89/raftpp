@@ -118,6 +118,7 @@ struct RdmaTransport::Impl {
         std::string addr;
         rdma_cm_id* id = nullptr;
         ibv_pd* pd = nullptr;
+        ibv_comp_channel* comp_channel = nullptr;
         ibv_cq* cq = nullptr;
         ibv_qp* qp = nullptr;
         bool is_active = false;
@@ -166,6 +167,7 @@ struct RdmaTransport::Impl {
     void DrainRemovals();
     void DrainDisconnects();
     void PollCompletions();
+    void PollCq(Connection& conn);
 
     void PostHandshake(Connection& conn);
     bool PostRecv(Connection& conn, RecvBuffer& buffer);
@@ -749,10 +751,29 @@ bool RdmaTransport::Impl::SetupConnectionResources(Connection& conn) {
         return false;
     }
 
+    conn.comp_channel = ibv_create_comp_channel(conn.id->verbs);
+    if (!conn.comp_channel) {
+        SPDLOG_ERROR("ibv_create_comp_channel failed: {}", strerror(errno));
+        ReleaseConnectionResources(conn);
+        return false;
+    }
+    int flags = fcntl(conn.comp_channel->fd, F_GETFL, 0);
+    if (flags >= 0) {
+        if (fcntl(conn.comp_channel->fd, F_SETFL, flags | O_NONBLOCK) != 0) {
+            SPDLOG_WARN("Failed to set RDMA completion channel non-blocking: {}", strerror(errno));
+        }
+    }
+
     conn.cq =
-        ibv_create_cq(conn.id->verbs, static_cast<int>(rdma_config_.cq_depth), nullptr, nullptr, 0);
+        ibv_create_cq(conn.id->verbs, static_cast<int>(rdma_config_.cq_depth), &conn,
+                      conn.comp_channel, 0);
     if (!conn.cq) {
         SPDLOG_ERROR("ibv_create_cq failed: {}", strerror(errno));
+        ReleaseConnectionResources(conn);
+        return false;
+    }
+    if (ibv_req_notify_cq(conn.cq, 0) != 0) {
+        SPDLOG_ERROR("ibv_req_notify_cq failed: {}", strerror(errno));
         ReleaseConnectionResources(conn);
         return false;
     }
@@ -845,6 +866,11 @@ void RdmaTransport::Impl::ReleaseConnectionResources(Connection& conn) {
         conn.cq = nullptr;
     }
 
+    if (conn.comp_channel) {
+        ibv_destroy_comp_channel(conn.comp_channel);
+        conn.comp_channel = nullptr;
+    }
+
     if (conn.pd) {
         ibv_dealloc_pd(conn.pd);
         conn.pd = nullptr;
@@ -870,9 +896,19 @@ void RdmaTransport::Impl::DisconnectConnection(Connection& conn) {
 void RdmaTransport::Impl::RemoveConnection(Connection& conn) {
     auto peer_id = conn.peer_id;
     if (peer_id != 0) {
-        peer_connections_.erase(peer_id);
-        connecting_peers_.erase(peer_id);
-        UpdatePeerState(peer_id, PeerState::Disconnected);
+        bool removed = false;
+        auto it = peer_connections_.find(peer_id);
+        if (it != peer_connections_.end() && it->second == &conn) {
+            peer_connections_.erase(it);
+            removed = true;
+        }
+        auto connecting_it = connecting_peers_.find(peer_id);
+        if (connecting_it != connecting_peers_.end() && connecting_it->second == conn.id) {
+            connecting_peers_.erase(connecting_it);
+        }
+        if (removed) {
+            UpdatePeerState(peer_id, PeerState::Disconnected);
+        }
     }
 
     auto it = connections_.find(conn.id);
@@ -958,48 +994,95 @@ void RdmaTransport::Impl::DrainDisconnects() {
 }
 
 void RdmaTransport::Impl::PollCompletions() {
-    std::array<ibv_wc, kMaxPollBatch> wc{};
+    if (connections_.empty()) {
+        return;
+    }
+
+    std::vector<pollfd> pollfds;
+    std::vector<ibv_comp_channel*> channels;
+    pollfds.reserve(connections_.size());
+    channels.reserve(connections_.size());
+
     for (auto& [_, conn_ptr] : connections_) {
-        Connection& conn = *conn_ptr;
-        if (!conn.cq) {
+        if (!conn_ptr || !conn_ptr->comp_channel) {
             continue;
         }
+        pollfds.push_back(pollfd{conn_ptr->comp_channel->fd, POLLIN, 0});
+        channels.push_back(conn_ptr->comp_channel);
+    }
 
-        while (true) {
-            int count = ibv_poll_cq(conn.cq, static_cast<int>(wc.size()), wc.data());
-            if (count <= 0) {
-                break;
+    if (pollfds.empty()) {
+        return;
+    }
+
+    int ready = poll(pollfds.data(), static_cast<nfds_t>(pollfds.size()), 0);
+    if (ready <= 0) {
+        return;
+    }
+
+    for (size_t i = 0; i < pollfds.size(); ++i) {
+        if ((pollfds[i].revents & POLLIN) == 0) {
+            continue;
+        }
+        ibv_cq* cq = nullptr;
+        void* context = nullptr;
+        while (ibv_get_cq_event(channels[i], &cq, &context) == 0) {
+            ibv_ack_cq_events(cq, 1);
+            if (ibv_req_notify_cq(cq, 0) != 0) {
+                SPDLOG_WARN("ibv_req_notify_cq failed: {}", strerror(errno));
             }
+            auto* conn = static_cast<Connection*>(context);
+            if (!conn || conn->cq != cq) {
+                continue;
+            }
+            PollCq(*conn);
+        }
+        int err = errno;
+        if (err != EAGAIN && err != 0) {
+            SPDLOG_WARN("ibv_get_cq_event failed: {}", strerror(err));
+        }
+    }
+}
 
-            for (int i = 0; i < count; ++i) {
-                const auto& completion = wc[static_cast<size_t>(i)];
-                if (completion.status != IBV_WC_SUCCESS) {
-                    SPDLOG_WARN(
-                        "RDMA completion error (peer={}, status={})", conn.peer_id,
-                        static_cast<int>(completion.status)
-                    );
-                    if (completion.opcode == IBV_WC_SEND) {
-                        auto* buffer = reinterpret_cast<SendBuffer*>(completion.wr_id);
-                        ReleaseSendBuffer(conn, buffer);
-                    }
-                    QueueDisconnect(conn);
-                    continue;
-                }
+void RdmaTransport::Impl::PollCq(Connection& conn) {
+    if (!conn.cq) {
+        return;
+    }
+    std::array<ibv_wc, kMaxPollBatch> wc{};
+    while (true) {
+        int count = ibv_poll_cq(conn.cq, static_cast<int>(wc.size()), wc.data());
+        if (count <= 0) {
+            break;
+        }
 
-                if (completion.opcode == IBV_WC_RECV) {
-                    auto* buffer = reinterpret_cast<RecvBuffer*>(completion.wr_id);
-                    if (!buffer) {
-                        continue;
-                    }
-                    HandleRecv(*buffer, completion.byte_len);
-                    PostRecv(conn, *buffer);
-                } else if (completion.opcode == IBV_WC_SEND) {
+        for (int i = 0; i < count; ++i) {
+            const auto& completion = wc[static_cast<size_t>(i)];
+            if (completion.status != IBV_WC_SUCCESS) {
+                SPDLOG_WARN(
+                    "RDMA completion error (peer={}, status={})", conn.peer_id,
+                    static_cast<int>(completion.status)
+                );
+                if (completion.opcode == IBV_WC_SEND) {
                     auto* buffer = reinterpret_cast<SendBuffer*>(completion.wr_id);
-                    if (!buffer) {
-                        continue;
-                    }
                     ReleaseSendBuffer(conn, buffer);
                 }
+                QueueDisconnect(conn);
+                continue;
+            }
+
+            if (completion.opcode == IBV_WC_RECV) {
+                auto* buffer = reinterpret_cast<RecvBuffer*>(completion.wr_id);
+                if (!buffer) {
+                    continue;
+                }
+                HandleRecv(*buffer, completion.byte_len);
+                PostRecv(conn, *buffer);
+            } else if (completion.opcode == IBV_WC_SEND) {
+                auto* buffer = reinterpret_cast<SendBuffer*>(completion.wr_id);
+                if (!buffer) {
+                    continue;
+                }
+                ReleaseSendBuffer(conn, buffer);
             }
         }
     }

@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <string>
 
+#include "codec.h"
+
 namespace raftpp::raftor::rpc {
 
 /// RDMA transport tuning parameters (rdma-core / RC).
@@ -16,7 +18,7 @@ struct RdmaConfig {
 
     /// Size of each registered buffer (bytes).
     /// Must be >= max_size_per_message + RPC framing overhead.
-    size_t buffer_size = 1024 * 1024;
+    size_t buffer_size = 1024 * 1024 + Codec::FrameOverhead();
 
     /// Completion queue depth per connection.
     size_t cq_depth = 1024;

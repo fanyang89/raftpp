@@ -78,6 +78,11 @@ Result<void> RaftorConfig::Validate() const {
         if (rdma.buffer_size < max_frame_size) {
             return std::unexpected(RaftError(ConfigErrorCode::RdmaConfigInvalid));
         }
+        const auto cq_needed =
+            static_cast<uint64_t>(rdma.recv_buffer_count) + rdma.send_buffer_count;
+        if (cq_needed > rdma.cq_depth) {
+            return std::unexpected(RaftError(ConfigErrorCode::RdmaConfigInvalid));
+        }
     }
     return {};
 }
