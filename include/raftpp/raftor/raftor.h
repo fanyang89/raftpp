@@ -76,7 +76,7 @@ class Raftor {
     ///
     /// This is the primary factory method. It creates:
     /// - WALStorage for persistence
-    /// - TcpTransport for networking
+    /// - CapnpTransport for networking (default)
     ///
     /// @param config The Raftor configuration
     /// @param state_machine The user's state machine implementation

@@ -8,8 +8,17 @@
 
 #include "raftpp/core/error.h"
 #include "raftpp/core/raft_config.h"
+#include "raftpp/raftor/rpc/rdma_config.h"
 
 namespace raftpp::raftor {
+
+/// Transport selection for Raftor RPC.
+enum class TransportKind {
+    /// Cap'n Proto RPC transport (default).
+    Capnp,
+    /// RDMA transport using rdma-core (RC).
+    Rdma,
+};
 
 /// Peer node configuration
 struct PeerConfig {
@@ -27,6 +36,12 @@ struct RaftorConfig {
 
     /// Address to listen on for incoming connections (e.g., "0.0.0.0:9000")
     std::string listen_addr;
+
+    /// RPC transport kind (default: Capnp)
+    TransportKind transport_kind = TransportKind::Capnp;
+
+    /// RDMA transport parameters (used when transport_kind == Rdma)
+    rpc::RdmaConfig rdma;
 
     /// Initial cluster configuration (for bootstrap)
     /// Should include this node and all other initial peers

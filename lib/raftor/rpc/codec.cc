@@ -50,6 +50,35 @@ std::vector<uint8_t> Codec::Encode(
     return buffer;
 }
 
+size_t Codec::FrameOverhead() {
+    static const size_t overhead = []() {
+        auto header = capnp_util::make<capnp::RpcHeader>();
+        auto header_builder = capnp_util::builder<capnp::RpcHeader>(header);
+        header_builder.setVersion(kVersion);
+        header_builder.setFromNode(0);
+        header_builder.setToNode(0);
+        header_builder.setRequestId(0);
+        header_builder.setCompression(capnp::CompressionType::COMPRESSION_NONE);
+        header_builder.setPayloadSize(0);
+        header_builder.setMsgType(capnp::MessageType::MSG_HUP);
+        auto header_bytes = capnp_util::toBytes(header);
+        return kPrefixSize + header_bytes.size();
+    }();
+    return overhead;
+}
+
+size_t Codec::MessageOverhead() {
+    static const size_t overhead = []() {
+        auto msg = capnp_util::make<msg::Message>();
+        auto builder = capnp_util::builder<msg::Message>(msg);
+        builder.setMsgType(MessageType::MSG_HUP);
+        builder.initEntries(0);
+        auto msg_bytes = capnp_util::toBytes(msg);
+        return msg_bytes.size();
+    }();
+    return overhead;
+}
+
 Result<size_t> Codec::FrameSize(std::span<const uint8_t> buffer, size_t max_size) {
     if (buffer.size() < kPrefixSize) {
         return 0;  // Incomplete prefix
