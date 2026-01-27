@@ -764,9 +764,9 @@ bool RdmaTransport::Impl::SetupConnectionResources(Connection& conn) {
         }
     }
 
-    conn.cq =
-        ibv_create_cq(conn.id->verbs, static_cast<int>(rdma_config_.cq_depth), &conn,
-                      conn.comp_channel, 0);
+    conn.cq = ibv_create_cq(
+        conn.id->verbs, static_cast<int>(rdma_config_.cq_depth), &conn, conn.comp_channel, 0
+    );
     if (!conn.cq) {
         SPDLOG_ERROR("ibv_create_cq failed: {}", strerror(errno));
         ReleaseConnectionResources(conn);
