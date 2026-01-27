@@ -232,6 +232,15 @@ void ConfigureFromEnv(LogLevel default_level) {
 }
 
 bool ShouldLog(opentelemetry::logs::Severity severity) {
+    EnsureProviderInstalled();
+    auto provider = opentelemetry::logs::Provider::GetLoggerProvider();
+    if (dynamic_cast<opentelemetry::logs::NoopLoggerProvider*>(provider.get()) != nullptr) {
+        return false;
+    }
+    if (dynamic_cast<SpdlogLoggerProvider*>(provider.get()) == nullptr) {
+        return true;
+    }
+
     auto backend = spdlog::default_logger();
     if (!backend) {
         return false;
