@@ -17,7 +17,7 @@ struct TransportConfig {
     /// This node's ID
     uint64_t node_id = 0;
 
-    /// Maximum message size in bytes (default: 64 MB)
+    /// Maximum framed message size in bytes (including transport framing).
     size_t max_message_size = 64 * 1024 * 1024;
 
     /// Timeout for establishing connections

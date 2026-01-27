@@ -36,6 +36,9 @@ class Codec {
     /// Default maximum message size (64 MB)
     static constexpr size_t kDefaultMaxMessageSize = 64 * 1024 * 1024;
 
+    /// Frame overhead size (prefix + RpcHeader bytes).
+    static size_t FrameOverhead();
+
     /// Encode a message to a buffer with frame header
     /// @param msg The message to encode
     /// @param from_node Source node ID

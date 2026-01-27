@@ -15,6 +15,7 @@ struct RdmaConfig {
     size_t send_buffer_count = 256;
 
     /// Size of each registered buffer (bytes).
+    /// Must be >= max_size_per_message + RPC framing overhead.
     size_t buffer_size = 1024 * 1024;
 
     /// Completion queue depth per connection.

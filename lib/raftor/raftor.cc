@@ -11,6 +11,7 @@
 
 #include "raftpp/logging.h"
 #include "raftpp/raftor/rpc/capnp_transport.h"
+#include "raftpp/raftor/rpc/codec.h"
 #include "raftpp/raftor/telemetry.h"
 #if defined(RAFTPP_WITH_RDMA) && RAFTPP_WITH_RDMA
 #include "raftpp/raftor/rpc/rdma_transport.h"
@@ -27,6 +28,15 @@ namespace raftpp::raftor {
 namespace {
 constexpr auto kLogSizeCheckMinInterval = std::chrono::seconds{1};
 constexpr auto kSnapshotRetryMinInterval = std::chrono::seconds{1};
+
+bool TryGetRdmaMaxFrameSize(uint64_t payload_max, size_t* max_frame_size) {
+    const size_t overhead = rpc::Codec::FrameOverhead();
+    if (payload_max > std::numeric_limits<size_t>::max() - overhead) {
+        return false;
+    }
+    *max_frame_size = static_cast<size_t>(payload_max) + overhead;
+    return true;
+}
 }  // namespace
 
 // === RaftorConfig implementation ===
@@ -61,7 +71,11 @@ Result<void> RaftorConfig::Validate() const {
             rdma.qp_depth > kMaxU32 || rdma.max_inline_data > kMaxU32) {
             return std::unexpected(RaftError(ConfigErrorCode::RdmaConfigInvalid));
         }
-        if (rdma.buffer_size < max_size_per_message) {
+        size_t max_frame_size = 0;
+        if (!TryGetRdmaMaxFrameSize(max_size_per_message, &max_frame_size)) {
+            return std::unexpected(RaftError(ConfigErrorCode::RdmaConfigInvalid));
+        }
+        if (rdma.buffer_size < max_frame_size) {
             return std::unexpected(RaftError(ConfigErrorCode::RdmaConfigInvalid));
         }
     }
@@ -876,6 +890,12 @@ Result<std::unique_ptr<Raftor>> Raftor::Create(
     transport_config.node_id = config.node_id;
     transport_config.connect_timeout = config.connect_timeout;
     transport_config.max_message_size = config.max_size_per_message;
+    if (config.transport_kind == TransportKind::Rdma) {
+        size_t max_frame_size = 0;
+        if (TryGetRdmaMaxFrameSize(config.max_size_per_message, &max_frame_size)) {
+            transport_config.max_message_size = max_frame_size;
+        }
+    }
 
     std::unique_ptr<rpc::Transport> transport;
     switch (config.transport_kind) {
