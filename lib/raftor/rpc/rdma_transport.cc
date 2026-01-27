@@ -57,21 +57,19 @@ bool CopySockaddr(const sockaddr* addr, sockaddr_storage* storage) {
     return false;
 }
 
-bool SockaddrEqual(const sockaddr_storage& left, const sockaddr_storage& right) {
+bool SockaddrAddressEqual(const sockaddr_storage& left, const sockaddr_storage& right) {
     if (left.ss_family != right.ss_family) {
         return false;
     }
     if (left.ss_family == AF_INET) {
         auto laddr = reinterpret_cast<const sockaddr_in*>(&left);
         auto raddr = reinterpret_cast<const sockaddr_in*>(&right);
-        return laddr->sin_port == raddr->sin_port &&
-            std::memcmp(&laddr->sin_addr, &raddr->sin_addr, sizeof(in_addr)) == 0;
+        return std::memcmp(&laddr->sin_addr, &raddr->sin_addr, sizeof(in_addr)) == 0;
     }
     if (left.ss_family == AF_INET6) {
         auto laddr = reinterpret_cast<const sockaddr_in6*>(&left);
         auto raddr = reinterpret_cast<const sockaddr_in6*>(&right);
-        return laddr->sin6_port == raddr->sin6_port &&
-            std::memcmp(&laddr->sin6_addr, &raddr->sin6_addr, sizeof(in6_addr)) == 0;
+        return std::memcmp(&laddr->sin6_addr, &raddr->sin6_addr, sizeof(in6_addr)) == 0;
     }
     return false;
 }
@@ -651,7 +649,7 @@ bool RdmaTransport::Impl::IsAllowedIncoming(rdma_cm_id* id) {
         if (!resolved) {
             continue;
         }
-        if (SockaddrEqual(remote, resolved.value())) {
+        if (SockaddrAddressEqual(remote, resolved.value())) {
             return true;
         }
     }
