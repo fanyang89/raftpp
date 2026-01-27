@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <exception>
 #include <string>
 #include <string_view>
 
@@ -38,9 +39,26 @@ inline void LogWithLocation(
     if (!ShouldLog(severity)) {
         return;
     }
-    auto message = fmt::vformat(format, fmt::make_format_args(args...));
     auto logger = GetLogger();
     if (!logger) {
+        return;
+    }
+    std::string message;
+    try {
+        message = fmt::vformat(format, fmt::make_format_args(args...));
+    } catch (const std::exception& ex) {
+        message = "Log formatting failed: ";
+        message.append(ex.what());
+        message.append(" format=");
+        message.append(format.data(), format.size());
+        logger->EmitLogRecord(
+            opentelemetry::logs::Severity::kError,
+            opentelemetry::nostd::string_view{message.data(), message.size()},
+            opentelemetry::common::MakeAttributes(
+                {{"code.filepath", opentelemetry::nostd::string_view{file}},
+                 {"code.lineno", static_cast<int64_t>(line)}}
+            )
+        );
         return;
     }
     logger->EmitLogRecord(
