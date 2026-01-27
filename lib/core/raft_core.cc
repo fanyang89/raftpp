@@ -1,8 +1,7 @@
 #include "raftpp/core/raft_core.h"
 
-#include <spdlog/spdlog.h>
-
 #include "raftpp/core/util.h"
+#include "raftpp/logging.h"
 
 namespace raftpp {
 

@@ -1,6 +1,7 @@
 #include "raftpp/raftor/wal/wal_storage.h"
 
-#include <spdlog/spdlog.h>
+#include "raftpp/logging.h"
+#include "raftpp/raftor/telemetry.h"
 
 namespace raftpp::raftor::wal {
 
@@ -104,14 +105,19 @@ void WALStorage::SetHardState(HardState&& hs) {
 
     auto result = wal_->SaveHardState(hs);
     if (!result) {
-        SPDLOG_ERROR("failed to save hard state: {}", result.error().ToString());
+        RAFTPP_LOG_ERROR("failed to save hard state: {}", result.error().ToString());
     }
 }
 
 Result<void> WALStorage::Append(const std::vector<Entry>& entries) {
     std::lock_guard lock(mutex_);
 
-    return wal_->Append(entries);
+    telemetry::ScopedSpan span("raftor.wal.append");
+    span.span()->SetAttribute("raft.entry.count", static_cast<int64_t>(entries.size()));
+
+    auto result = wal_->Append(entries);
+    telemetry::RecordErrorIf(span.span(), result);
+    return result;
 }
 
 Result<void> WALStorage::Compact(uint64_t compact_index) {
@@ -123,11 +129,19 @@ Result<void> WALStorage::Compact(uint64_t compact_index) {
 Result<void> WALStorage::ApplySnapshot(const Snapshot& snapshot) {
     std::lock_guard lock(mutex_);
 
+    telemetry::ScopedSpan span("raftor.wal.apply_snapshot");
+    auto snap_reader = capnp_util::reader<msg::Snapshot>(snapshot);
+    auto snap_meta = snap_reader.getMetadata();
+    span.span()->SetAttribute("raft.snapshot.index", static_cast<int64_t>(snap_meta.getIndex()));
+    span.span()->SetAttribute("raft.snapshot.term", static_cast<int64_t>(snap_meta.getTerm()));
+
     // Store snapshot in memory
     snapshot_ = CloneSnapshot(snapshot);
 
     // Apply to WAL
-    return wal_->ApplySnapshot(snapshot);
+    auto result = wal_->ApplySnapshot(snapshot);
+    telemetry::RecordErrorIf(span.span(), result);
+    return result;
 }
 
 void WALStorage::SetConfState(const ConfState& conf_state) {
@@ -135,14 +149,17 @@ void WALStorage::SetConfState(const ConfState& conf_state) {
 
     auto result = wal_->SaveConfState(conf_state);
     if (!result) {
-        SPDLOG_ERROR("failed to save conf state: {}", result.error().ToString());
+        RAFTPP_LOG_ERROR("failed to save conf state: {}", result.error().ToString());
     }
 }
 
 Result<void> WALStorage::Sync() {
     std::lock_guard lock(mutex_);
 
-    return wal_->Sync();
+    telemetry::ScopedSpan span("raftor.wal.sync");
+    auto result = wal_->Sync();
+    telemetry::RecordErrorIf(span.span(), result);
+    return result;
 }
 
 uint64_t WALStorage::LogSizeBytes() const {
@@ -165,7 +182,7 @@ std::vector<Entry> WALStorage::AllEntries() {
 
     auto result = wal_->ReadEntries(first, last + 1, std::nullopt);
     if (!result) {
-        SPDLOG_ERROR("failed to read all entries: {}", result.error().ToString());
+        RAFTPP_LOG_ERROR("failed to read all entries: {}", result.error().ToString());
         return {};
     }
 

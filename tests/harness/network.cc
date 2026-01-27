@@ -2,9 +2,8 @@
 
 #include <cassert>
 
-#include <spdlog/spdlog.h>
-
 #include "harness/test_util.h"
+#include "raftpp/logging.h"
 
 namespace raftpp {
 
@@ -129,7 +128,7 @@ void Network::Send(std::vector<Message> msgs) {
 
         for (auto& m : msgs) {
             auto reader = capnp_util::reader<msg::Message>(m);
-            SPDLOG_DEBUG(
+            RAFTPP_LOG_DEBUG(
                 "Network::Send: type={}, from={}, to={}", static_cast<int>(reader.getMsgType()),
                 reader.getFrom(), reader.getTo()
             );

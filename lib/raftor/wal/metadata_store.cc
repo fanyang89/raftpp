@@ -5,9 +5,8 @@
 
 #include <cstring>
 
-#include <spdlog/spdlog.h>
-
 #include "raftpp/core/capnp_util.h"
+#include "raftpp/logging.h"
 #include "raftpp/raftor/wal/crc32c.h"
 #include "raftpp/raftor/wal/record.h"
 
@@ -35,7 +34,7 @@ Result<void> MetadataStore::Initialize() {
         if (!result) {
             return result;
         }
-        SPDLOG_DEBUG("created default metadata file at {}", path_.string());
+        RAFTPP_LOG_DEBUG("created default metadata file at {}", path_.string());
     }
 
     return {};
@@ -151,7 +150,7 @@ Result<void> MetadataStore::AtomicWrite(const std::vector<uint8_t>& data) {
         ::close(dir_fd);
     }
 
-    SPDLOG_DEBUG("saved metadata to {}", path_.string());
+    RAFTPP_LOG_DEBUG("saved metadata to {}", path_.string());
 
     return {};
 }
@@ -300,7 +299,7 @@ Result<WALMetadata> MetadataStore::Deserialize(const std::vector<uint8_t>& data)
     }
 
     auto hs_reader = capnp_util::reader<msg::HardState>(meta.hard_state);
-    SPDLOG_DEBUG(
+    RAFTPP_LOG_DEBUG(
         "loaded metadata: first_index={}, snapshot_index={}, term={}, vote={}", meta.first_index,
         meta.snapshot_index, hs_reader.getTerm(), hs_reader.getVote()
     );

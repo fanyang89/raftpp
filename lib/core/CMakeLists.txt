@@ -5,6 +5,7 @@ add_library(raftpp
   error.cc
   inflights.cc
   joint_conf.cc
+  logging.cc
   majority_conf.cc
   memory_storage.cc
   progress_tracker.cc
@@ -24,5 +25,6 @@ target_include_directories(raftpp PUBLIC ${RAFTPP_INCLUDE_DIR})
 
 target_link_libraries(raftpp PUBLIC raftpp-proto)
 target_link_libraries(raftpp PUBLIC spdlog)
+target_link_libraries(raftpp PUBLIC opentelemetry-cpp::api)
 target_link_libraries(raftpp PUBLIC libassert::assert)
 target_link_libraries(raftpp PUBLIC absl::flat_hash_map absl::flat_hash_set)

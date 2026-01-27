@@ -1,8 +1,7 @@
 #include "raftpp/core/raw_node.h"
 
-#include <spdlog/spdlog.h>
-
 #include "raftpp/core/util.h"
+#include "raftpp/logging.h"
 
 namespace raftpp {
 
@@ -45,7 +44,7 @@ RawNode::RawNode(const Config& config, const std::shared_ptr<Storage>& store)
     ASSERT(config.id, "config.id must not be zero");
     prev_hs_ = raft_.hard_state();
     prev_ss_ = raft_.soft_state();
-    SPDLOG_INFO("RawNode created with id {}", raft_.id());
+    RAFTPP_LOG_INFO("RawNode created with id {}", raft_.id());
 }
 
 void RawNode::SetPriority(uint64_t priority) {

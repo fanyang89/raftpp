@@ -9,10 +9,11 @@
 #include <kj/async-io.h>
 #include <kj/async.h>
 #include <spdlog/fmt/fmt.h>
-#include <spdlog/spdlog.h>
 
 #include "raftpp/core/types.h"
+#include "raftpp/logging.h"
 #include "raftpp/raftor/rpc/codec.h"
+#include "raftpp/raftor/telemetry.h"
 
 using raftpp::RaftError;
 using raftpp::Result;
@@ -39,7 +40,7 @@ class RaftTransportImpl final : public raftpp::capnp::RaftTransport::Server {
 
     kj::Promise<void> sendSnapshot(SendSnapshotContext context) override {
         auto snapshot = context.getParams().getSnapshot();
-        SPDLOG_WARN("Received snapshot via RPC (index={})", snapshot.getMetadata().getIndex());
+        RAFTPP_LOG_WARN("Received snapshot via RPC (index={})", snapshot.getMetadata().getIndex());
         return kj::READY_NOW;
     }
 
@@ -62,12 +63,15 @@ CapnpTransport::~CapnpTransport() {
 }
 
 Result<void> CapnpTransport::Start() {
+    telemetry::ScopedSpan span("raftor.transport.start", config_.node_id);
+
     if (running_) {
         return {};
     }
 
     // Validate address format early.
     if (auto addr_result = ParseAddress(config_.listen_addr); !addr_result) {
+        telemetry::RecordErrorIf(span.span(), addr_result);
         return std::unexpected(addr_result.error());
     }
 
@@ -87,14 +91,17 @@ Result<void> CapnpTransport::Start() {
         if (rpc_thread_.joinable()) {
             rpc_thread_.join();
         }
+        telemetry::RecordErrorIf(span.span(), result);
         return result;
     }
 
-    SPDLOG_INFO("CapnpTransport started on {}", config_.listen_addr);
+    RAFTPP_LOG_INFO("CapnpTransport started on {}", config_.listen_addr);
     return result;
 }
 
 void CapnpTransport::Stop() {
+    telemetry::ScopedSpan span("raftor.transport.stop", config_.node_id);
+
     if (!running_ || stopped_) {
         return;
     }
@@ -106,7 +113,7 @@ void CapnpTransport::Stop() {
         rpc_thread_.join();
     }
 
-    SPDLOG_INFO("CapnpTransport stopped");
+    RAFTPP_LOG_INFO("CapnpTransport stopped");
 }
 
 void CapnpTransport::AddPeer(uint64_t id, const std::string& addr) {
@@ -120,6 +127,9 @@ void CapnpTransport::RemovePeer(uint64_t id) {
 }
 
 void CapnpTransport::Send(std::span<const Message> messages) {
+    telemetry::ScopedSpan span("raftor.transport.send", config_.node_id);
+    span.span()->SetAttribute("raft.message.count", static_cast<int64_t>(messages.size()));
+
     Map<uint64_t, std::vector<Message>> batches;
 
     for (const auto& msg : messages) {
@@ -134,6 +144,7 @@ void CapnpTransport::Send(std::span<const Message> messages) {
     if (batches.empty()) {
         return;
     }
+    span.span()->SetAttribute("raft.transport.batch_count", static_cast<int64_t>(batches.size()));
 
     std::vector<uint64_t> dropped_peers;
     {
@@ -234,7 +245,7 @@ void CapnpTransport::RpcLoop(std::promise<Result<void>> start_promise) {
         class SendTaskErrorHandler final : public kj::TaskSet::ErrorHandler {
           public:
             void taskFailed(kj::Exception&& exception) override {
-                SPDLOG_WARN("RPC send task failed: {}", exception.getDescription().cStr());
+                RAFTPP_LOG_WARN("RPC send task failed: {}", exception.getDescription().cStr());
             }
         } task_error_handler;
 
@@ -284,7 +295,7 @@ void CapnpTransport::RpcLoop(std::promise<Result<void>> start_promise) {
             }
 
             if (backpressure_peer != 0) {
-                SPDLOG_WARN(
+                RAFTPP_LOG_WARN(
                     "RPC send backpressure for peer {} (cap={})", backpressure_peer,
                     kMaxInFlightSendTasks
                 );
@@ -317,7 +328,7 @@ void CapnpTransport::RpcLoop(std::promise<Result<void>> start_promise) {
                             clients.emplace(batch.peer_id, RpcClient{std::move(client), cap, addr})
                                 .first;
                     } catch (const kj::Exception& e) {
-                        SPDLOG_ERROR(
+                        RAFTPP_LOG_ERROR(
                             "Failed to create RPC client for peer {} at {}: {}", batch.peer_id,
                             addr, e.getDescription().cStr()
                         );
@@ -345,7 +356,7 @@ void CapnpTransport::RpcLoop(std::promise<Result<void>> start_promise) {
                             if (inflight_send_tasks > 0) {
                                 --inflight_send_tasks;
                             }
-                            SPDLOG_WARN(
+                            RAFTPP_LOG_WARN(
                                 "RPC send to {} failed: {}", peer_id, e.getDescription().cStr()
                             );
                             clients.erase(peer_id);
@@ -378,14 +389,14 @@ void CapnpTransport::RpcLoop(std::promise<Result<void>> start_promise) {
         }
     } catch (const kj::Exception& e) {
         set_start(std::unexpected(RaftError(RpcErrorCode::BindFailed)));
-        SPDLOG_ERROR("Cap'n Proto RPC loop failed: {}", e.getDescription().cStr());
+        RAFTPP_LOG_ERROR("Cap'n Proto RPC loop failed: {}", e.getDescription().cStr());
         EnqueueError(0, e.getDescription().cStr());
     } catch (const std::exception& e) {
         set_start(std::unexpected(RaftError(RpcErrorCode::BindFailed)));
-        SPDLOG_ERROR("Cap'n Proto RPC loop failed: {}", e.what());
+        RAFTPP_LOG_ERROR("Cap'n Proto RPC loop failed: {}", e.what());
     } catch (...) {
         set_start(std::unexpected(RaftError(RpcErrorCode::BindFailed)));
-        SPDLOG_ERROR("Cap'n Proto RPC loop failed: unknown error");
+        RAFTPP_LOG_ERROR("Cap'n Proto RPC loop failed: unknown error");
     }
 }
 
@@ -411,7 +422,7 @@ void CapnpTransport::EnqueueMessage(Message msg) {
 void CapnpTransport::EnqueueError(uint64_t peer_id, std::string error) {
     std::lock_guard lock(error_mutex_);
     if (error_queue_.size() >= kMaxPendingErrorEvents) {
-        SPDLOG_WARN(
+        RAFTPP_LOG_WARN(
             "error_queue_ overflow (capacity={}) for peer {}, dropping error: {}",
             kMaxPendingErrorEvents, peer_id, error
         );

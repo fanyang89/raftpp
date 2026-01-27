@@ -50,6 +50,12 @@ tasks:
     cmds:
       - ./build/tests/datadriven/data-driven-tests
 
+  gh-review:
+    desc: Notify bot to review on the current PR
+    cmds:
+      - gh pr comment --body "@codex review"
+      - gh pr comment --body "@gemini-code-assist review"
+
   clean:
     desc: Clear the default build directory
     cmds:
