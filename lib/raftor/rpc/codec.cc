@@ -67,6 +67,18 @@ size_t Codec::FrameOverhead() {
     return overhead;
 }
 
+size_t Codec::MessageOverhead() {
+    static const size_t overhead = []() {
+        auto msg = capnp_util::make<msg::Message>();
+        auto builder = capnp_util::builder<msg::Message>(msg);
+        builder.setMsgType(MessageType::MSG_HUP);
+        builder.initEntries(0);
+        auto msg_bytes = capnp_util::toBytes(msg);
+        return msg_bytes.size();
+    }();
+    return overhead;
+}
+
 Result<size_t> Codec::FrameSize(std::span<const uint8_t> buffer, size_t max_size) {
     if (buffer.size() < kPrefixSize) {
         return 0;  // Incomplete prefix

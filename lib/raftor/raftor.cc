@@ -30,11 +30,16 @@ constexpr auto kLogSizeCheckMinInterval = std::chrono::seconds{1};
 constexpr auto kSnapshotRetryMinInterval = std::chrono::seconds{1};
 
 bool TryGetRdmaMaxFrameSize(uint64_t payload_max, size_t* max_frame_size) {
-    const size_t overhead = rpc::Codec::FrameOverhead();
-    if (payload_max > std::numeric_limits<size_t>::max() - overhead) {
+    const size_t frame_overhead = rpc::Codec::FrameOverhead();
+    const size_t message_overhead = rpc::Codec::MessageOverhead();
+    if (message_overhead > std::numeric_limits<size_t>::max() - frame_overhead) {
         return false;
     }
-    *max_frame_size = static_cast<size_t>(payload_max) + overhead;
+    const size_t total_overhead = frame_overhead + message_overhead;
+    if (payload_max > std::numeric_limits<size_t>::max() - total_overhead) {
+        return false;
+    }
+    *max_frame_size = static_cast<size_t>(payload_max) + total_overhead;
     return true;
 }
 }  // namespace

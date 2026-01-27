@@ -39,6 +39,9 @@ class Codec {
     /// Frame overhead size (prefix + RpcHeader bytes).
     static size_t FrameOverhead();
 
+    /// Payload overhead size for a message without entries.
+    static size_t MessageOverhead();
+
     /// Encode a message to a buffer with frame header
     /// @param msg The message to encode
     /// @param from_node Source node ID
