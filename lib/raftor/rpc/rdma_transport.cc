@@ -193,20 +193,6 @@ Result<void> RdmaTransport::Impl::Start() {
         return std::unexpected(RaftError(ConfigErrorCode::ListenAddressEmpty));
     }
 
-    if (rdma_config_.recv_buffer_count == 0 || rdma_config_.send_buffer_count == 0 ||
-        rdma_config_.buffer_size == 0 || rdma_config_.cq_depth == 0 || rdma_config_.qp_depth == 0) {
-        return std::unexpected(RaftError(ConfigErrorCode::RdmaConfigInvalid));
-    }
-
-    if (rdma_config_.recv_buffer_count > rdma_config_.qp_depth ||
-        rdma_config_.send_buffer_count > rdma_config_.qp_depth) {
-        return std::unexpected(RaftError(ConfigErrorCode::RdmaConfigInvalid));
-    }
-
-    if (config_.max_message_size > rdma_config_.buffer_size) {
-        return std::unexpected(RaftError(ConfigErrorCode::RdmaConfigInvalid));
-    }
-
     running_ = true;
     stopped_ = false;
 
@@ -614,12 +600,16 @@ void RdmaTransport::Impl::HandleDisconnected(rdma_cm_id* id) {
 
 void RdmaTransport::Impl::HandleConnectError(rdma_cm_id* id, const char* reason) {
     if (!id) {
-        SPDLOG_WARN("RDMA connect error (peer=0, reason={})", reason);
+        SPDLOG_INFO("RDMA connect error (peer=0, reason={})", reason);
         return;
     }
     auto* conn = static_cast<Connection*>(id->context);
     uint64_t peer_id = conn ? conn->peer_id : 0;
-    SPDLOG_WARN("RDMA connect error (peer={}, reason={})", peer_id, reason);
+    if (peer_id == 0) {
+        SPDLOG_INFO("RDMA connect error (peer={}, reason={})", peer_id, reason);
+    } else {
+        SPDLOG_WARN("RDMA connect error (peer={}, reason={})", peer_id, reason);
+    }
 
     if (conn) {
         RemoveConnection(*conn);

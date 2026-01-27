@@ -3,6 +3,7 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <limits>
 #include <mutex>
 #include <thread>
 
@@ -49,6 +50,15 @@ Result<void> RaftorConfig::Validate() const {
             return std::unexpected(RaftError(ConfigErrorCode::RdmaConfigInvalid));
         }
         if (rdma.recv_buffer_count > rdma.qp_depth || rdma.send_buffer_count > rdma.qp_depth) {
+            return std::unexpected(RaftError(ConfigErrorCode::RdmaConfigInvalid));
+        }
+        if (rdma.max_inline_data > rdma.buffer_size) {
+            return std::unexpected(RaftError(ConfigErrorCode::RdmaConfigInvalid));
+        }
+        constexpr auto kMaxU32 = std::numeric_limits<uint32_t>::max();
+        if (rdma.buffer_size > kMaxU32 || rdma.recv_buffer_count > kMaxU32 ||
+            rdma.send_buffer_count > kMaxU32 || rdma.cq_depth > kMaxU32 ||
+            rdma.qp_depth > kMaxU32 || rdma.max_inline_data > kMaxU32) {
             return std::unexpected(RaftError(ConfigErrorCode::RdmaConfigInvalid));
         }
         if (rdma.buffer_size < max_size_per_message) {
@@ -876,6 +886,7 @@ Result<std::unique_ptr<Raftor>> Raftor::Create(
 #if RAFTPP_WITH_RDMA
             transport = std::make_unique<rpc::RdmaTransport>(transport_config, config.rdma);
 #else
+            spdlog::warn("RDMA transport requested but not enabled at build time");
             return std::unexpected(RaftError(ConfigErrorCode::RdmaNotEnabled));
 #endif
             break;
