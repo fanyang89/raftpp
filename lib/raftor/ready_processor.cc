@@ -265,7 +265,18 @@ Result<void> ReadyProcessor::ApplyEntry(const Entry& entry) {
                 change.getChangeType() == ConfChangeType::ADD_LEARNER_NODE) {
                 // Note: address needs to be provided via context or external mechanism
                 // For now, we skip adding - the user should call AddNode explicitly
-                RAFTPP_LOG_INFO("Node {} added to configuration", change.getNodeId());
+                auto ctx = cc_reader.getContext();
+                std::string addr;
+                if (ctx.size() > 0) {
+                    addr.assign(reinterpret_cast<const char*>(ctx.begin()), ctx.size());
+                }
+                if (addr.empty()) {
+                    RAFTPP_LOG_INFO("Node {} added to configuration", change.getNodeId());
+                } else {
+                    RAFTPP_LOG_INFO(
+                        "Node {} added to configuration (address: {})", change.getNodeId(), addr
+                    );
+                }
             } else if (change.getChangeType() == ConfChangeType::REMOVE_NODE) {
                 transport_.RemovePeer(change.getNodeId());
                 RAFTPP_LOG_INFO("Node {} removed from configuration", change.getNodeId());

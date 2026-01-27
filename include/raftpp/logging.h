@@ -73,19 +73,31 @@ inline void LogWithLocation(
 
 }  // namespace raftpp::logging
 
-#define RAFTPP_LOG_DEBUG(...)                                                    \
-    ::raftpp::logging::LogWithLocation(                                          \
-        ::opentelemetry::logs::Severity::kDebug, __FILE__, __LINE__, __VA_ARGS__ \
-    )
-#define RAFTPP_LOG_INFO(...)                                                    \
-    ::raftpp::logging::LogWithLocation(                                         \
-        ::opentelemetry::logs::Severity::kInfo, __FILE__, __LINE__, __VA_ARGS__ \
-    )
-#define RAFTPP_LOG_WARN(...)                                                    \
-    ::raftpp::logging::LogWithLocation(                                         \
-        ::opentelemetry::logs::Severity::kWarn, __FILE__, __LINE__, __VA_ARGS__ \
-    )
-#define RAFTPP_LOG_ERROR(...)                                                    \
-    ::raftpp::logging::LogWithLocation(                                          \
-        ::opentelemetry::logs::Severity::kError, __FILE__, __LINE__, __VA_ARGS__ \
-    )
+#define RAFTPP_LOG_DEBUG(...)                                                      \
+    do {                                                                           \
+        if (::raftpp::logging::ShouldLog(::opentelemetry::logs::Severity::kDebug)) \
+            ::raftpp::logging::LogWithLocation(                                    \
+                ::opentelemetry::logs::Severity::kDebug, __FILE__, __LINE__, __VA_ARGS__ \
+            );                                                                     \
+    } while (0)
+#define RAFTPP_LOG_INFO(...)                                                      \
+    do {                                                                          \
+        if (::raftpp::logging::ShouldLog(::opentelemetry::logs::Severity::kInfo)) \
+            ::raftpp::logging::LogWithLocation(                                   \
+                ::opentelemetry::logs::Severity::kInfo, __FILE__, __LINE__, __VA_ARGS__ \
+            );                                                                    \
+    } while (0)
+#define RAFTPP_LOG_WARN(...)                                                      \
+    do {                                                                          \
+        if (::raftpp::logging::ShouldLog(::opentelemetry::logs::Severity::kWarn)) \
+            ::raftpp::logging::LogWithLocation(                                   \
+                ::opentelemetry::logs::Severity::kWarn, __FILE__, __LINE__, __VA_ARGS__ \
+            );                                                                    \
+    } while (0)
+#define RAFTPP_LOG_ERROR(...)                                                      \
+    do {                                                                           \
+        if (::raftpp::logging::ShouldLog(::opentelemetry::logs::Severity::kError)) \
+            ::raftpp::logging::LogWithLocation(                                    \
+                ::opentelemetry::logs::Severity::kError, __FILE__, __LINE__, __VA_ARGS__ \
+            );                                                                     \
+    } while (0)

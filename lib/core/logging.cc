@@ -4,6 +4,7 @@
 #include <mutex>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 #include <opentelemetry/common/attribute_value.h>
 #include <opentelemetry/logs/logger.h>
@@ -91,9 +92,12 @@ class SpdlogLogRecord final : public opentelemetry::logs::LogRecord {
     }
 
     void SetAttribute(
-        opentelemetry::nostd::string_view /*key*/,
-        const opentelemetry::common::AttributeValue& /*value*/
-    ) noexcept override {}
+        opentelemetry::nostd::string_view key, const opentelemetry::common::AttributeValue& value
+    ) noexcept override {
+        attributes_.emplace_back(
+            std::string(key.data(), key.size()), AttributeToString(value)
+        );
+    }
 
     void SetEventId(int64_t /*id*/, opentelemetry::nostd::string_view /*name*/) noexcept override {}
 
@@ -106,10 +110,14 @@ class SpdlogLogRecord final : public opentelemetry::logs::LogRecord {
     [[nodiscard]] opentelemetry::logs::Severity severity() const { return severity_; }
 
     [[nodiscard]] const std::string& body() const { return body_; }
+    [[nodiscard]] const std::vector<std::pair<std::string, std::string>>& attributes() const {
+        return attributes_;
+    }
 
   private:
     opentelemetry::logs::Severity severity_ = opentelemetry::logs::Severity::kInfo;
     std::string body_;
+    std::vector<std::pair<std::string, std::string>> attributes_;
 };
 
 class SpdlogLogger final : public opentelemetry::logs::Logger {
@@ -140,7 +148,19 @@ class SpdlogLogger final : public opentelemetry::logs::Logger {
         if (!backend_->should_log(level)) {
             return;
         }
-        backend_->log(level, spdlog_record->body());
+        if (spdlog_record->attributes().empty()) {
+            backend_->log(level, spdlog_record->body());
+            return;
+        }
+
+        std::string message = spdlog_record->body();
+        for (const auto& [key, value] : spdlog_record->attributes()) {
+            message.append(" ");
+            message.append(key);
+            message.append("=");
+            message.append(value);
+        }
+        backend_->log(level, message);
     }
 
   private:
