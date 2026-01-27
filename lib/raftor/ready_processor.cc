@@ -2,7 +2,8 @@
 
 #include <algorithm>
 
-#include <spdlog/spdlog.h>
+#include "raftpp/logging.h"
+#include "raftpp/raftor/telemetry.h"
 
 namespace raftpp::raftor {
 
@@ -23,21 +24,48 @@ Result<bool> ReadyProcessor::Process() {
 
     Ready rd = raw_node_.GetReady();
 
+    telemetry::ScopedSpan span("raftor.ready.process");
+    span.span()->SetAttribute("raft.ready.number", static_cast<int64_t>(rd.number));
+    span.span()->SetAttribute("raft.ready.entries", static_cast<int64_t>(rd.entries.size()));
+    span.span()->SetAttribute(
+        "raft.ready.committed_entries", static_cast<int64_t>(rd.light.committed_entries.size())
+    );
+    span.span()->SetAttribute(
+        "raft.ready.light_messages", static_cast<int64_t>(rd.light.messages.size())
+    );
+    span.span()->SetAttribute(
+        "raft.ready.read_states", static_cast<int64_t>(rd.read_states.size())
+    );
+    span.span()->SetAttribute("raft.ready.must_sync", rd.must_sync);
+    span.span()->SetAttribute("raft.ready.has_snapshot", rd.snapshot != nullptr);
+    if (rd.ss) {
+        span.span()->SetAttribute("raft.role", static_cast<int64_t>(rd.ss->raft_state));
+        span.span()->SetAttribute("raft.leader_id", static_cast<int64_t>(rd.ss->leader_id));
+    }
+    if (rd.hs) {
+        auto hs_reader = capnp_util::reader<msg::HardState>(*rd.hs);
+        span.span()->SetAttribute("raft.term", static_cast<int64_t>(hs_reader.getTerm()));
+        span.span()->SetAttribute("raft.commit", static_cast<int64_t>(hs_reader.getCommit()));
+    }
+
     // Check for leadership changes before processing
     CheckLeadershipChange(rd);
 
     // 1. Persist entries to WAL
     if (auto result = PersistEntries(rd); !result) {
+        telemetry::RecordErrorIf(span.span(), result);
         return result.error();
     }
 
     // 2. Persist hard state
     if (auto result = PersistHardState(rd); !result) {
+        telemetry::RecordErrorIf(span.span(), result);
         return result.error();
     }
 
     // 3. Apply snapshot if present
     if (auto result = ApplySnapshot(rd); !result) {
+        telemetry::RecordErrorIf(span.span(), result);
         return result.error();
     }
 
@@ -49,6 +77,7 @@ Result<bool> ReadyProcessor::Process() {
 
     // 5. Apply committed entries to state machine
     if (auto result = ApplyCommittedEntries(rd.light.committed_entries); !result) {
+        telemetry::RecordErrorIf(span.span(), result);
         return result.error();
     }
 
@@ -69,8 +98,12 @@ Result<void> ReadyProcessor::PersistEntries(const Ready& rd) {
         return {};
     }
 
+    telemetry::ScopedSpan span("raftor.ready.persist_entries");
+    span.span()->SetAttribute("raft.entry.count", static_cast<int64_t>(rd.entries.size()));
+
     if (auto result = storage_->Append(rd.entries); !result) {
-        spdlog::error("Failed to persist entries: {}", result.error().ToString());
+        RAFTPP_LOG_ERROR("Failed to persist entries: {}", result.error().ToString());
+        telemetry::RecordErrorIf(span.span(), result);
         return std::unexpected(RaftError(RaftErrorCode::ProposalDropped));
     }
 
@@ -82,13 +115,19 @@ Result<void> ReadyProcessor::PersistHardState(const Ready& rd) {
         return {};
     }
 
+    telemetry::ScopedSpan span("raftor.ready.persist_hard_state");
+    auto hs_reader = capnp_util::reader<msg::HardState>(*rd.hs);
+    span.span()->SetAttribute("raft.term", static_cast<int64_t>(hs_reader.getTerm()));
+    span.span()->SetAttribute("raft.commit", static_cast<int64_t>(hs_reader.getCommit()));
+
     // SetHardState doesn't return error in current implementation
     storage_->SetHardState(CloneHardState(*rd.hs));
 
     // Sync if required
     if (rd.must_sync) {
         if (auto result = storage_->Sync(); !result) {
-            spdlog::error("Failed to sync storage: {}", result.error().ToString());
+            RAFTPP_LOG_ERROR("Failed to sync storage: {}", result.error().ToString());
+            telemetry::RecordErrorIf(span.span(), result);
             return std::unexpected(RaftError(RaftErrorCode::ProposalDropped));
         }
     }
@@ -108,20 +147,26 @@ Result<void> ReadyProcessor::ApplySnapshot(const Ready& rd) {
         return {};  // No snapshot
     }
 
-    spdlog::info(
+    telemetry::ScopedSpan span("raftor.ready.apply_snapshot");
+    span.span()->SetAttribute("raft.snapshot.index", static_cast<int64_t>(snap_meta.getIndex()));
+    span.span()->SetAttribute("raft.snapshot.term", static_cast<int64_t>(snap_meta.getTerm()));
+
+    RAFTPP_LOG_INFO(
         "Applying snapshot at index {} term {}", snap_meta.getIndex(), snap_meta.getTerm()
     );
 
     // First restore to state machine
     auto snapshot_data = ToSnapshotData(snapshot);
     if (auto result = state_machine_.RestoreSnapshot(snapshot_data); !result) {
-        spdlog::error("Failed to restore snapshot to state machine");
+        RAFTPP_LOG_ERROR("Failed to restore snapshot to state machine");
+        telemetry::RecordErrorIf(span.span(), result);
         return result.error();
     }
 
     // Then apply to storage
     if (auto result = storage_->ApplySnapshot(snapshot); !result) {
-        spdlog::error("Failed to apply snapshot to storage: {}", result.error().ToString());
+        RAFTPP_LOG_ERROR("Failed to apply snapshot to storage: {}", result.error().ToString());
+        telemetry::RecordErrorIf(span.span(), result);
         return std::unexpected(RaftError(RaftErrorCode::ProposalDropped));
     }
 
@@ -136,20 +181,31 @@ void ReadyProcessor::SendMessages(const std::vector<Message>& messages) {
         return;
     }
 
+    telemetry::ScopedSpan span("raftor.ready.send_messages");
+    span.span()->SetAttribute("raft.message.count", static_cast<int64_t>(messages.size()));
+
     transport_.Send(messages);
 }
 
 Result<void> ReadyProcessor::ApplyCommittedEntries(const std::vector<Entry>& entries) {
+    telemetry::ScopedSpan span("raftor.ready.apply_entries");
+    span.span()->SetAttribute("raft.entry.count", static_cast<int64_t>(entries.size()));
+
+    bool has_error = false;
     for (const auto& entry : entries) {
         if (auto result = ApplyEntry(entry); !result) {
             // Log but continue - state machine errors shouldn't stop Raft
             auto entry_reader = capnp_util::reader<msg::Entry>(entry);
-            spdlog::warn(
+            RAFTPP_LOG_WARN(
                 "Failed to apply entry at index {}: {}", entry_reader.getIndex(),
                 result.error().ToString()
             );
+            has_error = true;
         }
         applied_index_ = capnp_util::reader<msg::Entry>(entry).getIndex();
+    }
+    if (has_error) {
+        telemetry::RecordError(span.span(), "committed entry apply failed");
     }
     MaybeCompletePendingReads();
     return {};
@@ -209,10 +265,10 @@ Result<void> ReadyProcessor::ApplyEntry(const Entry& entry) {
                 change.getChangeType() == ConfChangeType::ADD_LEARNER_NODE) {
                 // Note: address needs to be provided via context or external mechanism
                 // For now, we skip adding - the user should call AddNode explicitly
-                spdlog::info("Node {} added to configuration", change.getNodeId());
+                RAFTPP_LOG_INFO("Node {} added to configuration", change.getNodeId());
             } else if (change.getChangeType() == ConfChangeType::REMOVE_NODE) {
                 transport_.RemovePeer(change.getNodeId());
-                spdlog::info("Node {} removed from configuration", change.getNodeId());
+                RAFTPP_LOG_INFO("Node {} removed from configuration", change.getNodeId());
             }
         }
 
@@ -256,6 +312,12 @@ Result<void> ReadyProcessor::ApplyEntry(const Entry& entry) {
 }
 
 void ReadyProcessor::ProcessLightReady(const LightReady& light_rd) {
+    telemetry::ScopedSpan span("raftor.ready.process_light");
+    span.span()->SetAttribute("raft.message.count", static_cast<int64_t>(light_rd.messages.size()));
+    span.span()->SetAttribute(
+        "raft.entry.count", static_cast<int64_t>(light_rd.committed_entries.size())
+    );
+
     // Send additional messages
     SendMessages(light_rd.messages);
 
@@ -263,10 +325,11 @@ void ReadyProcessor::ProcessLightReady(const LightReady& light_rd) {
     for (const auto& entry : light_rd.committed_entries) {
         if (auto result = ApplyEntry(entry); !result) {
             auto entry_reader = capnp_util::reader<msg::Entry>(entry);
-            spdlog::warn(
+            RAFTPP_LOG_WARN(
                 "Failed to apply entry at index {}: {}", entry_reader.getIndex(),
                 result.error().ToString()
             );
+            telemetry::RecordErrorIf(span.span(), result);
         }
         applied_index_ = capnp_util::reader<msg::Entry>(entry).getIndex();
     }
@@ -282,6 +345,9 @@ void ReadyProcessor::EnqueueReadStates(const std::vector<ReadState>& read_states
     if (read_states.empty()) {
         return;
     }
+
+    telemetry::ScopedSpan span("raftor.ready.enqueue_read_states");
+    span.span()->SetAttribute("raft.read_states.count", static_cast<int64_t>(read_states.size()));
 
     pending_reads_.reserve(pending_reads_.size() + read_states.size());
     for (const auto& rs : read_states) {
@@ -331,7 +397,14 @@ void ReadyProcessor::CheckLeadershipChange(const Ready& rd) {
         (rd.hs && prev_term_ != hs_term)) {
         uint64_t term = rd.hs ? capnp_util::reader<msg::HardState>(*rd.hs).getTerm() : prev_term_;
 
-        spdlog::info(
+        telemetry::ScopedSpan span("raftor.leadership_change");
+        span.span()->SetAttribute("raft.role", static_cast<int64_t>(ss.raft_state));
+        span.span()->SetAttribute("raft.leader_id", static_cast<int64_t>(ss.leader_id));
+        span.span()->SetAttribute("raft.term", static_cast<int64_t>(term));
+        span.span()->SetAttribute("raft.was_leader", was_leader);
+        span.span()->SetAttribute("raft.is_leader", is_leader);
+
+        RAFTPP_LOG_INFO(
             "Leadership change: role={}, leader={}, term={}", static_cast<int>(ss.raft_state),
             ss.leader_id, term
         );

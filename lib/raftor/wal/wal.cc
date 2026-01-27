@@ -1,8 +1,7 @@
 #include "raftpp/raftor/wal/wal.h"
 
-#include <spdlog/spdlog.h>
-
 #include "raftpp/core/capnp_util.h"
+#include "raftpp/logging.h"
 #include "raftpp/raftor/wal/record.h"
 
 namespace raftpp::raftor::wal {
@@ -10,7 +9,7 @@ namespace raftpp::raftor::wal {
 WAL::~WAL() {
     auto result = Close();
     if (!result) {
-        SPDLOG_ERROR("failed to close WAL: {}", result.error().ToString());
+        RAFTPP_LOG_ERROR("failed to close WAL: {}", result.error().ToString());
     }
 }
 
@@ -59,7 +58,7 @@ Result<void> WAL::Initialize(const WALConfig& config) {
         return recover_result;
     }
 
-    SPDLOG_INFO(
+    RAFTPP_LOG_INFO(
         "WAL opened at {}: first_index={}, last_index={}, term={}, vote={}", config_.dir.string(),
         first_index_, LastIndexUnlocked(),
         capnp_util::reader<msg::HardState>(hard_state_).getTerm(),
@@ -91,7 +90,7 @@ Result<void> WAL::Recover() {
         if (segment) {
             auto result = ReplaySegment(segment);
             if (!result) {
-                SPDLOG_WARN(
+                RAFTPP_LOG_WARN(
                     "failed to replay segment {}: {}", seg_info.segment_id,
                     result.error().ToString()
                 );
@@ -111,7 +110,7 @@ Result<void> WAL::Recover() {
         );
     }
 
-    SPDLOG_DEBUG(
+    RAFTPP_LOG_DEBUG(
         "WAL recovery complete: {} entries from index {} to {}", index_.size(), first_index_,
         LastIndexUnlocked()
     );
@@ -127,7 +126,7 @@ Result<void> WAL::ReplaySegment(Segment* segment) {
         // Read record header
         if (offset + sizeof(RecordHeader) > segment_size) {
             // Incomplete header - truncate
-            SPDLOG_WARN("incomplete record header at offset {}, truncating", offset);
+            RAFTPP_LOG_WARN("incomplete record header at offset {}, truncating", offset);
             auto result = segment->Truncate(offset);
             if (!result) {
                 return result;
@@ -156,7 +155,7 @@ Result<void> WAL::ReplaySegment(Segment* segment) {
         uint32_t total_size = header.TotalSize();
         if (offset + total_size > segment_size) {
             // Incomplete record - truncate
-            SPDLOG_WARN("incomplete record at offset {}, truncating", offset);
+            RAFTPP_LOG_WARN("incomplete record at offset {}, truncating", offset);
             auto result = segment->Truncate(offset);
             if (!result) {
                 return result;
@@ -174,7 +173,7 @@ Result<void> WAL::ReplaySegment(Segment* segment) {
         RecordParser parser(*record_data);
         if (!parser.IsValid()) {
             // CRC mismatch - truncate
-            SPDLOG_WARN("CRC mismatch at offset {}, truncating", offset);
+            RAFTPP_LOG_WARN("CRC mismatch at offset {}, truncating", offset);
             auto result = segment->Truncate(offset);
             if (!result) {
                 return result;
@@ -195,7 +194,7 @@ Result<void> WAL::ReplaySegment(Segment* segment) {
                         kj::ArrayPtr<const ::capnp::word>(words, word_count)
                     );
                 } catch (...) {
-                    SPDLOG_WARN("failed to parse entry at offset {}", offset);
+                    RAFTPP_LOG_WARN("failed to parse entry at offset {}", offset);
                     break;
                 }
 
@@ -683,13 +682,13 @@ Result<void> WAL::Compact(uint64_t compact_index) {
     for (uint64_t seg_id : segments_to_remove) {
         auto remove_result = segment_manager_->RemoveSegment(seg_id);
         if (!remove_result) {
-            SPDLOG_WARN(
+            RAFTPP_LOG_WARN(
                 "failed to remove segment {}: {}", seg_id, remove_result.error().ToString()
             );
         }
     }
 
-    SPDLOG_DEBUG("compacted WAL to index {}", compact_index);
+    RAFTPP_LOG_DEBUG("compacted WAL to index {}", compact_index);
 
     return {};
 }
@@ -753,7 +752,9 @@ Result<void> WAL::ApplySnapshot(const Snapshot& snapshot) {
     // Remove all segments (they're all before the snapshot)
     auto close_result = segment_manager_->CloseAll();
     if (!close_result) {
-        SPDLOG_WARN("failed to close segments after snapshot: {}", close_result.error().ToString());
+        RAFTPP_LOG_WARN(
+            "failed to close segments after snapshot: {}", close_result.error().ToString()
+        );
     }
 
     // Re-initialize segment manager
@@ -762,7 +763,7 @@ Result<void> WAL::ApplySnapshot(const Snapshot& snapshot) {
         return init_result;
     }
 
-    SPDLOG_INFO("applied snapshot at index={}, term={}", snapshot_index_, snapshot_term_);
+    RAFTPP_LOG_INFO("applied snapshot at index={}, term={}", snapshot_index_, snapshot_term_);
 
     return {};
 }
@@ -784,14 +785,14 @@ Result<void> WAL::Close() {
     if (segment_manager_) {
         auto flush_result = FlushWriteBuffer();
         if (!flush_result) {
-            SPDLOG_WARN(
+            RAFTPP_LOG_WARN(
                 "failed to flush write buffer on close: {}", flush_result.error().ToString()
             );
         }
 
         auto sync_result = segment_manager_->SyncAll();
         if (!sync_result) {
-            SPDLOG_WARN("failed to sync on close: {}", sync_result.error().ToString());
+            RAFTPP_LOG_WARN("failed to sync on close: {}", sync_result.error().ToString());
         }
 
         auto close_result = segment_manager_->CloseAll();

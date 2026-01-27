@@ -8,8 +8,7 @@
 #include <cstring>
 #include <regex>
 
-#include <spdlog/spdlog.h>
-
+#include "raftpp/logging.h"
 #include "raftpp/raftor/wal/record.h"
 
 #if !defined(RAFTPP_HAS_LIBURING)
@@ -357,7 +356,7 @@ Result<std::unique_ptr<Segment>> Segment::Create(
     if (preallocate && preallocate_size > 0) {
 #ifdef __linux__
         if (::posix_fallocate(fd, 0, preallocate_size) != 0) {
-            SPDLOG_WARN("posix_fallocate failed: {}", strerror(errno));
+            RAFTPP_LOG_WARN("posix_fallocate failed: {}", strerror(errno));
         }
 #endif
     }
@@ -397,7 +396,7 @@ Result<std::unique_ptr<Segment>> Segment::Create(
     segment->file_size_ = static_cast<uint64_t>(st.st_size);
     segment->path_ = path;
 
-    SPDLOG_DEBUG("created segment {} with first_index={}", path.string(), first_index);
+    RAFTPP_LOG_DEBUG("created segment {} with first_index={}", path.string(), first_index);
 
     return segment;
 }
@@ -448,7 +447,7 @@ Result<std::unique_ptr<Segment>> Segment::Open(
     segment->file_size_ = static_cast<uint64_t>(st.st_size);
     segment->path_ = path;
 
-    SPDLOG_DEBUG(
+    RAFTPP_LOG_DEBUG(
         "opened segment {} with segment_id={}, first_index={}, size={}", path.string(),
         header.segment_id, header.first_index, st.st_size
     );
@@ -508,7 +507,7 @@ Result<void> Segment::Truncate(uint64_t offset) {
 
     write_offset_ = offset;
     file_size_ = offset;
-    SPDLOG_DEBUG("truncated segment {} to offset {}", path_.string(), offset);
+    RAFTPP_LOG_DEBUG("truncated segment {} to offset {}", path_.string(), offset);
 
     return {};
 }

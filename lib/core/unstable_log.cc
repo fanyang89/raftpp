@@ -3,9 +3,9 @@
 #include <cstddef>
 
 #include <libassert/assert.hpp>
-#include <spdlog/spdlog.h>
 
 #include "raftpp/core/util.h"
+#include "raftpp/logging.h"
 
 namespace raftpp {
 

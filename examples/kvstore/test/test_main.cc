@@ -1,12 +1,10 @@
 #define DOCTEST_CONFIG_IMPLEMENT
-#include <spdlog/cfg/env.h>
-#include <spdlog/spdlog.h>
+#include "raftpp/logging.h"
 
 #include "doctest/doctest.h"
 
 int main(const int argc, char** argv) {
-    spdlog::set_level(spdlog::level::warn);
-    spdlog::cfg::load_env_levels();
+    raftpp::logging::ConfigureFromEnv(raftpp::logging::LogLevel::kWarn);
 
     doctest::Context context;
     context.applyCommandLine(argc, argv);

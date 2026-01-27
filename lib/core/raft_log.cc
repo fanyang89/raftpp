@@ -1,9 +1,8 @@
 #include "raftpp/core/raft_log.h"
 
-#include <spdlog/spdlog.h>
-
 #include "raftpp/core/types.h"
 #include "raftpp/core/util.h"
+#include "raftpp/logging.h"
 
 namespace raftpp {
 
@@ -73,7 +72,7 @@ uint64_t RaftLog::FindConflict(const std::vector<Entry>& entries) const {
         auto e_reader = capnp_util::reader<msg::Entry>(e);
         if (!MatchTerm(e_reader.getIndex(), e_reader.getTerm())) {
             if (e_reader.getIndex() <= LastIndex()) {
-                SPDLOG_INFO(
+                RAFTPP_LOG_INFO(
                     "found conflict at index({}), existing_term={}, "
                     "conflicting_term={}",
                     e_reader.getIndex(), UnwrapOr(Term(e_reader.getIndex()), uint64_t{0}),
@@ -105,7 +104,7 @@ bool RaftLog::MaybePersist(const uint64_t index, const uint64_t term) {
     }
 
     if (index > persisted_ && index < first_update_index && store_->Term(index) == term) {
-        SPDLOG_DEBUG("persisted index {}", index);
+        RAFTPP_LOG_DEBUG("persisted index {}", index);
         persisted_ = index;
         return true;
     }
@@ -126,7 +125,7 @@ bool RaftLog::MaybePersistSnapshot(const uint64_t index) {
         PANIC("snapshot's index {} >= offset {}", index, unstable_.offset());
     }
 
-    SPDLOG_DEBUG("snapshot persisted index {}", index);
+    RAFTPP_LOG_DEBUG("snapshot persisted index {}", index);
     persisted_ = index;
     return true;
 }
@@ -144,7 +143,9 @@ Result<RaftLog::MaybeAppendResult> RaftLog::MaybeAppend(
     const std::vector<Entry>& entries
 ) {
     if (!MatchTerm(idx, term)) {
-        SPDLOG_INFO("MaybeAppend failed: idx={}, term={}, last_index={}", idx, term, LastIndex());
+        RAFTPP_LOG_INFO(
+            "MaybeAppend failed: idx={}, term={}, last_index={}", idx, term, LastIndex()
+        );
         return MaybeAppendResult{false, 0, 0};
     }
 
@@ -185,7 +186,7 @@ uint64_t RaftLog::Append(const std::vector<Entry>& entries) {
     uint64_t after = first_reader.getIndex() - 1;
     if (after < committed_) {
         // This should not happen in normal circumstances, but we adjust for robustness
-        SPDLOG_WARN(
+        RAFTPP_LOG_WARN(
             "after {} is out of range [committed {}], resetting committed", after, committed_
         );
         committed_ = after;
@@ -332,7 +333,7 @@ std::pair<uint64_t, std::optional<uint64_t>> RaftLog::FindConflictByTerm(
     auto conflict_index = index;
 
     if (const auto last_index = LastIndex(); index > last_index) {
-        SPDLOG_WARN(
+        RAFTPP_LOG_WARN(
             "index({}) is out of range [0, last_index({})] in "
             "find_conflict_by_term",
             index, last_index
@@ -420,7 +421,7 @@ bool RaftLog::IsUpToDate(const uint64_t last_index, const uint64_t term) const {
 }
 
 Result<void> RaftLog::Restore(const Snapshot& snapshot) {
-    SPDLOG_INFO("restore snapshot, {}", IndexTerm(snapshot));
+    RAFTPP_LOG_INFO("restore snapshot, {}", IndexTerm(snapshot));
     auto meta = capnp_util::reader<msg::Snapshot>(snapshot).getMetadata();
     const uint64_t index = meta.getIndex();
     if (index < committed_) {

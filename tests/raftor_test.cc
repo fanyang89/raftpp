@@ -10,10 +10,10 @@
 #include <thread>
 
 #include <doctest/doctest.h>
-#include <spdlog/spdlog.h>
 
 #include "raftpp/core/capnp_util.h"
 #include "raftpp/core/memory_storage.h"
+#include "raftpp/logging.h"
 #include "raftpp/raftor/proposal_tracker.h"
 #include "raftpp/raftor/raftor_config.h"
 #include "raftpp/raftor/rpc/transport.h"
@@ -36,7 +36,7 @@ class TempDirCleanup {
         std::error_code ec;
         std::filesystem::remove_all(path_, ec);
         if (ec) {
-            SPDLOG_WARN("Failed to remove temp directory {}: {}", path_.string(), ec.message());
+            RAFTPP_LOG_WARN("Failed to remove temp directory {}: {}", path_.string(), ec.message());
         }
     }
 
@@ -81,7 +81,7 @@ class MockStateMachine : public StateMachine {
     void OnLeadershipChange(bool is_leader, uint64_t term, uint64_t leader_id) override {
         std::lock_guard lock(mutex_);
         leadership_changes_.push_back({is_leader, term, leader_id});
-        SPDLOG_INFO(
+        RAFTPP_LOG_INFO(
             "Leadership change: is_leader={}, term={}, leader_id={}", is_leader, term, leader_id
         );
     }
@@ -243,7 +243,7 @@ uint64_t GetLeaderId(const std::vector<std::unique_ptr<Raftor>>& raftors) {
 TEST_SUITE_BEGIN("raftor_bootstrap");
 
 TEST_CASE("three_node_cluster_bootstrap") {
-    SPDLOG_INFO("Creating 3-node cluster...");
+    RAFTPP_LOG_INFO("Creating 3-node cluster...");
 
     std::vector<PeerConfig> peers = {
         {.id = 1, .addr = "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())},
@@ -251,9 +251,9 @@ TEST_CASE("three_node_cluster_bootstrap") {
         {.id = 3, .addr = "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())},
     };
 
-    SPDLOG_INFO("Peers configured:");
+    RAFTPP_LOG_INFO("Peers configured:");
     for (const auto& peer : peers) {
-        SPDLOG_INFO("  ID: {}, addr: {}", peer.id, peer.addr);
+        RAFTPP_LOG_INFO("  ID: {}, addr: {}", peer.id, peer.addr);
     }
 
     std::vector<TestNode> test_nodes;
@@ -261,7 +261,7 @@ TEST_CASE("three_node_cluster_bootstrap") {
     for (auto peer : peers) {
         auto result = CreateTestNode(peer.id, peer.addr, peers);
         if (!result) {
-            SPDLOG_ERROR("Error creating node {}: {}", peer.id, result.error().ToString());
+            RAFTPP_LOG_ERROR("Error creating node {}: {}", peer.id, result.error().ToString());
         }
         REQUIRE(result.has_value());
         test_nodes.push_back(std::move(*result));
@@ -271,18 +271,18 @@ TEST_CASE("three_node_cluster_bootstrap") {
     for (auto& node : test_nodes) {
         auto start_result = node.raftor->Start();
         if (!start_result) {
-            SPDLOG_ERROR("Error starting node: {}", start_result.error().ToString());
+            RAFTPP_LOG_ERROR("Error starting node: {}", start_result.error().ToString());
         }
         REQUIRE(start_result.has_value());
         raftors.push_back(std::move(node.raftor));
     }
 
-    SPDLOG_INFO("Polling for leader election (up to 2s)...");
+    RAFTPP_LOG_INFO("Polling for leader election (up to 2s)...");
     REQUIRE_MESSAGE(WaitForStableLeader(raftors, 2s), "No leader was elected");
 
     for (size_t i = 0; i < raftors.size(); ++i) {
         auto status = raftors[i]->GetStatus();
-        SPDLOG_INFO(
+        RAFTPP_LOG_INFO(
             "Node {}: role={}, term={}, leader_id={}", status.id, static_cast<int>(status.role),
             status.term, status.leader_id
         );
@@ -510,7 +510,7 @@ TEST_CASE("three_node_leader_failure") {
 }
 
 TEST_CASE("five_node_cluster_propose") {
-    SPDLOG_INFO("Creating 5-node cluster...");
+    RAFTPP_LOG_INFO("Creating 5-node cluster...");
 
     std::vector<PeerConfig> peers;
     for (uint64_t i = 1; i <= 5; ++i) {
@@ -519,9 +519,9 @@ TEST_CASE("five_node_cluster_propose") {
         );
     }
 
-    SPDLOG_INFO("Peers configured:");
+    RAFTPP_LOG_INFO("Peers configured:");
     for (const auto& peer : peers) {
-        SPDLOG_INFO("  ID: {}, addr: {}", peer.id, peer.addr);
+        RAFTPP_LOG_INFO("  ID: {}, addr: {}", peer.id, peer.addr);
     }
 
     std::vector<TestNode> test_nodes;
@@ -547,18 +547,18 @@ TEST_CASE("five_node_cluster_propose") {
     }
 
     // Wait for leader election (5 nodes need more time)
-    SPDLOG_INFO("Polling for leader election (up to 2s)...");
+    RAFTPP_LOG_INFO("Polling for leader election (up to 2s)...");
     REQUIRE_MESSAGE(WaitForStableLeader(raftors, 2s), "Leader should be elected in 5-node cluster");
     uint64_t leader_id = GetLeaderId(raftors);
     REQUIRE_NE(leader_id, 0);
     REQUIRE_MESSAGE(leader_id <= state_machines.size(), "Leader ID out of range");
 
-    SPDLOG_INFO("Leader elected: node {}", leader_id);
+    RAFTPP_LOG_INFO("Leader elected: node {}", leader_id);
 
     // Print cluster status
     for (const auto& r : raftors) {
         auto status = r->GetStatus();
-        SPDLOG_INFO(
+        RAFTPP_LOG_INFO(
             "Node {}: role={}, term={}, leader_id={}", status.id, static_cast<int>(status.role),
             status.term, status.leader_id
         );
@@ -578,7 +578,7 @@ TEST_CASE("five_node_cluster_propose") {
     std::atomic<int> completed_count{0};
     std::atomic<int> success_count{0};
 
-    SPDLOG_INFO("Submitting {} proposals...", kNumProposals);
+    RAFTPP_LOG_INFO("Submitting {} proposals...", kNumProposals);
 
     for (int i = 0; i < kNumProposals; ++i) {
         std::string data = "proposal_" + std::to_string(i);
@@ -586,9 +586,9 @@ TEST_CASE("five_node_cluster_propose") {
             completed_count++;
             if (result.has_value()) {
                 success_count++;
-                SPDLOG_INFO("Proposal {} succeeded: {}", i, *result);
+                RAFTPP_LOG_INFO("Proposal {} succeeded: {}", i, *result);
             } else {
-                SPDLOG_WARN("Proposal {} failed: {}", i, result.error().ToString());
+                RAFTPP_LOG_WARN("Proposal {} failed: {}", i, result.error().ToString());
             }
         });
     }
@@ -602,7 +602,7 @@ TEST_CASE("five_node_cluster_propose") {
         std::this_thread::sleep_for(1ms);
     }
 
-    SPDLOG_INFO(
+    RAFTPP_LOG_INFO(
         "Completed: {}/{}, Success: {}", completed_count.load(), kNumProposals, success_count.load()
     );
 
@@ -620,9 +620,9 @@ TEST_CASE("five_node_cluster_propose") {
     }
 
     // Verify the leader has applied all entries
-    SPDLOG_INFO("Checking applied indices...");
+    RAFTPP_LOG_INFO("Checking applied indices...");
     auto leader_status = raftors[leader_id - 1]->GetStatus();
-    SPDLOG_INFO(
+    RAFTPP_LOG_INFO(
         "Leader (Node {}): applied_index={}, commit_index={}", leader_status.id,
         leader_status.applied_index, leader_status.commit_index
     );
@@ -651,7 +651,7 @@ TEST_CASE("five_node_cluster_propose") {
     int caught_up_count = 0;
     for (const auto& r : raftors) {
         auto status = r->GetStatus();
-        SPDLOG_INFO(
+        RAFTPP_LOG_INFO(
             "Node {}: applied_index={}, commit_index={}", status.id, status.applied_index,
             status.commit_index
         );

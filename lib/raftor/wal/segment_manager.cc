@@ -2,7 +2,7 @@
 
 #include <algorithm>
 
-#include <spdlog/spdlog.h>
+#include "raftpp/logging.h"
 
 namespace raftpp::raftor::wal {
 
@@ -50,7 +50,9 @@ Result<void> SegmentManager::Initialize() {
         auto segment = Segment::Open(path, std::move(io));
         if (!segment) {
             // Log warning but continue - we might be able to recover partial data
-            SPDLOG_WARN("failed to open segment {}: {}", path.string(), segment.error().ToString());
+            RAFTPP_LOG_WARN(
+                "failed to open segment {}: {}", path.string(), segment.error().ToString()
+            );
             continue;
         }
 
@@ -62,7 +64,7 @@ Result<void> SegmentManager::Initialize() {
         }
     }
 
-    SPDLOG_DEBUG("initialized segment manager with {} segments", segments_.size());
+    RAFTPP_LOG_DEBUG("initialized segment manager with {} segments", segments_.size());
 
     return {};
 }
@@ -89,7 +91,9 @@ Result<Segment*> SegmentManager::RollToNewSegment(uint64_t first_index) {
         if (it != segments_.end()) {
             auto result = it->second->Sync();
             if (!result) {
-                SPDLOG_WARN("failed to sync segment before roll: {}", result.error().ToString());
+                RAFTPP_LOG_WARN(
+                    "failed to sync segment before roll: {}", result.error().ToString()
+                );
             }
         }
     }
@@ -110,7 +114,7 @@ Result<Segment*> SegmentManager::RollToNewSegment(uint64_t first_index) {
     segments_[new_segment_id] = std::move(*segment);
     current_segment_id_ = new_segment_id;
 
-    SPDLOG_DEBUG("rolled to new segment {} with first_index={}", new_segment_id, first_index);
+    RAFTPP_LOG_DEBUG("rolled to new segment {} with first_index={}", new_segment_id, first_index);
 
     return segment_ptr;
 }
@@ -162,7 +166,9 @@ Result<void> SegmentManager::RemoveSegment(uint64_t segment_id) {
     // Close the segment
     auto close_result = it->second->Close();
     if (!close_result) {
-        SPDLOG_WARN("failed to close segment before removal: {}", close_result.error().ToString());
+        RAFTPP_LOG_WARN(
+            "failed to close segment before removal: {}", close_result.error().ToString()
+        );
     }
 
     // Remove from map
@@ -177,7 +183,7 @@ Result<void> SegmentManager::RemoveSegment(uint64_t segment_id) {
         );
     }
 
-    SPDLOG_DEBUG("removed segment {}", segment_id);
+    RAFTPP_LOG_DEBUG("removed segment {}", segment_id);
 
     return {};
 }

@@ -1,9 +1,9 @@
 #include "raftpp/core/progress.h"
 
 #include <libassert/assert.hpp>
-#include <spdlog/spdlog.h>
 
 #include "raftpp/core/primitives.h"
+#include "raftpp/logging.h"
 
 namespace raftpp {
 
@@ -121,20 +121,22 @@ bool Progress::IsPaused() const {
 bool Progress::MaybeDecTo(
     const uint64_t rejected, uint64_t match_hint, const uint64_t request_snapshot
 ) {
-    SPDLOG_DEBUG(
+    RAFTPP_LOG_DEBUG(
         "MaybeDecTo: rejected={}, match_hint={}, request_snapshot={}, state={}, matched={}",
         rejected, match_hint, request_snapshot, format_as(state_), matched_
     );
     if (state_ == ProgressState::Replicate) {
         if (rejected < matched_ || (rejected == matched_ && request_snapshot == kInvalidIndex)) {
-            SPDLOG_DEBUG("MaybeDecTo: returning false (stale reject in Replicate)");
+            RAFTPP_LOG_DEBUG("MaybeDecTo: returning false (stale reject in Replicate)");
             return false;
         }
 
         if (request_snapshot == kInvalidIndex) {
             next_idx_ = matched_ + 1;
         } else {
-            SPDLOG_DEBUG("MaybeDecTo: setting pending_request_snapshot to {}", request_snapshot);
+            RAFTPP_LOG_DEBUG(
+                "MaybeDecTo: setting pending_request_snapshot to {}", request_snapshot
+            );
             pending_request_snapshot_ = request_snapshot;
         }
         return true;

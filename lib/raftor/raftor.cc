@@ -7,9 +7,10 @@
 #include <thread>
 
 #include <kj/array.h>
-#include <spdlog/spdlog.h>
 
+#include "raftpp/logging.h"
 #include "raftpp/raftor/rpc/capnp_transport.h"
+#include "raftpp/raftor/telemetry.h"
 #include "raftpp/raftor/wal/wal_storage.h"
 #include "ready_processor.h"
 
@@ -104,6 +105,12 @@ class RaftorImpl : public Raftor {
     void OnMessage(Message msg);
     void OnPeerError(uint64_t peer_id, std::string error);
     std::string GenerateProposalContext();
+    void EnqueueProposal(
+        std::string data, ProposalCallback callback, std::chrono::milliseconds timeout
+    );
+    void EnqueueReadIndex(
+        std::string ctx, ReadIndexCallback callback, std::chrono::milliseconds timeout
+    );
     void RefreshStatus();
     void InitializeSnapshotState();
     [[nodiscard]] uint64_t GetWalDirSizeBytes() const;
@@ -178,13 +185,17 @@ RaftorImpl::~RaftorImpl() {
 }
 
 Result<void> RaftorImpl::Start() {
+    telemetry::ScopedSpan span("raftor.start", config_.node_id);
+
     if (started_.exchange(true)) {
+        telemetry::RecordError(span.span(), "already started");
         return std::unexpected(RaftError(RaftErrorCode::AlreadyStarted));
     }
 
     // Start transport
     if (auto result = transport_->Start(); !result) {
         started_ = false;
+        telemetry::RecordErrorIf(span.span(), result);
         return result;
     }
 
@@ -192,13 +203,15 @@ Result<void> RaftorImpl::Start() {
     last_tick_ = std::chrono::steady_clock::now();
     InitializeSnapshotState();
 
-    spdlog::info("Raftor node {} started, listening on {}", config_.node_id, config_.listen_addr);
+    RAFTPP_LOG_INFO(
+        "Raftor node {} started, listening on {}", config_.node_id, config_.listen_addr
+    );
     return {};
 }
 
 void RaftorImpl::Run() {
     if (!started_) {
-        spdlog::error("Cannot run: Raftor not started");
+        RAFTPP_LOG_ERROR("Cannot run: Raftor not started");
         return;
     }
 
@@ -206,6 +219,8 @@ void RaftorImpl::Run() {
 }
 
 void RaftorImpl::Stop() {
+    telemetry::ScopedSpan span("raftor.stop", config_.node_id);
+
     if (!running_.exchange(false)) {
         return;
     }
@@ -232,7 +247,7 @@ void RaftorImpl::Stop() {
     transport_->Stop();
 
     started_ = false;
-    spdlog::info("Raftor node {} stopped", config_.node_id);
+    RAFTPP_LOG_INFO("Raftor node {} stopped", config_.node_id);
 }
 
 bool RaftorImpl::IsRunning() const {
@@ -290,7 +305,7 @@ void RaftorImpl::InitializeSnapshotState() {
         return;
     }
 
-    spdlog::warn(
+    RAFTPP_LOG_WARN(
         "Snapshot init failed to read first index: {}", first_index_result.error().ToString()
     );
     last_snapshot_attempt_index_ = 0;
@@ -301,10 +316,20 @@ uint64_t RaftorImpl::GetWalDirSizeBytes() const {
 }
 
 void RaftorImpl::ProcessRaftWork() {
+    telemetry::ScopedSpan span("raftor.process_work", config_.node_id);
+    span.span()->SetAttribute(
+        "raft.pending_proposals", static_cast<int64_t>(proposal_tracker_.PendingCount())
+    );
+    span.span()->SetAttribute(
+        "raft.pending_reads", static_cast<int64_t>(proposal_tracker_.PendingReadCount())
+    );
+    span.span()->SetAttribute("raft.queue.proposals", static_cast<int64_t>(proposal_queue_.Size()));
+
     ProcessProposalQueue();
 
     if (auto result = ready_processor_->Process(); !result) {
-        spdlog::error("Ready processing failed: {}", result.error().ToString());
+        RAFTPP_LOG_ERROR("Ready processing failed: {}", result.error().ToString());
+        telemetry::RecordErrorIf(span.span(), result);
     }
 
     ProcessReadIndexQueue();
@@ -327,7 +352,7 @@ void RaftorImpl::MaybeAutoSnapshot() {
 
     auto first_index_result = storage_->FirstIndex();
     if (!first_index_result) {
-        spdlog::error(
+        RAFTPP_LOG_ERROR(
             "Auto snapshot skipped: failed to read first index: {}",
             first_index_result.error().ToString()
         );
@@ -367,20 +392,29 @@ void RaftorImpl::MaybeAutoSnapshot() {
         return;
     }
 
+    telemetry::ScopedSpan span("raftor.snapshot.auto", config_.node_id);
+    span.span()->SetAttribute("raft.snapshot.applied_index", static_cast<int64_t>(applied_index));
+    span.span()->SetAttribute("raft.snapshot.index", static_cast<int64_t>(snapshot_index));
+    if (reason) {
+        span.span()->SetAttribute("raft.snapshot.reason", reason);
+    }
+
     if (applied_index <= last_snapshot_attempt_index_ &&
         now - last_snapshot_attempt_time_ < kSnapshotRetryMinInterval) {
+        span.span()->SetAttribute("raft.snapshot.skipped", true);
         return;
     }
 
     last_snapshot_attempt_index_ = applied_index;
     last_snapshot_attempt_time_ = now;
-    spdlog::info(
+    RAFTPP_LOG_INFO(
         "Auto snapshot triggered (reason={}, applied_index={}, snapshot_index={})",
         reason ? reason : "unknown", applied_index, snapshot_index
     );
 
     if (auto result = TakeSnapshot(); !result) {
-        spdlog::error("Auto snapshot failed: {}", result.error().ToString());
+        RAFTPP_LOG_ERROR("Auto snapshot failed: {}", result.error().ToString());
+        telemetry::RecordErrorIf(span.span(), result);
     }
 }
 
@@ -393,12 +427,20 @@ void RaftorImpl::ProcessProposalQueue() {
         // Generate a unique context for tracking this proposal
         std::string ctx = GenerateProposalContext();
 
+        telemetry::ScopedSpan span("raftor.proposal.process", config_.node_id);
+        span.span()->SetAttribute("raft.proposal.ctx", ctx);
+        span.span()->SetAttribute("raft.proposal.data_bytes", static_cast<int64_t>(data.size()));
+        span.span()->SetAttribute(
+            "raft.proposal.timeout_ms", static_cast<int64_t>(timeout.count())
+        );
+
         // Track the proposal
         proposal_tracker_.Track(ctx, std::move(callback), timeout);
 
         // Submit to Raft
         if (auto result = raw_node_->Propose(ctx, data); !result) {
             proposal_tracker_.Fail(ctx, result.error());
+            telemetry::RecordErrorIf(span.span(), result);
         }
     }
 }
@@ -408,6 +450,10 @@ void RaftorImpl::ProcessReadIndexQueue() {
         auto ctx = std::move(item->ctx);
         auto callback = std::move(item->callback);
         const auto timeout = item->timeout.value_or(config_.read_index_timeout);
+
+        telemetry::ScopedSpan span("raftor.read_index.process", config_.node_id);
+        span.span()->SetAttribute("raft.read.ctx_bytes", static_cast<int64_t>(ctx.size()));
+        span.span()->SetAttribute("raft.read.timeout_ms", static_cast<int64_t>(timeout.count()));
 
         // Track the read
         proposal_tracker_.TrackRead(ctx, std::move(callback), timeout);
@@ -422,25 +468,76 @@ std::string RaftorImpl::GenerateProposalContext() {
     return std::to_string(config_.node_id) + ":" + std::to_string(counter);
 }
 
+void RaftorImpl::EnqueueProposal(
+    std::string data, ProposalCallback callback, std::chrono::milliseconds timeout
+) {
+    auto span = telemetry::StartSpanWithNodeId("raftor.proposal", config_.node_id);
+    span->SetAttribute("raft.proposal.data_bytes", static_cast<int64_t>(data.size()));
+    span->SetAttribute("raft.proposal.timeout_ms", static_cast<int64_t>(timeout.count()));
+
+    auto wrapped_callback = [span,
+                             callback = std::move(callback)](Result<std::string> result) mutable {
+        telemetry::RecordErrorIf(span, result);
+        span->End();
+        if (callback) {
+            callback(std::move(result));
+        }
+    };
+
+    proposal_queue_.Push(std::move(data), std::move(wrapped_callback), timeout);
+}
+
+void RaftorImpl::EnqueueReadIndex(
+    std::string ctx, ReadIndexCallback callback, std::chrono::milliseconds timeout
+) {
+    auto span = telemetry::StartSpanWithNodeId("raftor.read_index", config_.node_id);
+    span->SetAttribute("raft.read.ctx_bytes", static_cast<int64_t>(ctx.size()));
+    span->SetAttribute("raft.read.timeout_ms", static_cast<int64_t>(timeout.count()));
+
+    auto wrapped_callback = [span, callback = std::move(callback)](Result<void> result) mutable {
+        telemetry::RecordErrorIf(span, result);
+        span->End();
+        if (callback) {
+            callback(std::move(result));
+        }
+    };
+
+    read_index_queue_.Push(std::move(ctx), std::move(wrapped_callback), timeout);
+}
+
 void RaftorImpl::ProcessTimeouts() {
     proposal_tracker_.ExpireTimeouts(std::chrono::steady_clock::now());
 }
 
 void RaftorImpl::OnMessage(Message msg) {
+    telemetry::ScopedSpan span("raftor.step", config_.node_id);
+    const auto reader = capnp_util::reader<msg::Message>(msg);
+    span.span()->SetAttribute("raft.msg.type", static_cast<int64_t>(reader.getMsgType()));
+    span.span()->SetAttribute("raft.msg.from", static_cast<int64_t>(reader.getFrom()));
+    span.span()->SetAttribute("raft.msg.to", static_cast<int64_t>(reader.getTo()));
+    span.span()->SetAttribute("raft.msg.term", static_cast<int64_t>(reader.getTerm()));
+    span.span()->SetAttribute("raft.msg.index", static_cast<int64_t>(reader.getIndex()));
+    span.span()->SetAttribute("raft.msg.commit", static_cast<int64_t>(reader.getCommit()));
+
     if (auto result = raw_node_->Step(std::move(msg)); !result) {
         // Step errors are usually benign (e.g., stale messages)
-        spdlog::debug("Step error: {}", result.error().ToString());
+        RAFTPP_LOG_DEBUG("Step error: {}", result.error().ToString());
+        telemetry::RecordErrorIf(span.span(), result);
     }
 }
 
 void RaftorImpl::OnPeerError(uint64_t peer_id, std::string error) {
-    spdlog::warn("Peer {} error: {}", peer_id, error);
+    telemetry::ScopedSpan span("raftor.peer_error", config_.node_id);
+    span.span()->SetAttribute("raft.peer_id", static_cast<int64_t>(peer_id));
+    telemetry::RecordError(span.span(), error);
+
+    RAFTPP_LOG_WARN("Peer {} error: {}", peer_id, error);
     raw_node_->ReportUnreachable(peer_id);
     state_machine_->OnPeerUnreachable(peer_id);
 }
 
 void RaftorImpl::Propose(std::string data, ProposalCallback callback) {
-    proposal_queue_.Push(std::move(data), std::move(callback), config_.proposal_timeout);
+    EnqueueProposal(std::move(data), std::move(callback), config_.proposal_timeout);
 }
 
 Result<std::string> RaftorImpl::ProposeSync(std::string data, std::chrono::milliseconds timeout) {
@@ -448,7 +545,7 @@ Result<std::string> RaftorImpl::ProposeSync(std::string data, std::chrono::milli
     auto future = promise->get_future();
     auto completed = std::make_shared<std::atomic<bool>>(false);
 
-    proposal_queue_.Push(
+    EnqueueProposal(
         std::move(data),
         [promise, completed](Result<std::string> result) {
             if (completed->exchange(true)) {
@@ -481,7 +578,7 @@ std::future<Result<std::string>> RaftorImpl::ProposeAsync(std::string data) {
 }
 
 void RaftorImpl::ReadIndex(std::string ctx, ReadIndexCallback callback) {
-    read_index_queue_.Push(std::move(ctx), std::move(callback), config_.read_index_timeout);
+    EnqueueReadIndex(std::move(ctx), std::move(callback), config_.read_index_timeout);
 }
 
 Result<void> RaftorImpl::ReadIndexSync(std::string ctx, std::chrono::milliseconds timeout) {
@@ -489,7 +586,7 @@ Result<void> RaftorImpl::ReadIndexSync(std::string ctx, std::chrono::millisecond
     auto future = promise->get_future();
     auto completed = std::make_shared<std::atomic<bool>>(false);
 
-    read_index_queue_.Push(
+    EnqueueReadIndex(
         std::move(ctx),
         [promise, completed](Result<void> result) {
             if (completed->exchange(true)) {
@@ -511,6 +608,10 @@ Result<void> RaftorImpl::ReadIndexSync(std::string ctx, std::chrono::millisecond
 }
 
 Result<void> RaftorImpl::AddNode(uint64_t id, const std::string& addr) {
+    telemetry::ScopedSpan span("raftor.conf_change.add_node", config_.node_id);
+    span.span()->SetAttribute("raft.peer_id", static_cast<int64_t>(id));
+    span.span()->SetAttribute("raft.peer.addr_bytes", static_cast<int64_t>(addr.size()));
+
     ConfChangeV2 cc = capnp_util::make<msg::ConfChangeV2>();
     auto builder = capnp_util::builder<msg::ConfChangeV2>(cc);
     auto changes = builder.initChanges(1);
@@ -522,6 +623,7 @@ Result<void> RaftorImpl::AddNode(uint64_t id, const std::string& addr) {
 
     std::string ctx = GenerateProposalContext();
     if (auto result = raw_node_->ProposeConfChange(ctx, cc); !result) {
+        telemetry::RecordErrorIf(span.span(), result);
         return result.error();
     }
 
@@ -532,6 +634,9 @@ Result<void> RaftorImpl::AddNode(uint64_t id, const std::string& addr) {
 }
 
 Result<void> RaftorImpl::RemoveNode(uint64_t id) {
+    telemetry::ScopedSpan span("raftor.conf_change.remove_node", config_.node_id);
+    span.span()->SetAttribute("raft.peer_id", static_cast<int64_t>(id));
+
     ConfChangeV2 cc = capnp_util::make<msg::ConfChangeV2>();
     auto builder = capnp_util::builder<msg::ConfChangeV2>(cc);
     auto changes = builder.initChanges(1);
@@ -539,15 +644,24 @@ Result<void> RaftorImpl::RemoveNode(uint64_t id) {
     changes[0].setNodeId(id);
 
     std::string ctx = GenerateProposalContext();
-    return raw_node_->ProposeConfChange(ctx, cc);
+    auto result = raw_node_->ProposeConfChange(ctx, cc);
+    telemetry::RecordErrorIf(span.span(), result);
+    return result;
 }
 
 void RaftorImpl::TransferLeader(uint64_t target_id) {
+    telemetry::ScopedSpan span("raftor.transfer_leader", config_.node_id);
+    span.span()->SetAttribute("raft.target_id", static_cast<int64_t>(target_id));
+
     raw_node_->TransferLeader(target_id);
 }
 
 Result<void> RaftorImpl::Campaign() {
-    return raw_node_->Campaign();
+    telemetry::ScopedSpan span("raftor.campaign", config_.node_id);
+
+    auto result = raw_node_->Campaign();
+    telemetry::RecordErrorIf(span.span(), result);
+    return result;
 }
 
 NodeStatus RaftorImpl::GetStatus() const {
@@ -566,25 +680,32 @@ uint64_t RaftorImpl::GetLeaderId() const {
 }
 
 Result<void> RaftorImpl::TakeSnapshot() {
+    telemetry::ScopedSpan span("raftor.snapshot.create", config_.node_id);
+
     auto status = raw_node_->GetStatus();
     auto applied_index = ready_processor_->GetAppliedIndex();
+    span.span()->SetAttribute("raft.snapshot.applied_index", static_cast<int64_t>(applied_index));
+    span.span()->SetAttribute("raft.role", static_cast<int64_t>(status.ss.raft_state));
+    auto hs_reader = capnp_util::reader<msg::HardState>(status.hs);
+    span.span()->SetAttribute("raft.term", static_cast<int64_t>(hs_reader.getTerm()));
+    span.span()->SetAttribute("raft.commit", static_cast<int64_t>(hs_reader.getCommit()));
 
     // Get current conf state from storage
     auto initial_state = storage_->InitialState();
-    if (!initial_state) {
+    if (telemetry::RecordErrorIf(span.span(), initial_state)) {
         return initial_state.error();
     }
 
     // Get term of applied entry
     auto term_result = storage_->Term(applied_index);
-    if (!term_result) {
+    if (telemetry::RecordErrorIf(span.span(), term_result)) {
         return term_result.error();
     }
 
     // Create snapshot via state machine
     auto snapshot_result =
         state_machine_->TakeSnapshot(applied_index, *term_result, initial_state->conf_state);
-    if (!snapshot_result) {
+    if (telemetry::RecordErrorIf(span.span(), snapshot_result)) {
         return snapshot_result.error();
     }
 
@@ -601,6 +722,7 @@ Result<void> RaftorImpl::TakeSnapshot() {
 
     // Apply to storage (this will compact the log)
     if (auto result = storage_->ApplySnapshot(snapshot); !result) {
+        telemetry::RecordErrorIf(span.span(), result);
         return result;
     }
 
@@ -657,7 +779,7 @@ Result<std::unique_ptr<Raftor>> Raftor::Create(
 
         if (config.initial_peers.empty()) {
             // Single-node cluster: bootstrap with only this node
-            SPDLOG_INFO("Bootstrapping single-node cluster with node {}", config.node_id);
+            RAFTPP_LOG_INFO("Bootstrapping single-node cluster with node {}", config.node_id);
             auto voters = conf_builder.initVoters(1);
             voters.set(0, config.node_id);
         } else {
@@ -674,7 +796,9 @@ Result<std::unique_ptr<Raftor>> Raftor::Create(
                 return std::unexpected(RaftError(ConfigErrorCode::NodeIdNotInInitialPeers));
             }
 
-            SPDLOG_INFO("Bootstrapping cluster with {} initial peers", config.initial_peers.size());
+            RAFTPP_LOG_INFO(
+                "Bootstrapping cluster with {} initial peers", config.initial_peers.size()
+            );
             auto voters = conf_builder.initVoters(config.initial_peers.size());
             for (size_t i = 0; i < config.initial_peers.size(); ++i) {
                 voters.set(i, config.initial_peers[i].id);
@@ -683,12 +807,12 @@ Result<std::unique_ptr<Raftor>> Raftor::Create(
 
         // Persist bootstrap ConfState to WAL
         storage->SetConfState(conf_state);
-        SPDLOG_INFO(
+        RAFTPP_LOG_INFO(
             "WAL bootstrap complete: node {} initialized with cluster configuration", config.node_id
         );
     } else {
         // WAL already initialized - ignore initial_peers and use existing config
-        SPDLOG_INFO("WAL already initialized, ignoring initial_peers");
+        RAFTPP_LOG_INFO("WAL already initialized, ignoring initial_peers");
     }
 
     // Create TCP transport

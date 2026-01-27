@@ -6,7 +6,7 @@
 #include "raftpp/core/conf_changer.h"
 #include "raftpp/core/conf_restore.h"
 #include "raftpp/core/util.h"
-#include "spdlog/spdlog.h"
+#include "raftpp/logging.h"
 
 namespace raftpp {
 
@@ -101,7 +101,7 @@ Raft::Raft(const Config& config, const std::shared_ptr<Storage>& store)
     BecomeFollower(term_, kInvalidId);
 
     RaftLog& log = raft_log_;
-    SPDLOG_INFO(
+    RAFTPP_LOG_INFO(
         "new raft instance, term={}, commit={}, applied={}, last_index={}, last_term={}, peers={}",
         term_, log.committed(), log.applied(), log.LastIndex(), log.LastTerm(),
         fmt::format("{}", progress_tracker_.conf().voters)
@@ -110,7 +110,7 @@ Raft::Raft(const Config& config, const std::shared_ptr<Storage>& store)
 
 ConfState Raft::PostConfChange() {
     // TODO(fanyang) formatter for tracker conf
-    // SPDLOG_INFO("switched to configuration, config={}", progress_tracker_.conf());
+    // RAFTPP_LOG_INFO("switched to configuration, config={}", progress_tracker_.conf());
     auto cs = progress_tracker_.conf().ToConfState();
     const bool is_voter = progress_tracker_.conf().voters.Contains(id_);
     promotable_ = is_voter;
@@ -228,7 +228,7 @@ void Raft::OnPersistEntries(const uint64_t index, const uint64_t term) {
     const bool update = raft_log_.MaybePersist(index, term);
     if (update && state_ == StateRole::Leader) {
         if (term_ != term) {
-            SPDLOG_ERROR(
+            RAFTPP_LOG_ERROR(
                 "leader's persisted index changed but the term {} is not the same as {}", term,
                 term_
             );
@@ -251,7 +251,7 @@ void Raft::BecomePreCandidate() {
     state_ = StateRole::PreCandidate;
     progress_tracker_.ResetVotes();
     leader_id_ = kInvalidId;
-    SPDLOG_INFO("became pre-candidate, term={}", term_);
+    RAFTPP_LOG_INFO("became pre-candidate, term={}", term_);
 }
 
 void Raft::BecomeCandidate() {
@@ -262,7 +262,7 @@ void Raft::BecomeCandidate() {
     vote_ = id;
     state_ = StateRole::Candidate;
     promotable_ = progress_tracker_.conf().voters.Contains(id);
-    SPDLOG_INFO("became candidate, term={}", term_);
+    RAFTPP_LOG_INFO("became candidate, term={}", term_);
 }
 
 void Raft::BecomeLeader() {
@@ -285,14 +285,14 @@ void Raft::BecomeLeader() {
         PANIC("appending an empty entry should never be dropped");
     }
 
-    SPDLOG_INFO("became leader at term {}", term_);
+    RAFTPP_LOG_INFO("became leader at term {}", term_);
 }
 
 VoteResult Raft::Poll(const uint64_t from, MessageType mt, const bool vote) {
     progress_tracker_.RecordVote(from, vote);
     const auto& r = progress_tracker_.CountVotes();
     if (from != id_) {
-        SPDLOG_DEBUG("received votes response from {}, vote={}", from, vote);
+        RAFTPP_LOG_DEBUG("received votes response from {}, vote={}", from, vote);
     }
 
     switch (r.result) {
@@ -365,7 +365,7 @@ void Raft::Campaign(std::string_view campaign_type) {
 
 void Raft::Hup(const bool transfer_leader) {
     if (state_ == StateRole::Leader) {
-        SPDLOG_DEBUG("ignoring MsgHup because already leader");
+        RAFTPP_LOG_DEBUG("ignoring MsgHup because already leader");
         return;
     }
 
@@ -380,7 +380,7 @@ void Raft::Hup(const bool transfer_leader) {
     GetEntriesContext ctx;
     ctx.what = GetEntriesFor::TransferLeader;
     if (HasUnappliedConfChanges(low, high, ctx)) {
-        SPDLOG_WARN(
+        RAFTPP_LOG_WARN(
             "cannot campaign at term {} since there are still pending configuration changes to "
             "apply",
             term_
@@ -388,7 +388,7 @@ void Raft::Hup(const bool transfer_leader) {
         return;
     }
 
-    SPDLOG_INFO("starting a new election, term={}", term_);
+    RAFTPP_LOG_INFO("starting a new election, term={}", term_);
     if (transfer_leader) {
         Campaign(kCampaignTransfer);
     } else if (pre_vote_) {
@@ -470,7 +470,7 @@ void Raft::MaybeCommitByVote(const Message& m) {
     }
 
     const auto& log = raft_log_;
-    SPDLOG_INFO(
+    RAFTPP_LOG_INFO(
         "[commit: {}, last_index: {}, last_term: {}] fast-forwarded commit to vote request [index: "
         "{}, term: {}]",
         log.committed(), log.LastIndex(), log.LastTerm(), m_reader.getCommit(),
@@ -513,20 +513,20 @@ void Raft::HandleAppendResponse(const Message& m) {
 
     auto* p = progress_tracker_.get(m_reader.getFrom());
     if (p == nullptr) {
-        SPDLOG_WARN("no progress available for {}", m_reader.getFrom());
+        RAFTPP_LOG_WARN("no progress available for {}", m_reader.getFrom());
         return;
     }
 
     Progress& pr = *p;
     pr.recent_active() = true;
-    SPDLOG_DEBUG(
+    RAFTPP_LOG_DEBUG(
         "HandleAppendResponse: from={}, index={}, reject={}", m_reader.getFrom(),
         m_reader.getIndex(), m_reader.getReject()
     );
     pr.UpdateCommitted(m_reader.getCommit());
 
     if (m_reader.getReject()) {
-        SPDLOG_DEBUG(
+        RAFTPP_LOG_DEBUG(
             "HandleAppendResponse: reject from {}, index={}, reject_hint={}, log_term={}",
             m_reader.getFrom(), m_reader.getIndex(), m_reader.getRejectHint(), m_reader.getLogTerm()
         );
@@ -573,7 +573,9 @@ void Raft::HandleAppendResponse(const Message& m) {
 
     if (m_reader.getFrom() == lead_transferee_) {
         if (progress_tracker_.at(m_reader.getFrom()).matched() == raft_log_.LastIndex()) {
-            SPDLOG_INFO("sent MsgTimeoutNow to {} after received MsgAppResp", m_reader.getFrom());
+            RAFTPP_LOG_INFO(
+                "sent MsgTimeoutNow to {} after received MsgAppResp", m_reader.getFrom()
+            );
             SendTimeoutNow(m_reader.getFrom());
         }
     }
@@ -621,7 +623,7 @@ bool Raft::Restore(const Snapshot& snapshot) {
     }
 
     if (state_ != StateRole::Follower) {
-        SPDLOG_WARN("non-follower attempted to restore snapshot, state={}", format_as(state_));
+        RAFTPP_LOG_WARN("non-follower attempted to restore snapshot, state={}", format_as(state_));
         BecomeFollower(term_ + 1, kInvalidId);
         return false;
     }
@@ -640,13 +642,13 @@ bool Raft::Restore(const Snapshot& snapshot) {
         cs_ids.insert(voter);
     }
     if (!cs_ids.contains(id_)) {
-        SPDLOG_WARN("attempted to restore snapshot but it is not in the ConfState");
+        RAFTPP_LOG_WARN("attempted to restore snapshot but it is not in the ConfState");
         return false;
     }
 
     if (pending_request_snapshot_ == kInvalidIndex &&
         raft_log_.MatchTerm(snap_meta.getIndex(), snap_meta.getTerm())) {
-        SPDLOG_INFO("fast-forwarded commit to snapshot");
+        RAFTPP_LOG_INFO("fast-forwarded commit to snapshot");
         std::ignore = raft_log_.CommitTo(snap_meta.getIndex());
         return false;
     }
@@ -655,7 +657,7 @@ bool Raft::Restore(const Snapshot& snapshot) {
 
     pending_request_snapshot_ = kInvalidIndex;
 
-    SPDLOG_INFO("restored snapshot");
+    RAFTPP_LOG_INFO("restored snapshot");
     return true;
 }
 
@@ -780,13 +782,13 @@ Result<void> Raft::StepCandidate(const Message& m) {
             break;
 
         case MessageType::MSG_TIMEOUT_NOW:
-            SPDLOG_DEBUG(
+            RAFTPP_LOG_DEBUG(
                 "ignored MsgTimeoutNow, term={}, from={}", m_reader.getTerm(), m_reader.getFrom()
             );
             break;
 
         case MessageType::MSG_READ_INDEX:
-            SPDLOG_INFO("no leader at term={}; dropping read index msg", m_reader.getTerm());
+            RAFTPP_LOG_INFO("no leader at term={}; dropping read index msg", m_reader.getTerm());
             break;
 
         default:
@@ -830,7 +832,7 @@ Result<void> Raft::StepFollower(Message& m) {
 
         case MessageType::MSG_TRANSFER_LEADER:
             if (leader_id_ == kInvalidId) {
-                SPDLOG_INFO("no leader at term {}; dropping leader transfer msg", term_);
+                RAFTPP_LOG_INFO("no leader at term {}; dropping leader transfer msg", term_);
                 return {};
             }
             capnp_util::builder<msg::Message>(m).setTo(leader_id_);
@@ -841,7 +843,7 @@ Result<void> Raft::StepFollower(Message& m) {
             if (promotable_) {
                 Hup(true);
             } else {
-                SPDLOG_INFO(
+                RAFTPP_LOG_INFO(
                     "received MsgTimeoutNow from {} but is not promotable", m_reader.getFrom()
                 );
             }
@@ -849,7 +851,7 @@ Result<void> Raft::StepFollower(Message& m) {
 
         case MessageType::MSG_READ_INDEX:
             if (leader_id_ == kInvalidId) {
-                SPDLOG_INFO("no leader at term {}; dropping read index msg", term_);
+                RAFTPP_LOG_INFO("no leader at term {}; dropping read index msg", term_);
                 return {};
             }
             capnp_util::builder<msg::Message>(m).setTo(leader_id_);
@@ -859,7 +861,7 @@ Result<void> Raft::StepFollower(Message& m) {
         case MessageType::MSG_READ_INDEX_RESP: {
             // Only accept read index responses from the current leader.
             if (leader_id_ == kInvalidId || m_reader.getFrom() != leader_id_) {
-                SPDLOG_DEBUG(
+                RAFTPP_LOG_DEBUG(
                     "ignored MsgReadIndexResp from {}: leader_id={}", m_reader.getFrom(), leader_id_
                 );
                 return {};
@@ -867,7 +869,7 @@ Result<void> Raft::StepFollower(Message& m) {
 
             auto entries = m_reader.getEntries();
             if (entries.size() != 1) {
-                SPDLOG_ERROR(
+                RAFTPP_LOG_ERROR(
                     "invalid format of MsgReadIndexResp from {}, entries_size={}",
                     m_reader.getFrom(), entries.size()
                 );
@@ -904,7 +906,7 @@ void Raft::HandleHeartbeatResponse(const Message& m) {
     auto m_reader = capnp_util::reader<msg::Message>(m);
     Progress* p;
     if (p = progress_tracker_.get(m_reader.getFrom()); p == nullptr) {
-        SPDLOG_INFO("no progress available for {}", m_reader.getFrom());
+        RAFTPP_LOG_INFO("no progress available for {}", m_reader.getFrom());
         return;
     }
     Progress& pr = *p;
@@ -912,7 +914,7 @@ void Raft::HandleHeartbeatResponse(const Message& m) {
     // update followers committed index via heartbeat response
     pr.UpdateCommitted(m_reader.getCommit());
     pr.recent_active() = true;
-    SPDLOG_DEBUG(
+    RAFTPP_LOG_DEBUG(
         "HandleHeartbeatResponse: from={}, index={}, reject={}", m_reader.getFrom(),
         m_reader.getIndex(), m_reader.getReject()
     );
@@ -923,12 +925,12 @@ void Raft::HandleHeartbeatResponse(const Message& m) {
     }
 
     // Does it request snapshot?
-    SPDLOG_DEBUG(
+    RAFTPP_LOG_DEBUG(
         "HandleHeartbeatResp check: from={}, matched={}, next={}, last_index={}",
         m_reader.getFrom(), pr.matched(), pr.next_idx(), raft_log_.LastIndex()
     );
     if (pr.matched() < raft_log_.LastIndex() || pr.pending_request_snapshot() != kInvalidIndex) {
-        SPDLOG_DEBUG("HandleHeartbeatResp: sending append to {}", m_reader.getFrom());
+        RAFTPP_LOG_DEBUG("HandleHeartbeatResp: sending append to {}", m_reader.getFrom());
         RaftCore::SendAppend(m_reader.getFrom(), pr, messages_);
     }
 
@@ -966,7 +968,7 @@ void Raft::HandleSnapshotStatus(const Message& m) {
     }
 
     if (m_reader.getReject()) {
-        SPDLOG_DEBUG(
+        RAFTPP_LOG_DEBUG(
             "HandleSnapshotStatus: reject from {}, index={}, reject_hint={}, log_term={}",
             m_reader.getFrom(), m_reader.getIndex(), m_reader.getRejectHint(), m_reader.getLogTerm()
         );
@@ -992,7 +994,7 @@ void Raft::HandleUnreachable(const Message& m) {
         pr.BecomeProbe();
     }
 
-    SPDLOG_INFO("failed to send message to {} because it is unreachable", m_reader.getFrom());
+    RAFTPP_LOG_INFO("failed to send message to {} because it is unreachable", m_reader.getFrom());
 }
 
 void Raft::HandleTransferLeader(const Message& m) {
@@ -1070,7 +1072,7 @@ Result<void> Raft::StepLeader(const Message& m) {
 
         case MessageType::MSG_CHECK_QUORUM:
             if (!CheckQuorumActive()) {
-                SPDLOG_WARN("stepped down to follower since quorum is not active");
+                RAFTPP_LOG_WARN("stepped down to follower since quorum is not active");
                 BecomeFollower(term_, kInvalidId);
             }
             return {};
@@ -1128,7 +1130,9 @@ Result<void> Raft::StepLeader(const Message& m) {
             if (!CommitToCurrentTerm()) {
                 // Reject read only request when this leader has not committed any log entry
                 // in its term.
-                SPDLOG_INFO("leader has not yet committed in its term; dropping read index msg");
+                RAFTPP_LOG_INFO(
+                    "leader has not yet committed in its term; dropping read index msg"
+                );
                 return {};
             }
 
@@ -1169,7 +1173,7 @@ Result<void> Raft::StepLeader(const Message& m) {
     // Continue handling other message types
     switch (m_reader.getMsgType()) {
         case MessageType::MSG_APPEND_RESPONSE:
-            SPDLOG_DEBUG("StepLeader: received MsgAppendResponse from {}", m_reader.getFrom());
+            RAFTPP_LOG_DEBUG("StepLeader: received MsgAppendResponse from {}", m_reader.getFrom());
             HandleAppendResponse(m);
             break;
         case MessageType::MSG_HEARTBEAT_RESPONSE:
@@ -1186,7 +1190,7 @@ Result<void> Raft::StepLeader(const Message& m) {
             break;
         default:
             if (progress_tracker_.get(m_reader.getFrom()) == nullptr) {
-                SPDLOG_DEBUG("no progress available for {}", m_reader.getFrom());
+                RAFTPP_LOG_DEBUG("no progress available for {}", m_reader.getFrom());
             }
     }
 
@@ -1217,7 +1221,7 @@ Result<void> Raft::Step(Message& m) {
                 check_quorum_ && leader_id_ != kInvalidId && election_elapsed_ < election_timeout_;
 
             if (!force && in_lease) {
-                SPDLOG_INFO("ignored vote from {}: lease is not expired");
+                RAFTPP_LOG_INFO("ignored vote from {}: lease is not expired");
                 return {};
             }
         }
@@ -1228,7 +1232,7 @@ Result<void> Raft::Step(Message& m) {
             // For a pre-vote request:
             // Never change our term in response to a pre-vote request.
         } else {
-            SPDLOG_INFO("received a message with higher term from {}", m_reader.getFrom());
+            RAFTPP_LOG_INFO("received a message with higher term from {}", m_reader.getFrom());
             if (m_reader.getMsgType() == MessageType::MSG_APPEND ||
                 m_reader.getMsgType() == MessageType::MSG_HEARTBEAT ||
                 m_reader.getMsgType() == MessageType::MSG_SNAPSHOT) {
@@ -1257,7 +1261,7 @@ Result<void> Raft::Step(Message& m) {
             Send(to_send, messages_);
         } else {
             // ignore other cases
-            SPDLOG_INFO("ignored a message with lower term, from={}", m_reader.getFrom());
+            RAFTPP_LOG_INFO("ignored a message with lower term, from={}", m_reader.getFrom());
         }
         return {};
     }
@@ -1349,7 +1353,7 @@ void Raft::HandleAppendEntries(const Message& m) {
     to_send_builder.setTo(m_reader.getFrom());
     to_send_builder.setMsgType(MessageType::MSG_APPEND_RESPONSE);
 
-    SPDLOG_INFO(
+    RAFTPP_LOG_INFO(
         "HandleAppendEntries: index={}, log_term={}, commit={}, num_entries={}",
         m_reader.getIndex(), m_reader.getLogTerm(), m_reader.getCommit(),
         m_reader.getEntries().size()
@@ -1493,7 +1497,7 @@ void Raft::ReduceUncommittedSize(const std::vector<Entry>& ents) {
     }
 
     if (!uncommitted_state_.MaybeReduceUncommittedSize(ents)) {
-        SPDLOG_WARN(
+        RAFTPP_LOG_WARN(
             "try to reduce uncommitted size less than 0, first index of pending ents is {}",
             capnp_util::reader<msg::Entry>(ents.front()).getIndex()
         );
@@ -1506,11 +1510,11 @@ void Raft::CommitApply(const uint64_t applied) {
 
 Result<void> Raft::RequestSnapshot() {
     if (state_ == StateRole::Leader) {
-        SPDLOG_INFO("can not request snapshot on leader; dropping request snapshot");
+        RAFTPP_LOG_INFO("can not request snapshot on leader; dropping request snapshot");
     } else if (leader_id_ == kInvalidId) {
-        SPDLOG_INFO("no leader; dropping request snapshot, term={}", term_);
+        RAFTPP_LOG_INFO("no leader; dropping request snapshot, term={}", term_);
     } else if (snapshot().has_value() || pending_request_snapshot_ != kInvalidIndex) {
-        SPDLOG_INFO("there is a pending snapshot; dropping request snapshot");
+        RAFTPP_LOG_INFO("there is a pending snapshot; dropping request snapshot");
     } else {
         const auto request_index = raft_log_.LastIndex();
         const auto request_index_term = Unwrap(raft_log_.Term(request_index));
@@ -1519,7 +1523,7 @@ Result<void> Raft::RequestSnapshot() {
             SendRequestSnapshot();
             return {};
         }
-        SPDLOG_INFO(
+        RAFTPP_LOG_INFO(
             "mismatched term; dropping request snapshot, term={}, last_term={}", term_,
             request_index_term
         );
@@ -1636,7 +1640,7 @@ Result<ConfState> Raft::ApplyConfChange(const ConfChangeV2& cc) {
 
     Result<std::pair<TrackerConfiguration, MapChange>> r;
     if (LeaveJoint(cc)) {
-        SPDLOG_INFO("ApplyConfChange: LeaveJoint");
+        RAFTPP_LOG_INFO("ApplyConfChange: LeaveJoint");
         r = changer.LeaveJoint();
     } else {
         auto cc_reader = capnp_util::reader<msg::ConfChangeV2>(cc);
@@ -1651,10 +1655,10 @@ Result<ConfState> Raft::ApplyConfChange(const ConfChangeV2& cc) {
             ccs.push_back(std::move(single));
         }
         if (const auto auto_leave = EnterJoint(cc)) {
-            SPDLOG_INFO("ApplyConfChange: EnterJoint, auto_leave={}", *auto_leave);
+            RAFTPP_LOG_INFO("ApplyConfChange: EnterJoint, auto_leave={}", *auto_leave);
             r = changer.EnterJoint(*auto_leave, ccs);
         } else {
-            SPDLOG_INFO("ApplyConfChange: Simple, num_changes={}", ccs.size());
+            RAFTPP_LOG_INFO("ApplyConfChange: Simple, num_changes={}", ccs.size());
             r = changer.Simple(ccs);
         }
     }
@@ -1662,15 +1666,15 @@ Result<ConfState> Raft::ApplyConfChange(const ConfChangeV2& cc) {
     if (r) {
         const auto& cfg = r->first;
         const auto& changes = r->second;
-        SPDLOG_INFO("ApplyConfChange: success, num_changes={}", changes.size());
+        RAFTPP_LOG_INFO("ApplyConfChange: success, num_changes={}", changes.size());
         for (const auto& [id, change_type] : changes) {
-            SPDLOG_INFO(
+            RAFTPP_LOG_INFO(
                 "  change: id={}, type={}", id, change_type == MapChangeType::Add ? "Add" : "Remove"
             );
         }
         progress_tracker_.ApplyConf(cfg, changes, raft_log_.LastIndex());
     } else {
-        SPDLOG_ERROR("ApplyConfChange: failed, error={}", r.error().ToString());
+        RAFTPP_LOG_ERROR("ApplyConfChange: failed, error={}", r.error().ToString());
     }
 
     return PostConfChange();
@@ -1695,7 +1699,7 @@ void Raft::ResetRandomizedElectionTimeout() {
     const size_t timeout = dist(gen);
     size_t prev_timeout = randomized_election_timeout_;
     randomized_election_timeout_ = timeout;
-    SPDLOG_INFO("reset election timeout, {} -> {}", prev_timeout, timeout);
+    RAFTPP_LOG_INFO("reset election timeout, {} -> {}", prev_timeout, timeout);
 }
 
 void Raft::AbortLeaderTransfer() {
@@ -1741,7 +1745,7 @@ void Raft::BecomeFollower(const uint64_t term, const uint64_t leader_id) {
     pending_request_snapshot_ = pending_request_snapshot;
     raft_log_.max_apply_unpersisted_log_limit() = 0;
 
-    SPDLOG_INFO("became follower, term={}, from_role={}", term, format_as(from_role));
+    RAFTPP_LOG_INFO("became follower, term={}, from_role={}", term, format_as(from_role));
 }
 
 size_t Raft::max_inflight_messages() const {
