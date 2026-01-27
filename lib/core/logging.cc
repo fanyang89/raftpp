@@ -121,8 +121,7 @@ class SpdlogLogRecord final : public opentelemetry::logs::LogRecord {
 
 class SpdlogLogger final : public opentelemetry::logs::Logger {
   public:
-    explicit SpdlogLogger(std::string name)
-        : name_(std::move(name)), backend_(spdlog::default_logger()) {}
+    explicit SpdlogLogger(std::string name) : name_(std::move(name)) {}
 
     const opentelemetry::nostd::string_view GetName() noexcept override { return name_; }
 
@@ -139,16 +138,17 @@ class SpdlogLogger final : public opentelemetry::logs::Logger {
         opentelemetry::nostd::unique_ptr<opentelemetry::logs::LogRecord>&& record
     ) noexcept override {
         auto* spdlog_record = dynamic_cast<SpdlogLogRecord*>(record.get());
-        if (!spdlog_record || !backend_) {
+        auto backend = spdlog::default_logger();
+        if (!spdlog_record || !backend) {
             return;
         }
 
         const auto level = ToSpdlogLevel(spdlog_record->severity());
-        if (!backend_->should_log(level)) {
+        if (!backend->should_log(level)) {
             return;
         }
         if (spdlog_record->attributes().empty()) {
-            backend_->log(level, spdlog_record->body());
+            backend->log(level, spdlog_record->body());
             return;
         }
 
@@ -159,12 +159,11 @@ class SpdlogLogger final : public opentelemetry::logs::Logger {
             message.append("=");
             message.append(value);
         }
-        backend_->log(level, message);
+        backend->log(level, message);
     }
 
   private:
     std::string name_;
-    std::shared_ptr<spdlog::logger> backend_;
 };
 
 class SpdlogLoggerProvider final : public opentelemetry::logs::LoggerProvider {
