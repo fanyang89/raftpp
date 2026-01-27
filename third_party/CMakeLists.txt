@@ -71,3 +71,13 @@ if(RAFTPP_WITH_LIBURING)
     set(RAFTPP_WITH_LIBURING OFF CACHE BOOL "Enable liburing" FORCE)
   endif()
 endif()
+
+# OpenTelemetry API (header-only, no-op by default)
+CPMAddPackage(
+  URI "https://github.com/fanyang89/opentelemetry-cpp-api.git"
+  GIT_TAG "main"
+  OPTIONS
+    "OPENTELEMETRY_INSTALL OFF"
+    "WITH_STL CXX23"
+    "WITH_NO_DEPRECATED_CODE ON"
+)

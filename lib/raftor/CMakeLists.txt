@@ -3,4 +3,4 @@ add_subdirectory(rpc)
 
 add_library(raftor raftor.cc mock_state_machine.cc proposal_tracker.cc ready_processor.cc)
 
-target_link_libraries(raftor PUBLIC raftpp raftor-rpc raftor-wal)
+target_link_libraries(raftor PUBLIC raftpp raftor-rpc raftor-wal opentelemetry-cpp::api)
