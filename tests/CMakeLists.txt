@@ -10,6 +10,7 @@ add_executable(
   log_test.cc
   progress_test.cc
   raw_node_test.cc
+  read_only_test.cc
   storage_test.cc
   raft_paper_test.cc
   raft_test.cc
