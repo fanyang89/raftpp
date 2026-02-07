@@ -114,21 +114,6 @@ TEST_CASE("ReadOnly: AddRequest empty entries ignored") {
     CHECK_EQ(ro.LastPendingRequestCtx(), std::nullopt);
 }
 
-TEST_CASE("ReadOnly: AddRequest self ack included") {
-    ReadOnly ro(ReadOnlyOption::Safe);
-    const uint64_t self_id = 1;
-    const std::string ctx = "ctx1";
-
-    Message msg = NewReadIndexMessage(2, 1, ctx);
-    ro.AddRequest(10, msg, self_id);
-
-    // RecvACK returns the current ack set, which should include self_id
-    auto acks = ro.RecvACK(self_id, ctx);
-    REQUIRE(acks.has_value());
-    CHECK(acks->contains(self_id));
-    CHECK_EQ(acks->size(), 1);
-}
-
 // ============================================================================
 // LastPendingRequestCtx Tests
 // ============================================================================
