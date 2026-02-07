@@ -190,8 +190,8 @@ TEST_SUITE("wal") {
             auto segment = Segment::Create(path, 1, 1, false, 0);
             REQUIRE(segment.has_value());
             std::vector<uint8_t> data = {1, 2, 3, 4, 5};
-            std::ignore = (*segment)->Append(data);
-            std::ignore = (*segment)->Sync();
+            CHECK((*segment)->Append(data).has_value());
+            CHECK((*segment)->Sync().has_value());
         }
 
         // Open and verify
@@ -266,7 +266,7 @@ TEST_SUITE("wal") {
         entries.push_back(MakeWalEntry(1, 1));
         entries.push_back(MakeWalEntry(2, 1));
         entries.push_back(MakeWalEntry(3, 2));
-        std::ignore = (*wal)->Append(entries);
+        CHECK((*wal)->Append(entries));
 
         auto term = (*wal)->Term(1);
         REQUIRE(term.has_value());
@@ -340,7 +340,7 @@ TEST_SUITE("wal") {
             for (uint64_t i = 1; i <= 100; ++i) {
                 entries.push_back(MakeWalEntry(i, 1, "data" + std::to_string(i)));
             }
-            std::ignore = (*wal)->Append(entries);
+            CHECK((*wal)->Append(entries));
         }
 
         // Reopen and verify
@@ -373,7 +373,7 @@ TEST_SUITE("wal") {
         for (uint64_t i = 1; i <= 10; ++i) {
             entries.push_back(MakeWalEntry(i, 1));
         }
-        std::ignore = (*wal)->Append(entries);
+        CHECK((*wal)->Append(entries));
 
         // Compact
         auto result = (*wal)->Compact(5);
@@ -534,7 +534,7 @@ TEST_SUITE("wal") {
         for (uint64_t i = 1; i <= 10; ++i) {
             entries.push_back(MakeWalEntry(i, 1, std::string(100, 'x')));
         }
-        std::ignore = (*wal)->Append(entries);
+        CHECK((*wal)->Append(entries));
 
         // Read with size limit - should return at least one entry
         auto read_result = (*wal)->ReadEntries(1, 11, 50);
@@ -769,7 +769,7 @@ TEST_SUITE("wal") {
         for (uint64_t i = 1; i <= 10; ++i) {
             entries.push_back(MakeWalEntry(i, 1, "data"));
         }
-        std::ignore = (*wal)->Append(entries);
+        CHECK((*wal)->Append(entries));
 
         CHECK((*wal)->FirstIndex() == 1);
         CHECK((*wal)->LastIndex() == 10);
@@ -816,7 +816,7 @@ TEST_SUITE("wal") {
             for (uint64_t i = 1; i <= 20; ++i) {
                 entries.push_back(MakeWalEntry(i, 1, "data"));
             }
-            std::ignore = (*wal)->Append(entries);
+            CHECK((*wal)->Append(entries));
 
             Snapshot snap = capnp_util::make<msg::Snapshot>();
             auto snap_builder = capnp_util::builder<msg::Snapshot>(snap);
@@ -824,17 +824,18 @@ TEST_SUITE("wal") {
             meta_builder.setIndex(10);
             meta_builder.setTerm(1);
 
-            std::ignore = (*wal)->ApplySnapshot(snap);
-            std::ignore = (*wal)->Close();
+            CHECK((*wal)->ApplySnapshot(snap));
+            CHECK((*wal)->Close());
         }
 
         // Reopen and verify
+        // ApplySnapshot clears all entries, so last_index = first_index - 1 = 10
         {
             auto wal = WAL::Open(config);
             REQUIRE(wal.has_value());
 
             CHECK((*wal)->FirstIndex() == 11);
-            CHECK((*wal)->LastIndex() == 20);
+            CHECK((*wal)->LastIndex() == 10);
         }
     }
 
@@ -865,7 +866,7 @@ TEST_SUITE("wal") {
 
             auto result = (*wal)->SaveConfState(cs);
             CHECK(result.has_value());
-            std::ignore = (*wal)->Close();
+            CHECK((*wal)->Close());
         }
 
         // Reopen and verify
@@ -926,7 +927,7 @@ TEST_SUITE("wal") {
         for (uint64_t i = 1; i <= 10; ++i) {
             entries.push_back(MakeWalEntry(i, 1, "data"));
         }
-        std::ignore = (*wal)->Append(entries);
+        CHECK((*wal)->Append(entries));
 
         // Read exact range
         auto result = (*wal)->ReadEntries(1, 11, std::nullopt);
@@ -1006,7 +1007,7 @@ TEST_SUITE("wal") {
         entries.push_back(MakeWalEntry(3, 2, "term2"));
         entries.push_back(MakeWalEntry(4, 2, "term2"));
         entries.push_back(MakeWalEntry(5, 3, "term3"));
-        std::ignore = (*wal)->Append(entries);
+        CHECK((*wal)->Append(entries));
 
         // Verify terms
         for (uint64_t i = 1; i <= 5; ++i) {
@@ -1042,7 +1043,7 @@ TEST_SUITE("wal") {
         for (uint64_t i = 1; i <= 100; ++i) {
             entries.push_back(MakeWalEntry(i, 1, "data_" + std::to_string(i)));
         }
-        std::ignore = (*wal)->Append(entries);
+        CHECK((*wal)->Append(entries));
 
         // Read entries that span segments
         auto result = (*wal)->ReadEntries(1, 101, std::nullopt);
@@ -1083,7 +1084,7 @@ TEST_SUITE("wal") {
             }
 
             CHECK((*wal)->LastIndex() == 50);
-            std::ignore = (*wal)->Close();
+            CHECK((*wal)->Close());
         }
 
         // Reopen and verify
@@ -1116,7 +1117,7 @@ TEST_SUITE("wal") {
         for (uint64_t i = 1; i <= 100; ++i) {
             entries.push_back(MakeWalEntry(i, 1, "data"));
         }
-        std::ignore = (*wal)->Append(entries);
+        CHECK((*wal)->Append(entries));
 
         // Compact to remove old entries
         auto result = (*wal)->Compact(80);
@@ -1155,7 +1156,7 @@ TEST_SUITE("wal") {
         for (uint64_t i = 1; i <= 20; ++i) {
             entries.push_back(MakeWalEntry(i, 1, "data"));
         }
-        std::ignore = (*storage)->Append(entries);
+        CHECK((*storage)->Append(entries));
 
         // Compact
         auto result = (*storage)->Compact(10);
@@ -1192,7 +1193,7 @@ TEST_SUITE("wal") {
         for (uint64_t i = 1; i <= 10; ++i) {
             entries.push_back(MakeWalEntry(i, 1, "data"));
         }
-        std::ignore = (*storage)->Append(entries);
+        CHECK((*storage)->Append(entries));
 
         // Apply snapshot
         Snapshot snap = capnp_util::make<msg::Snapshot>();
@@ -1225,7 +1226,7 @@ TEST_SUITE("wal") {
         for (uint64_t i = 1; i <= 15; ++i) {
             entries.push_back(MakeWalEntry(i, 1, "entry_" + std::to_string(i)));
         }
-        std::ignore = (*storage)->Append(entries);
+        CHECK((*storage)->Append(entries));
 
         // Get all entries
         auto all = (*storage)->AllEntries();
@@ -1279,8 +1280,8 @@ TEST_SUITE("wal") {
         for (uint64_t i = 1; i <= 100; ++i) {
             entries.push_back(MakeWalEntry(i, 1, std::string(100, 'x')));
         }
-        std::ignore = (*storage)->Append(entries);
-        std::ignore = (*storage)->Sync();
+        CHECK((*storage)->Append(entries));
+        CHECK((*storage)->Sync());
 
         uint64_t final_size = (*storage)->LogSizeBytes();
         CHECK(final_size > initial_size);
@@ -1305,7 +1306,7 @@ TEST_SUITE("wal") {
         for (uint64_t i = 1; i <= 100; ++i) {
             entries.push_back(MakeWalEntry(i, 1, "data_" + std::to_string(i)));
         }
-        std::ignore = (*wal)->Append(entries);
+        CHECK((*wal)->Append(entries));
 
         // Perform multiple concurrent reads
         std::vector<std::thread> threads;
@@ -1316,6 +1317,7 @@ TEST_SUITE("wal") {
                 for (int i = 0; i < 10; ++i) {
                     uint64_t start = (t * 10 + i) % 90 + 1;
                     auto result = (*wal)->ReadEntries(start, start + 10, std::nullopt);
+                    CHECK(result.has_value());
                     if (result.has_value() && result->size() == 10) {
                         success_count++;
                     }
@@ -1351,7 +1353,7 @@ TEST_SUITE("wal") {
             entries.push_back(MakeWalEntry(1, 1, large_data));
             auto result = (*wal)->Append(entries);
             CHECK(result.has_value());
-            std::ignore = (*wal)->Close();
+            CHECK((*wal)->Close());
         }
 
         // Reopen and verify data integrity
@@ -1391,7 +1393,7 @@ TEST_SUITE("wal") {
             }
             auto result = (*wal)->Append(entries);
             CHECK(result.has_value());
-            std::ignore = (*wal)->Close();
+            CHECK((*wal)->Close());
         }
 
         // Reopen and verify
@@ -1490,8 +1492,8 @@ TEST_SUITE("wal") {
 
         // Write some data
         std::vector<uint8_t> data(1000, 0xAB);
-        std::ignore = (*segment)->Append(data);
-        std::ignore = (*segment)->Sync();
+        CHECK((*segment)->Append(data).has_value());
+        CHECK((*segment)->Sync().has_value());
 
         size_t original_offset = (*segment)->write_offset();
         CHECK(original_offset == sizeof(SegmentHeader) + 1000);
@@ -1590,7 +1592,7 @@ TEST_SUITE("wal") {
         TempDir temp_dir;
 
         MetadataStore store(temp_dir.path());
-        std::ignore = store.Initialize();
+        CHECK(store.Initialize());
 
         uint64_t initial_size = store.SizeBytes();
         CHECK(initial_size > 0);  // Initialize creates default metadata
@@ -1614,7 +1616,7 @@ TEST_SUITE("wal") {
         meta.snapshot_index = 499;
         meta.snapshot_term = 10;
 
-        std::ignore = store.Save(meta);
+        CHECK(store.Save(meta));
 
         uint64_t final_size = store.SizeBytes();
         CHECK(final_size > 0);

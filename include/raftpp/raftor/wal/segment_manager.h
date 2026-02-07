@@ -47,6 +47,9 @@ class SegmentManager {
     // Remove a specific segment
     [[nodiscard]] Result<void> RemoveSegment(uint64_t segment_id);
 
+    // Remove all segments
+    [[nodiscard]] Result<void> RemoveAllSegments();
+
     // List all segments sorted by segment_id
     [[nodiscard]] std::vector<SegmentInfo> ListSegments() const;
 

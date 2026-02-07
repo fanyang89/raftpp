@@ -750,10 +750,10 @@ Result<void> WAL::ApplySnapshot(const Snapshot& snapshot) {
     }
 
     // Remove all segments (they're all before the snapshot)
-    auto close_result = segment_manager_->CloseAll();
-    if (!close_result) {
+    auto remove_result = segment_manager_->RemoveAllSegments();
+    if (!remove_result) {
         RAFTPP_LOG_WARN(
-            "failed to close segments after snapshot: {}", close_result.error().ToString()
+            "failed to remove segments after snapshot: {}", remove_result.error().ToString()
         );
     }
 
