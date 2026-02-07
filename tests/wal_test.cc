@@ -1269,6 +1269,7 @@ TEST_SUITE("wal") {
         WALConfig config;
         config.dir = temp_dir.path();
         config.sync_on_write = true;
+        config.preallocate = false;  // Disable preallocation so file size grows with appends
 
         auto storage = WALStorage::Open(config);
         REQUIRE(storage.has_value());
@@ -1311,15 +1312,19 @@ TEST_SUITE("wal") {
         // Perform multiple concurrent reads
         std::vector<std::thread> threads;
         std::atomic<int> success_count{0};
+        std::atomic<int> failure_count{0};
 
         for (int t = 0; t < 10; ++t) {
-            threads.emplace_back([&wal, &success_count, t]() {
+            threads.emplace_back([&wal, &success_count, &failure_count, t]() {
                 for (int i = 0; i < 10; ++i) {
                     uint64_t start = (t * 10 + i) % 90 + 1;
                     auto result = (*wal)->ReadEntries(start, start + 10, std::nullopt);
-                    CHECK(result.has_value());
+                    // Collect results instead of asserting in thread (doctest assertions
+                    // are not thread-safe)
                     if (result.has_value() && result->size() == 10) {
                         success_count++;
+                    } else {
+                        failure_count++;
                     }
                 }
             });
@@ -1329,6 +1334,8 @@ TEST_SUITE("wal") {
             t.join();
         }
 
+        // Assert in main thread after all threads complete
+        CHECK(failure_count == 0);
         CHECK(success_count == 100);
     }
 
@@ -1512,9 +1519,15 @@ TEST_SUITE("wal") {
         auto segment = Segment::Create(path, 1, 1, true, 1024 * 1024);
         REQUIRE(segment.has_value());
 
-        // File should be preallocated
+        // File should be preallocated on Linux (posix_fallocate is only called on Linux)
         auto file_size = std::filesystem::file_size(path);
+#ifdef __linux__
         CHECK(file_size >= 1024 * 1024);
+#else
+        // On non-Linux platforms, preallocation may not be supported
+        // Just verify the file exists and write_offset is correct
+        CHECK(file_size >= sizeof(SegmentHeader));
+#endif
 
         // Write offset should still be at header
         CHECK((*segment)->write_offset() == sizeof(SegmentHeader));
