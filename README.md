@@ -76,18 +76,22 @@ cmake --preset=dev -DRAFTPP_WITH_LIBURING=ON
 
 class MyStateMachine : public raftpp::raftor::StateMachine {
 public:
-    raftpp::raftor::ApplyResult Apply(raftpp::Entry entry) override {
+    raftpp::Result<raftpp::raftor::ApplyResult> Apply(const raftpp::Entry& entry) override {
         // Apply the committed entry to your application state
         // Return the result to be passed back to the proposer
-        return {.data = "ok"};
+        return raftpp::raftor::ApplyResult{.response = "ok"};
     }
 
-    raftpp::Result<raftpp::Snapshot> TakeSnapshot() override {
+    raftpp::Result<raftpp::raftor::SnapshotData> TakeSnapshot(
+        uint64_t applied_index, uint64_t applied_term, const raftpp::ConfState& conf_state
+    ) override {
         // Serialize your application state for snapshots
+        return raftpp::raftor::SnapshotData{};
     }
 
-    raftpp::Result<void> RestoreSnapshot(raftpp::Snapshot snapshot) override {
+    raftpp::Result<void> RestoreSnapshot(const raftpp::raftor::SnapshotData& snapshot) override {
         // Restore your application state from a snapshot
+        return {};
     }
 };
 ```
@@ -110,10 +114,17 @@ int main() {
     config.pre_vote = true;
     config.check_quorum = true;
 
-    auto state_machine = std::make_shared<MyStateMachine>();
-    auto raftor = raftpp::raftor::Raftor::Create(config, state_machine);
+    auto state_machine = std::make_unique<MyStateMachine>();
+    auto result = raftpp::raftor::Raftor::Create(config, std::move(state_machine));
+    if (!result) {
+        // Handle creation error
+        return 1;
+    }
+    auto raftor = std::move(*result);
 
-    raftor->Start();
+    if (auto err = raftor->Start(); !err) {
+        return 1;
+    }
 
     // Event loop
     const auto tick_interval = std::chrono::milliseconds{100};
@@ -147,10 +158,11 @@ auto result = future.get();
 ### 4. Linearizable Reads
 
 ```cpp
-// Get read index, then read from state machine after index is applied
-raftor->ReadIndex("read-ctx", [&](raftpp::Result<uint64_t> result) {
+// Request linearizable read confirmation
+raftor->ReadIndex("read-ctx", [&](raftpp::Result<void> result) {
     if (result) {
-        // Wait until applied_index >= *result, then read
+        // Safe to read from state machine with linearizable consistency
+        // Use raftor->GetStatus().applied_index to check progress
     }
 });
 ```
