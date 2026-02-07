@@ -188,6 +188,22 @@ Result<void> SegmentManager::RemoveSegment(uint64_t segment_id) {
     return {};
 }
 
+Result<void> SegmentManager::RemoveAllSegments() {
+    std::vector<uint64_t> to_remove;
+    for (const auto& [seg_id, segment] : segments_) {
+        to_remove.push_back(seg_id);
+    }
+
+    for (uint64_t seg_id : to_remove) {
+        auto result = RemoveSegment(seg_id);
+        if (!result) {
+            return result;
+        }
+    }
+
+    return {};
+}
+
 std::vector<SegmentInfo> SegmentManager::ListSegments() const {
     std::vector<SegmentInfo> result;
     result.reserve(segments_.size());
