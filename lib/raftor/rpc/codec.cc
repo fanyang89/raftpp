@@ -240,34 +240,6 @@ Result<std::pair<RpcHandshake, size_t>> HandshakeCodec::Decode(std::span<const u
     return std::pair{std::move(hs), total_size};
 }
 
-// Legacy Handshake implementation (delegates to HandshakeCodec)
-std::vector<uint8_t> Handshake::Encode() const {
-    auto hs = capnp_util::make<capnp::RpcHandshake>();
-    auto hs_builder = capnp_util::builder<capnp::RpcHandshake>(hs);
-    hs_builder.setVersion(kVersion);
-    hs_builder.setNodeId(node_id);
-    hs_builder.setClusterId(cluster_id);
-    return HandshakeCodec::Encode(hs);
-}
-
-Result<Handshake> Handshake::Decode(std::span<const uint8_t> buffer) {
-    auto result = HandshakeCodec::Decode(buffer);
-    if (!result) {
-        return std::unexpected(result.error());
-    }
-
-    auto& [hs, consumed] = *result;
-    if (consumed == 0) {
-        return RaftError(RpcErrorCode::HandshakeBufferTooSmall);
-    }
-
-    auto hs_reader = capnp_util::reader<capnp::RpcHandshake>(hs);
-    Handshake legacy;
-    legacy.node_id = hs_reader.getNodeId();
-    legacy.cluster_id = hs_reader.getClusterId();
-    return legacy;
-}
-
 Result<std::pair<std::string, int>> ParseAddress(const std::string& addr) {
     auto colon = addr.rfind(':');
     if (colon == std::string::npos) {

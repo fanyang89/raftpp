@@ -106,20 +106,6 @@ class HandshakeCodec {
     static Result<std::pair<RpcHandshake, size_t>> Decode(std::span<const uint8_t> buffer);
 };
 
-/// Legacy Handshake struct for backward compatibility
-/// @deprecated Use HandshakeCodec with RpcHandshake instead
-struct Handshake {
-    static constexpr uint32_t kMagic = HandshakeCodec::kMagic;
-    static constexpr uint16_t kVersion = 1;
-    static constexpr size_t kSize = HandshakeCodec::kPrefixSize;  // Minimum size
-
-    uint64_t node_id;
-    uint64_t cluster_id = 0;
-
-    std::vector<uint8_t> Encode() const;
-    static Result<Handshake> Decode(std::span<const uint8_t> buffer);
-};
-
 /// Parse address string "host:port" into components
 /// @param addr Address string in the format "host:port"
 /// @return Pair of (host, port) on success, or RaftError on failure

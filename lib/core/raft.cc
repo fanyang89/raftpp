@@ -109,8 +109,7 @@ Raft::Raft(const Config& config, const std::shared_ptr<Storage>& store)
 }
 
 ConfState Raft::PostConfChange() {
-    // TODO(fanyang) formatter for tracker conf
-    // RAFTPP_LOG_INFO("switched to configuration, config={}", progress_tracker_.conf());
+    RAFTPP_LOG_INFO("switched to configuration, config={}", progress_tracker_.conf());
     auto cs = progress_tracker_.conf().ToConfState();
     const bool is_voter = progress_tracker_.conf().voters.Contains(id_);
     promotable_ = is_voter;

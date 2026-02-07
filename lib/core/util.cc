@@ -12,11 +12,12 @@ IndexTerm::IndexTerm(const Snapshot& snapshot) {
 }
 
 size_t EntryApproximateSize(const Entry& ent) {
+    // Cap'n Proto Entry message overhead (index, term, type fields)
+    static constexpr size_t kEntryMessageOverhead = 12;
     auto reader = capnp_util::reader<msg::Entry>(ent);
     auto data = reader.getData();
     auto context = reader.getContext();
-    // TODO(fanyang) check the 12
-    return data.size() + context.size() + 12;
+    return data.size() + context.size() + kEntryMessageOverhead;
 }
 
 void LimitSize(std::vector<Entry>& entries, std::optional<uint64_t> max) {
