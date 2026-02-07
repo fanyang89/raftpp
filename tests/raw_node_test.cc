@@ -361,7 +361,6 @@ TEST_CASE("raw_node: step local message ignored") {
 }
 
 /// Test that RawNode.read_index sends MessageType::MSG_READ_INDEX and ReadState can be read out.
-/// TODO: This test may need adjustment based on raftpp's read index implementation
 TEST_CASE("raw_node: read index") {
     const std::string request_ctx = "somedata";
     const std::vector<ReadState> wrs = {ReadState{2, request_ctx}};
@@ -446,7 +445,6 @@ TEST_CASE("raw_node: start") {
 }
 
 /// Test node restart.
-/// TODO: This test may need adjustment - raftpp may have different behavior for committed entries on restart
 TEST_CASE("raw_node: restart") {
     // raft-rs: empty_entry(term=1, index=1), new_entry(term=1, index=2)
     // raftpp: EmptyEntry(index, term), NewEntry(index, term)
@@ -483,7 +481,6 @@ TEST_CASE("raw_node: restart") {
 }
 
 /// Test node restart from snapshot.
-/// TODO: This test may need adjustment - raftpp may have different behavior for committed entries on restart
 TEST_CASE("raw_node: restart from snapshot") {
     // raft-rs: new_snapshot(index=2, term=1, voters)
     // raftpp: NewSnapshot(index, term, voters) ✓

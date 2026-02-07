@@ -129,20 +129,6 @@ TEST_SUITE("rpc") {
         CHECK(DataToString(decoded_reader.getEntries()[5].getData()) == "test data 5");
     }
 
-    TEST_CASE("Handshake encode/decode round-trip") {
-        Handshake hs;
-        hs.node_id = 12345;
-        hs.cluster_id = 999;
-
-        auto encoded = hs.Encode();
-        CHECK(encoded.size() >= Handshake::kSize);  // At least prefix size
-
-        auto result = Handshake::Decode(encoded);
-        REQUIRE(result.has_value());
-        CHECK(result->node_id == 12345);
-        CHECK(result->cluster_id == 999);
-    }
-
     TEST_CASE("HandshakeCodec encode/decode round-trip") {
         RpcHandshake hs = capnp_util::make<raftpp::capnp::RpcHandshake>();
         auto builder = capnp_util::builder<raftpp::capnp::RpcHandshake>(hs);
@@ -161,14 +147,6 @@ TEST_SUITE("rpc") {
         CHECK(decoded_reader.getVersion() == 1);
         CHECK(decoded_reader.getNodeId() == 54321);
         CHECK(decoded_reader.getClusterId() == 888);
-    }
-
-    TEST_CASE("Handshake rejects invalid magic") {
-        std::vector<uint8_t> bad_hs(HandshakeCodec::kPrefixSize, 0);
-
-        auto result = Handshake::Decode(bad_hs);
-        REQUIRE(!result.has_value());
-        CHECK(result.error().Is(RpcErrorCode::InvalidMagic));
     }
 
     TEST_CASE("Handshake rejects incomplete buffer") {
