@@ -1,6 +1,8 @@
 #include "kv_store_state_machine.h"
 
 #include <array>
+#include <istream>
+#include <streambuf>
 
 #include <nlohmann/json.hpp>
 
@@ -39,11 +41,58 @@ std::string serializeData(const std::map<std::string, std::string>& data) {
     return j.dump();
 }
 
-raftpp::Result<std::map<std::string, std::string>> deserializeData(const std::string& data_str) {
+class SnapshotReaderStreamBuf final : public std::streambuf {
+  public:
+    explicit SnapshotReaderStreamBuf(raftpp::raftor::SnapshotReader& reader) : reader_(reader) {
+        char* begin = reinterpret_cast<char*>(buffer_.data());
+        setg(begin, begin, begin);
+    }
+
+    [[nodiscard]] const std::optional<raftpp::RaftError>& error() const { return error_; }
+
+  protected:
+    int_type underflow() override {
+        if (gptr() < egptr()) {
+            return traits_type::to_int_type(*gptr());
+        }
+
+        auto read_result = reader_.Read(buffer_);
+        if (!read_result) {
+            error_ = read_result.error();
+            return traits_type::eof();
+        }
+
+        const size_t bytes_read = *read_result;
+        if (bytes_read == 0) {
+            return traits_type::eof();
+        }
+
+        char* begin = reinterpret_cast<char*>(buffer_.data());
+        setg(begin, begin, begin + static_cast<std::ptrdiff_t>(bytes_read));
+        return traits_type::to_int_type(*gptr());
+    }
+
+  private:
+    raftpp::raftor::SnapshotReader& reader_;
+    std::array<uint8_t, 4096> buffer_{};
+    std::optional<raftpp::RaftError> error_;
+};
+
+raftpp::Result<std::map<std::string, std::string>> deserializeData(
+    raftpp::raftor::SnapshotReader& reader
+) {
+    SnapshotReaderStreamBuf stream_buf(reader);
+    std::istream stream(&stream_buf);
     try {
-        auto j = nlohmann::json::parse(data_str);
+        auto j = nlohmann::json::parse(stream);
+        if (stream_buf.error().has_value()) {
+            return std::unexpected(*stream_buf.error());
+        }
         return j.get<std::map<std::string, std::string>>();
     } catch (const nlohmann::json::exception& e) {
+        if (stream_buf.error().has_value()) {
+            return std::unexpected(*stream_buf.error());
+        }
         return std::unexpected(
             raftpp::RaftError(
                 raftpp::StorageErrorOther{
@@ -135,22 +184,18 @@ raftpp::Result<raftpp::SnapshotMetadata> KvStoreStateMachine::TakeSnapshot(
 raftpp::Result<void> KvStoreStateMachine::RestoreSnapshot(
     const raftpp::SnapshotMetadata& metadata, raftpp::raftor::SnapshotReader& reader
 ) {
-    (void)metadata;
-    std::string data_str;
-    std::array<uint8_t, 4096> buffer{};
-    while (true) {
-        auto read_result = reader.Read(buffer);
-        if (!read_result) {
-            return std::unexpected(read_result.error());
-        }
-        const size_t bytes_read = *read_result;
-        if (bytes_read == 0) {
-            break;
-        }
-        data_str.append(reinterpret_cast<const char*>(buffer.data()), bytes_read);
+    auto meta = raftpp::capnp_util::reader<raftpp::msg::SnapshotMetadata>(metadata);
+    if (meta.getIndex() == 0) {
+        return std::unexpected(
+            raftpp::RaftError(
+                raftpp::StorageErrorOther{
+                    "kvstore snapshot metadata index must be non-zero",
+                }
+            )
+        );
     }
 
-    auto data_result = deserializeData(data_str);
+    auto data_result = deserializeData(reader);
     if (!data_result) {
         return std::unexpected(data_result.error());
     }

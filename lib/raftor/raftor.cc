@@ -1,8 +1,11 @@
 #include "raftpp/raftor/raftor.h"
 
 #include <atomic>
+#include <cerrno>
 #include <chrono>
 #include <condition_variable>
+#include <cstdio>
+#include <cstring>
 #include <limits>
 #include <mutex>
 #include <thread>
@@ -29,21 +32,74 @@ namespace {
 constexpr auto kLogSizeCheckMinInterval = std::chrono::seconds{1};
 constexpr auto kSnapshotRetryMinInterval = std::chrono::seconds{1};
 
-class BufferSnapshotWriter final : public SnapshotWriter {
+class TempFileSnapshotWriter final : public SnapshotWriter {
   public:
-    explicit BufferSnapshotWriter(std::vector<uint8_t>* buffer) : buffer_(buffer) {}
+    explicit TempFileSnapshotWriter(std::FILE* file) : file_(file) {}
 
     Result<void> Write(std::span<const uint8_t> chunk) override {
-        if (chunk.empty()) {
-            return {};
+        const size_t bytes_written = std::fwrite(chunk.data(), 1, chunk.size(), file_);
+        if (bytes_written != chunk.size()) {
+            return RaftError(
+                StorageErrorOther{
+                    fmt::format("snapshot temp write failed: {}", std::strerror(errno)),
+                }
+            );
         }
-        buffer_->insert(buffer_->end(), chunk.begin(), chunk.end());
+        total_bytes_written_ += bytes_written;
         return {};
     }
 
+    [[nodiscard]] uint64_t total_bytes_written() const { return total_bytes_written_; }
+
   private:
-    std::vector<uint8_t>* buffer_;
+    std::FILE* file_;
+    uint64_t total_bytes_written_ = 0;
 };
+
+Result<void> LoadSnapshotDataFromFile(
+    std::FILE* file, uint64_t payload_size, msg::Snapshot::Builder* snapshot_builder
+) {
+    if (payload_size > std::numeric_limits<uint32_t>::max()) {
+        return RaftError(
+            StorageErrorOther{
+                "snapshot payload exceeds Cap'n Proto Data size limit",
+            }
+        );
+    }
+
+    if (std::fseek(file, 0, SEEK_SET) != 0) {
+        return RaftError(
+            StorageErrorOther{
+                fmt::format("snapshot temp rewind failed: {}", std::strerror(errno)),
+            }
+        );
+    }
+
+    auto data_builder = snapshot_builder->initData(static_cast<uint32_t>(payload_size));
+    size_t copied = 0;
+    while (copied < payload_size) {
+        const size_t to_read =
+            std::min(static_cast<size_t>(payload_size - copied), size_t{1 << 20});
+        size_t read = std::fread(data_builder.begin() + copied, 1, to_read, file);
+        if (read == 0) {
+            if (std::ferror(file) != 0) {
+                return RaftError(
+                    StorageErrorOther{
+                        fmt::format("snapshot temp read failed: {}", std::strerror(errno)),
+                    }
+                );
+            }
+            return RaftError(
+                StorageErrorOther{
+                    "snapshot temp read hit unexpected EOF",
+                }
+            );
+        }
+        copied += read;
+    }
+
+    return {};
+}
 
 bool TryGetRdmaMaxFrameSize(uint64_t payload_max, size_t* max_frame_size) {
     const size_t frame_overhead = rpc::Codec::FrameOverhead();
@@ -790,9 +846,20 @@ Result<void> RaftorImpl::TakeSnapshot() {
         return term_result.error();
     }
 
-    // Create snapshot via state machine.
-    std::vector<uint8_t> snapshot_bytes;
-    BufferSnapshotWriter writer(&snapshot_bytes);
+    std::unique_ptr<std::FILE, int (*)(std::FILE*)> snapshot_file(std::tmpfile(), &std::fclose);
+    if (snapshot_file == nullptr) {
+        auto error = RaftError(
+            StorageErrorOther{
+                fmt::format("snapshot temp file creation failed: {}", std::strerror(errno)),
+            }
+        );
+        telemetry::RecordError(span.span(), error.ToString());
+        RAFTPP_LOG_ERROR("Snapshot failed to create temp file: {}", error.ToString());
+        return error;
+    }
+
+    // Create snapshot via state machine and stream payload to a temp file.
+    TempFileSnapshotWriter writer(snapshot_file.get());
     auto metadata_result = state_machine_->TakeSnapshot(
         applied_index, *term_result, initial_state->conf_state, writer
     );
@@ -807,11 +874,17 @@ Result<void> RaftorImpl::TakeSnapshot() {
     // Create Cap'n Proto snapshot
     Snapshot snapshot = capnp_util::make<msg::Snapshot>();
     auto snap_builder = capnp_util::builder<msg::Snapshot>(snapshot);
-    snap_builder.setData(
-        kj::arrayPtr(
-            reinterpret_cast<const kj::byte*>(snapshot_bytes.data()), snapshot_bytes.size()
-        )
-    );
+    const uint64_t payload_size = writer.total_bytes_written();
+    span.span()->SetAttribute("raft.snapshot.payload_bytes", static_cast<int64_t>(payload_size));
+
+    auto load_result = LoadSnapshotDataFromFile(snapshot_file.get(), payload_size, &snap_builder);
+    if (telemetry::RecordErrorIf(span.span(), load_result)) {
+        RAFTPP_LOG_ERROR(
+            "Snapshot failed to load payload from temp file at index {}: {}", applied_index,
+            load_result.error().ToString()
+        );
+        return load_result.error();
+    }
     snap_builder.setMetadata(capnp_util::reader<msg::SnapshotMetadata>(*metadata_result));
 
     // Apply to storage (this will compact the log)
