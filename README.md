@@ -82,15 +82,26 @@ public:
         return raftpp::raftor::ApplyResult{.response = "ok"};
     }
 
-    raftpp::Result<raftpp::raftor::SnapshotData> TakeSnapshot(
-        uint64_t applied_index, uint64_t applied_term, const raftpp::ConfState& conf_state
+    raftpp::Result<raftpp::SnapshotMetadata> TakeSnapshot(
+        uint64_t applied_index, uint64_t applied_term, const raftpp::ConfState& conf_state,
+        raftpp::raftor::SnapshotWriter& writer
     ) override {
-        // Serialize your application state for snapshots
-        return raftpp::raftor::SnapshotData{};
+        // Stream snapshot payload bytes into writer.
+        std::array<uint8_t, 4> bytes = {'s', 'n', 'a', 'p'};
+        writer.Write(bytes);
+
+        auto metadata = raftpp::capnp_util::make<raftpp::msg::SnapshotMetadata>();
+        auto meta = raftpp::capnp_util::builder<raftpp::msg::SnapshotMetadata>(metadata);
+        meta.setIndex(applied_index);
+        meta.setTerm(applied_term);
+        meta.setConfState(raftpp::capnp_util::reader<raftpp::msg::ConfState>(conf_state));
+        return metadata;
     }
 
-    raftpp::Result<void> RestoreSnapshot(const raftpp::raftor::SnapshotData& snapshot) override {
-        // Restore your application state from a snapshot
+    raftpp::Result<void> RestoreSnapshot(
+        const raftpp::SnapshotMetadata& metadata, raftpp::raftor::SnapshotReader& reader
+    ) override {
+        // Read snapshot payload bytes from reader and restore application state.
         return {};
     }
 };

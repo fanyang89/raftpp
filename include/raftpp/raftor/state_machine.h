@@ -1,9 +1,10 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <string>
-#include <vector>
 
 #include "raftpp/core/error.h"
 #include "raftpp/core/types.h"
@@ -16,13 +17,19 @@ struct ApplyResult {
     std::optional<std::string> response;
 };
 
-/// Snapshot data holder
-struct SnapshotData {
-    /// The serialized snapshot data
-    std::vector<uint8_t> data;
+/// Streaming sink for snapshot bytes.
+class SnapshotWriter {
+  public:
+    virtual ~SnapshotWriter() = default;
+    [[nodiscard]] virtual Result<void> Write(std::span<const uint8_t> chunk) = 0;
+};
 
-    /// Metadata about the snapshot (index, term, conf_state)
-    SnapshotMetadata metadata;
+/// Streaming source for snapshot bytes.
+class SnapshotReader {
+  public:
+    virtual ~SnapshotReader() = default;
+    /// Read up to out.size() bytes. Returns 0 on EOF.
+    [[nodiscard]] virtual Result<size_t> Read(std::span<uint8_t> out) = 0;
 };
 
 /// The StateMachine interface that users must implement
@@ -57,9 +64,11 @@ class StateMachine {
     /// @param applied_index The last applied index to include
     /// @param applied_term The term of the last applied entry
     /// @param conf_state The current cluster configuration
-    /// @return SnapshotData containing the serialized state, or error
-    [[nodiscard]] virtual Result<SnapshotData> TakeSnapshot(
-        uint64_t applied_index, uint64_t applied_term, const ConfState& conf_state
+    /// @param writer Streaming sink for snapshot payload bytes
+    /// @return Snapshot metadata (index, term, conf_state), or error
+    [[nodiscard]] virtual Result<SnapshotMetadata> TakeSnapshot(
+        uint64_t applied_index, uint64_t applied_term, const ConfState& conf_state,
+        SnapshotWriter& writer
     ) = 0;
 
     /// Restore state machine from a snapshot
@@ -67,9 +76,12 @@ class StateMachine {
     /// Called when this node receives a snapshot from the leader.
     /// The state machine should completely replace its state with the snapshot.
     ///
-    /// @param snapshot The snapshot to restore from
+    /// @param metadata The snapshot metadata (index, term, conf_state)
+    /// @param reader Streaming source of snapshot payload bytes
     /// @return void on success, or error
-    [[nodiscard]] virtual Result<void> RestoreSnapshot(const SnapshotData& snapshot) = 0;
+    [[nodiscard]] virtual Result<void> RestoreSnapshot(
+        const SnapshotMetadata& metadata, SnapshotReader& reader
+    ) = 0;
 
     /// Called when leadership status changes
     ///

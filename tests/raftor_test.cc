@@ -2,6 +2,7 @@
 
 #include <unistd.h>
 
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <filesystem>
@@ -63,17 +64,39 @@ class MockStateMachine : public StateMachine {
         return ApplyResult{.response = "OK:" + std::to_string(apply_count_)};
     }
 
-    Result<SnapshotData> TakeSnapshot(
-        uint64_t applied_index, uint64_t applied_term, const ConfState& conf_state
+    Result<SnapshotMetadata> TakeSnapshot(
+        uint64_t applied_index, uint64_t applied_term, const ConfState& conf_state,
+        SnapshotWriter& writer
     ) override {
         std::lock_guard lock(mutex_);
-        SnapshotData data;
-        data.data = {'s', 'n', 'a', 'p'};
-        return data;
+        const std::array<uint8_t, 4> snapshot_payload = {'s', 'n', 'a', 'p'};
+        if (auto write_result = writer.Write(snapshot_payload); !write_result) {
+            return std::unexpected(write_result.error());
+        }
+
+        auto metadata = capnp_util::make<msg::SnapshotMetadata>();
+        auto meta_builder = capnp_util::builder<msg::SnapshotMetadata>(metadata);
+        meta_builder.setIndex(applied_index);
+        meta_builder.setTerm(applied_term);
+        meta_builder.setConfState(capnp_util::reader<msg::ConfState>(conf_state));
+        return metadata;
     }
 
-    Result<void> RestoreSnapshot(const SnapshotData& snapshot) override {
+    Result<void> RestoreSnapshot(
+        const SnapshotMetadata& metadata, SnapshotReader& reader
+    ) override {
         std::lock_guard lock(mutex_);
+        (void)metadata;
+        std::array<uint8_t, 1024> buffer{};
+        while (true) {
+            auto read_result = reader.Read(buffer);
+            if (!read_result) {
+                return std::unexpected(read_result.error());
+            }
+            if (*read_result == 0) {
+                break;
+            }
+        }
         restore_count_++;
         return {};
     }

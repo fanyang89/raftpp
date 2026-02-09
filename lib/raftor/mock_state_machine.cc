@@ -1,5 +1,6 @@
 #include "raftpp/raftor/mock_state_machine.h"
 
+#include <array>
 #include <utility>
 
 namespace raftpp::raftor {
@@ -22,8 +23,9 @@ Result<ApplyResult> MockStateMachine::Apply(const Entry& entry) {
     return ApplyResult{.response = std::move(response)};
 }
 
-Result<SnapshotData> MockStateMachine::TakeSnapshot(
-    uint64_t applied_index, uint64_t applied_term, const ConfState& conf_state
+Result<SnapshotMetadata> MockStateMachine::TakeSnapshot(
+    uint64_t applied_index, uint64_t applied_term, const ConfState& conf_state,
+    SnapshotWriter& writer
 ) {
     std::lock_guard lock(mutex_);
     ++snapshot_count_;
@@ -32,20 +34,28 @@ Result<SnapshotData> MockStateMachine::TakeSnapshot(
         return std::unexpected(RaftError(StorageErrorCode::SnapshotTemporarilyUnavailable));
     }
 
-    SnapshotData data;
-    data.data = snapshot_payload_;
-    data.metadata = capnp_util::make<msg::SnapshotMetadata>();
-    auto meta_builder = capnp_util::builder<msg::SnapshotMetadata>(data.metadata);
+    if (auto write_result = writer.Write(
+            std::span<const uint8_t>(snapshot_payload_.data(), snapshot_payload_.size())
+        );
+        !write_result) {
+        ++snapshot_failure_count_;
+        return std::unexpected(write_result.error());
+    }
+
+    auto metadata = capnp_util::make<msg::SnapshotMetadata>();
+    auto meta_builder = capnp_util::builder<msg::SnapshotMetadata>(metadata);
     meta_builder.setIndex(applied_index);
     meta_builder.setTerm(applied_term);
     meta_builder.setConfState(capnp_util::reader<msg::ConfState>(conf_state));
     last_snapshot_index_ = applied_index;
     last_snapshot_term_ = applied_term;
     ++snapshot_success_count_;
-    return data;
+    return metadata;
 }
 
-Result<void> MockStateMachine::RestoreSnapshot(const SnapshotData& snapshot) {
+Result<void> MockStateMachine::RestoreSnapshot(
+    const SnapshotMetadata& metadata, SnapshotReader& reader
+) {
     std::lock_guard lock(mutex_);
     ++restore_count_;
     if (should_fail_restore_) {
@@ -53,10 +63,27 @@ Result<void> MockStateMachine::RestoreSnapshot(const SnapshotData& snapshot) {
         return std::unexpected(RaftError(StorageErrorCode::Unavailable));
     }
 
-    auto meta_reader = capnp_util::reader<msg::SnapshotMetadata>(snapshot.metadata);
+    auto meta_reader = capnp_util::reader<msg::SnapshotMetadata>(metadata);
     last_restored_index_ = meta_reader.getIndex();
     last_restored_term_ = meta_reader.getTerm();
-    last_restored_data_ = snapshot.data;
+    last_restored_data_.clear();
+
+    std::array<uint8_t, 4096> buffer{};
+    while (true) {
+        auto read_result = reader.Read(buffer);
+        if (!read_result) {
+            ++restore_failure_count_;
+            return std::unexpected(read_result.error());
+        }
+        const size_t bytes_read = *read_result;
+        if (bytes_read == 0) {
+            break;
+        }
+        last_restored_data_.insert(
+            last_restored_data_.end(), buffer.begin(), buffer.begin() + bytes_read
+        );
+    }
+
     ++restore_success_count_;
     return {};
 }

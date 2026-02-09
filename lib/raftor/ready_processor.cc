@@ -1,11 +1,76 @@
 #include "ready_processor.h"
 
 #include <algorithm>
+#include <cstring>
 
 #include "raftpp/logging.h"
 #include "raftpp/raftor/telemetry.h"
 
 namespace raftpp::raftor {
+namespace {
+
+class SnapshotDataReader final : public SnapshotReader {
+  public:
+    explicit SnapshotDataReader(::capnp::Data::Reader data) : data_(data) {}
+
+    Result<size_t> Read(std::span<uint8_t> out) override {
+        if (offset_ >= data_.size()) {
+            return 0;
+        }
+        if (out.empty()) {
+            return 0;
+        }
+
+        const size_t remaining = data_.size() - offset_;
+        const size_t bytes_to_copy = std::min(out.size(), remaining);
+        std::memcpy(out.data(), data_.begin() + offset_, bytes_to_copy);
+        offset_ += bytes_to_copy;
+        return bytes_to_copy;
+    }
+
+  private:
+    ::capnp::Data::Reader data_;
+    size_t offset_ = 0;
+};
+
+SnapshotMetadata CloneSnapshotMetadata(msg::SnapshotMetadata::Reader snap_meta) {
+    auto metadata = capnp_util::make<msg::SnapshotMetadata>();
+    auto meta_builder = capnp_util::builder<msg::SnapshotMetadata>(metadata);
+    meta_builder.setIndex(snap_meta.getIndex());
+    meta_builder.setTerm(snap_meta.getTerm());
+
+    auto conf_src = snap_meta.getConfState();
+    auto conf_dst = meta_builder.initConfState();
+
+    auto voters_src = conf_src.getVoters();
+    auto voters_dst = conf_dst.initVoters(voters_src.size());
+    for (size_t i = 0; i < voters_src.size(); ++i) {
+        voters_dst.set(i, voters_src[i]);
+    }
+
+    auto learners_src = conf_src.getLearners();
+    auto learners_dst = conf_dst.initLearners(learners_src.size());
+    for (size_t i = 0; i < learners_src.size(); ++i) {
+        learners_dst.set(i, learners_src[i]);
+    }
+
+    auto voters_out_src = conf_src.getVotersOutgoing();
+    auto voters_out_dst = conf_dst.initVotersOutgoing(voters_out_src.size());
+    for (size_t i = 0; i < voters_out_src.size(); ++i) {
+        voters_out_dst.set(i, voters_out_src[i]);
+    }
+
+    auto learners_next_src = conf_src.getLearnersNext();
+    auto learners_next_dst = conf_dst.initLearnersNext(learners_next_src.size());
+    for (size_t i = 0; i < learners_next_src.size(); ++i) {
+        learners_next_dst.set(i, learners_next_src[i]);
+    }
+
+    conf_dst.setAutoLeave(conf_src.getAutoLeave());
+    return metadata;
+}
+
+}  // namespace
 
 ReadyProcessor::ReadyProcessor(
     RawNode& raw_node, std::shared_ptr<wal::WALStorage> storage, StateMachine& state_machine,
@@ -155,9 +220,10 @@ Result<void> ReadyProcessor::ApplySnapshot(const Ready& rd) {
         "Applying snapshot at index {} term {}", snap_meta.getIndex(), snap_meta.getTerm()
     );
 
-    // First restore to state machine
-    auto snapshot_data = ToSnapshotData(snapshot);
-    if (auto result = state_machine_.RestoreSnapshot(snapshot_data); !result) {
+    // First restore to state machine.
+    auto metadata = CloneSnapshotMetadata(snap_meta);
+    SnapshotDataReader reader(snap_reader.getData());
+    if (auto result = state_machine_.RestoreSnapshot(metadata, reader); !result) {
         RAFTPP_LOG_ERROR("Failed to restore snapshot to state machine");
         telemetry::RecordErrorIf(span.span(), result);
         return result.error();
@@ -438,51 +504,6 @@ void ReadyProcessor::CheckLeadershipChange(const Ready& rd) {
     if (rd.hs) {
         prev_term_ = capnp_util::reader<msg::HardState>(*rd.hs).getTerm();
     }
-}
-
-SnapshotData ReadyProcessor::ToSnapshotData(const Snapshot& snapshot) {
-    SnapshotData data;
-    auto snap_reader = capnp_util::reader<msg::Snapshot>(snapshot);
-    auto snap_data = snap_reader.getData();
-    data.data = std::vector<uint8_t>(snap_data.begin(), snap_data.end());
-
-    // Clone the metadata
-    auto snap_meta = snap_reader.getMetadata();
-    auto meta_builder = capnp_util::builder<msg::SnapshotMetadata>(data.metadata);
-    meta_builder.setIndex(snap_meta.getIndex());
-    meta_builder.setTerm(snap_meta.getTerm());
-
-    // Copy ConfState
-    auto conf_src = snap_meta.getConfState();
-    auto conf_dst = meta_builder.initConfState();
-
-    auto voters_src = conf_src.getVoters();
-    auto voters_dst = conf_dst.initVoters(voters_src.size());
-    for (size_t i = 0; i < voters_src.size(); ++i) {
-        voters_dst.set(i, voters_src[i]);
-    }
-
-    auto learners_src = conf_src.getLearners();
-    auto learners_dst = conf_dst.initLearners(learners_src.size());
-    for (size_t i = 0; i < learners_src.size(); ++i) {
-        learners_dst.set(i, learners_src[i]);
-    }
-
-    auto voters_out_src = conf_src.getVotersOutgoing();
-    auto voters_out_dst = conf_dst.initVotersOutgoing(voters_out_src.size());
-    for (size_t i = 0; i < voters_out_src.size(); ++i) {
-        voters_out_dst.set(i, voters_out_src[i]);
-    }
-
-    auto learners_next_src = conf_src.getLearnersNext();
-    auto learners_next_dst = conf_dst.initLearnersNext(learners_next_src.size());
-    for (size_t i = 0; i < learners_next_src.size(); ++i) {
-        learners_next_dst.set(i, learners_next_src[i]);
-    }
-
-    conf_dst.setAutoLeave(conf_src.getAutoLeave());
-
-    return data;
 }
 
 }  // namespace raftpp::raftor
