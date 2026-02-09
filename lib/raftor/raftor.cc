@@ -29,6 +29,22 @@ namespace {
 constexpr auto kLogSizeCheckMinInterval = std::chrono::seconds{1};
 constexpr auto kSnapshotRetryMinInterval = std::chrono::seconds{1};
 
+class BufferSnapshotWriter final : public SnapshotWriter {
+  public:
+    explicit BufferSnapshotWriter(std::vector<uint8_t>* buffer) : buffer_(buffer) {}
+
+    Result<void> Write(std::span<const uint8_t> chunk) override {
+        if (chunk.empty()) {
+            return {};
+        }
+        buffer_->insert(buffer_->end(), chunk.begin(), chunk.end());
+        return {};
+    }
+
+  private:
+    std::vector<uint8_t>* buffer_;
+};
+
 bool TryGetRdmaMaxFrameSize(uint64_t payload_max, size_t* max_frame_size) {
     const size_t frame_overhead = rpc::Codec::FrameOverhead();
     const size_t message_overhead = rpc::Codec::MessageOverhead();
@@ -774,15 +790,18 @@ Result<void> RaftorImpl::TakeSnapshot() {
         return term_result.error();
     }
 
-    // Create snapshot via state machine
-    auto snapshot_result =
-        state_machine_->TakeSnapshot(applied_index, *term_result, initial_state->conf_state);
-    if (telemetry::RecordErrorIf(span.span(), snapshot_result)) {
+    // Create snapshot via state machine.
+    std::vector<uint8_t> snapshot_bytes;
+    BufferSnapshotWriter writer(&snapshot_bytes);
+    auto metadata_result = state_machine_->TakeSnapshot(
+        applied_index, *term_result, initial_state->conf_state, writer
+    );
+    if (telemetry::RecordErrorIf(span.span(), metadata_result)) {
         RAFTPP_LOG_ERROR(
             "Snapshot failed to build state at index {}: {}", applied_index,
-            snapshot_result.error().ToString()
+            metadata_result.error().ToString()
         );
-        return snapshot_result.error();
+        return metadata_result.error();
     }
 
     // Create Cap'n Proto snapshot
@@ -790,11 +809,10 @@ Result<void> RaftorImpl::TakeSnapshot() {
     auto snap_builder = capnp_util::builder<msg::Snapshot>(snapshot);
     snap_builder.setData(
         kj::arrayPtr(
-            reinterpret_cast<const kj::byte*>(snapshot_result->data.data()),
-            snapshot_result->data.size()
+            reinterpret_cast<const kj::byte*>(snapshot_bytes.data()), snapshot_bytes.size()
         )
     );
-    snap_builder.setMetadata(capnp_util::reader<msg::SnapshotMetadata>(snapshot_result->metadata));
+    snap_builder.setMetadata(capnp_util::reader<msg::SnapshotMetadata>(*metadata_result));
 
     // Apply to storage (this will compact the log)
     if (auto result = storage_->ApplySnapshot(snapshot); !result) {

@@ -1,5 +1,8 @@
+#include <algorithm>
 #include <doctest/doctest.h>
 #include <nlohmann/json.hpp>
+
+#include <cstring>
 
 #include "kv_store_state_machine.h"
 #include "raftpp/core/capnp_util.h"
@@ -23,6 +26,38 @@ raftpp::ConfState CreateTestConfState() {
     voters.set(0, 1);
     return conf_state;
 }
+
+class BufferSnapshotWriter final : public raftpp::raftor::SnapshotWriter {
+  public:
+    explicit BufferSnapshotWriter(std::vector<uint8_t>* buffer) : buffer_(buffer) {}
+
+    raftpp::Result<void> Write(std::span<const uint8_t> chunk) override {
+        buffer_->insert(buffer_->end(), chunk.begin(), chunk.end());
+        return {};
+    }
+
+  private:
+    std::vector<uint8_t>* buffer_;
+};
+
+class BufferSnapshotReader final : public raftpp::raftor::SnapshotReader {
+  public:
+    explicit BufferSnapshotReader(const std::vector<uint8_t>* buffer) : buffer_(buffer) {}
+
+    raftpp::Result<size_t> Read(std::span<uint8_t> out) override {
+        if (offset_ >= buffer_->size()) {
+            return 0;
+        }
+        const size_t bytes_to_copy = std::min(out.size(), buffer_->size() - offset_);
+        std::memcpy(out.data(), buffer_->data() + offset_, bytes_to_copy);
+        offset_ += bytes_to_copy;
+        return bytes_to_copy;
+    }
+
+  private:
+    const std::vector<uint8_t>* buffer_;
+    size_t offset_ = 0;
+};
 
 }  // namespace
 
@@ -102,11 +137,14 @@ TEST_CASE("kv_store: snapshot and restore") {
     auto put2_result = sm.Apply(CreateTestEntry(put2_json));
     CHECK(put2_result.has_value());
 
-    auto snapshot_result = sm.TakeSnapshot(2, 1, CreateTestConfState());
-    CHECK(snapshot_result.has_value());
+    std::vector<uint8_t> snapshot_data;
+    BufferSnapshotWriter writer(&snapshot_data);
+    auto metadata_result = sm.TakeSnapshot(2, 1, CreateTestConfState(), writer);
+    CHECK(metadata_result.has_value());
 
     KvStoreStateMachine sm2;
-    auto restore_result = sm2.RestoreSnapshot(*snapshot_result);
+    BufferSnapshotReader reader(&snapshot_data);
+    auto restore_result = sm2.RestoreSnapshot(*metadata_result, reader);
     CHECK(restore_result.has_value());
 
     CHECK(sm2.Get("snap_key1").has_value());
@@ -128,10 +166,12 @@ TEST_CASE("kv_store: restore corrupted snapshot fails and preserves state") {
     auto put2_result = sm.Apply(CreateTestEntry(put2_json));
     CHECK(put2_result.has_value());
 
-    auto snapshot_result = sm.TakeSnapshot(2, 1, CreateTestConfState());
-    CHECK(snapshot_result.has_value());
+    std::vector<uint8_t> snapshot_data;
+    BufferSnapshotWriter writer(&snapshot_data);
+    auto metadata_result = sm.TakeSnapshot(2, 1, CreateTestConfState(), writer);
+    CHECK(metadata_result.has_value());
 
-    snapshot_result->data = std::vector<uint8_t>{'{'};
+    snapshot_data = std::vector<uint8_t>{'{'};
 
     KvStoreStateMachine sm2;
 
@@ -150,7 +190,8 @@ TEST_CASE("kv_store: restore corrupted snapshot fails and preserves state") {
     CHECK(sm2.Get("pre_key").has_value());
     CHECK(*sm2.Get("pre_key") == "pre_value");
 
-    auto restore_result = sm2.RestoreSnapshot(*snapshot_result);
+    BufferSnapshotReader reader(&snapshot_data);
+    auto restore_result = sm2.RestoreSnapshot(*metadata_result, reader);
     CHECK(!restore_result.has_value());
 
     CHECK(sm2.Get("snap_key1").has_value());

@@ -1,5 +1,7 @@
 #include "kv_store_state_machine.h"
 
+#include <array>
+
 #include <nlohmann/json.hpp>
 
 #include "raftpp/core/capnp_util.h"
@@ -109,26 +111,45 @@ raftpp::Result<raftpp::raftor::ApplyResult> KvStoreStateMachine::Apply(const raf
     return result;
 }
 
-raftpp::Result<raftpp::raftor::SnapshotData> KvStoreStateMachine::TakeSnapshot(
-    uint64_t applied_index, uint64_t applied_term, const raftpp::ConfState& conf_state
+raftpp::Result<raftpp::SnapshotMetadata> KvStoreStateMachine::TakeSnapshot(
+    uint64_t applied_index, uint64_t applied_term, const raftpp::ConfState& conf_state,
+    raftpp::raftor::SnapshotWriter& writer
 ) {
     std::lock_guard lock(mutex_);
-    raftpp::raftor::SnapshotData snapshot;
     std::string data_str = serializeData(data_);
-    snapshot.data = std::vector<uint8_t>(data_str.begin(), data_str.end());
-    snapshot.metadata = raftpp::capnp_util::make<raftpp::msg::SnapshotMetadata>();
-    auto meta_builder =
-        raftpp::capnp_util::builder<raftpp::msg::SnapshotMetadata>(snapshot.metadata);
+    auto write_result = writer.Write(std::span<const uint8_t>(
+        reinterpret_cast<const uint8_t*>(data_str.data()), data_str.size()
+    ));
+    if (!write_result) {
+        return std::unexpected(write_result.error());
+    }
+
+    auto metadata = raftpp::capnp_util::make<raftpp::msg::SnapshotMetadata>();
+    auto meta_builder = raftpp::capnp_util::builder<raftpp::msg::SnapshotMetadata>(metadata);
     meta_builder.setIndex(applied_index);
     meta_builder.setTerm(applied_term);
     meta_builder.setConfState(raftpp::capnp_util::reader<raftpp::msg::ConfState>(conf_state));
-    return snapshot;
+    return metadata;
 }
 
 raftpp::Result<void> KvStoreStateMachine::RestoreSnapshot(
-    const raftpp::raftor::SnapshotData& snapshot
+    const raftpp::SnapshotMetadata& metadata, raftpp::raftor::SnapshotReader& reader
 ) {
-    std::string data_str(snapshot.data.begin(), snapshot.data.end());
+    (void)metadata;
+    std::string data_str;
+    std::array<uint8_t, 4096> buffer{};
+    while (true) {
+        auto read_result = reader.Read(buffer);
+        if (!read_result) {
+            return std::unexpected(read_result.error());
+        }
+        const size_t bytes_read = *read_result;
+        if (bytes_read == 0) {
+            break;
+        }
+        data_str.append(reinterpret_cast<const char*>(buffer.data()), bytes_read);
+    }
+
     auto data_result = deserializeData(data_str);
     if (!data_result) {
         return std::unexpected(data_result.error());

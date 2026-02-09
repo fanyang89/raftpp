@@ -14,10 +14,11 @@ namespace raftpp::raftor {
 class MockStateMachine final : public StateMachine {
   public:
     Result<ApplyResult> Apply(const Entry& entry) override;
-    Result<SnapshotData> TakeSnapshot(
-        uint64_t applied_index, uint64_t applied_term, const ConfState& conf_state
+    Result<SnapshotMetadata> TakeSnapshot(
+        uint64_t applied_index, uint64_t applied_term, const ConfState& conf_state,
+        SnapshotWriter& writer
     ) override;
-    Result<void> RestoreSnapshot(const SnapshotData& snapshot) override;
+    Result<void> RestoreSnapshot(const SnapshotMetadata& metadata, SnapshotReader& reader) override;
     void OnLeadershipChange(bool is_leader, uint64_t term, uint64_t leader_id) override;
     void OnPeerUnreachable(uint64_t peer_id) override;
 

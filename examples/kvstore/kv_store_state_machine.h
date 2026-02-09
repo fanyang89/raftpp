@@ -39,12 +39,13 @@ class KvStoreStateMachine : public raftpp::raftor::StateMachine, public IKVStore
         const raftpp::Entry& entry
     ) override;
 
-    [[nodiscard]] raftpp::Result<raftpp::raftor::SnapshotData> TakeSnapshot(
-        uint64_t applied_index, uint64_t applied_term, const raftpp::ConfState& conf_state
+    [[nodiscard]] raftpp::Result<raftpp::SnapshotMetadata> TakeSnapshot(
+        uint64_t applied_index, uint64_t applied_term, const raftpp::ConfState& conf_state,
+        raftpp::raftor::SnapshotWriter& writer
     ) override;
 
     [[nodiscard]] raftpp::Result<void> RestoreSnapshot(
-        const raftpp::raftor::SnapshotData& snapshot
+        const raftpp::SnapshotMetadata& metadata, raftpp::raftor::SnapshotReader& reader
     ) override;
 
     void OnLeadershipChange(bool is_leader, uint64_t term, uint64_t leader_id) override {

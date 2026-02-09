@@ -74,9 +74,6 @@ class ReadyProcessor {
     /// Check for leadership changes and notify state machine
     void CheckLeadershipChange(const Ready& rd);
 
-    /// Convert Cap'n Proto Snapshot to SnapshotData
-    [[nodiscard]] static SnapshotData ToSnapshotData(const Snapshot& snapshot);
-
     RawNode& raw_node_;
     std::shared_ptr<wal::WALStorage> storage_;
     StateMachine& state_machine_;
