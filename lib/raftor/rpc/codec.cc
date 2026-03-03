@@ -205,7 +205,7 @@ std::vector<uint8_t> HandshakeCodec::Encode(const RpcHandshake& hs) {
 
 Result<std::pair<RpcHandshake, size_t>> HandshakeCodec::Decode(std::span<const uint8_t> buffer) {
     if (buffer.size() < kPrefixSize) {
-        return std::pair<RpcHandshake, size_t>{{}, 0};  // Incomplete
+        return std::pair<RpcHandshake, size_t>{RpcHandshake{}, 0};  // Incomplete
     }
 
     // Read magic
@@ -221,7 +221,7 @@ Result<std::pair<RpcHandshake, size_t>> HandshakeCodec::Decode(std::span<const u
 
     size_t total_size = kPrefixSize + length;
     if (buffer.size() < total_size) {
-        return std::pair<RpcHandshake, size_t>{{}, 0};  // Incomplete
+        return std::pair<RpcHandshake, size_t>{RpcHandshake{}, 0};  // Incomplete
     }
 
     // Parse RpcHandshake

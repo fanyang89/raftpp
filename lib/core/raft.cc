@@ -1093,12 +1093,17 @@ Result<void> Raft::StepLeader(const Message& m) {
             for (size_t i = 0; i < entries.size(); i++) {
                 auto ent = entries[i];
                 if (ent.getEntryType() == EntryType::ENTRY_CONF_CHANGE_V2) {
-                    // Parse ConfChangeV2 from entry data
                     auto data = ent.getData();
-                    kj::ArrayPtr<const kj::byte> data_ptr(data.begin(), data.size());
-
-                    // Validate it can be parsed (just check if data exists for now)
                     if (data.size() == 0) {
+                        RAFTPP_LOG_WARN("proposed ConfChangeV2 has no data; dropping");
+                        return RaftError(RaftErrorCode::ProposalDropped);
+                    }
+                    try {
+                        std::ignore = capnp_util::fromString<msg::ConfChangeV2>(
+                            std::string_view(reinterpret_cast<const char*>(data.begin()), data.size())
+                        );
+                    } catch (const std::exception& e) {
+                        RAFTPP_LOG_WARN("proposed ConfChangeV2 is invalid: {}; dropping", e.what());
                         return RaftError(RaftErrorCode::ProposalDropped);
                     }
                 }
@@ -1111,8 +1116,6 @@ Result<void> Raft::StepLeader(const Message& m) {
                     auto entry = capnp_util::make<msg::Entry>();
                     auto entry_builder = capnp_util::builder<msg::Entry>(entry);
                     entry_builder.setEntryType(e.getEntryType());
-                    entry_builder.setTerm(e.getTerm());
-                    entry_builder.setIndex(e.getIndex());
                     entry_builder.setData(e.getData());
                     entry_builder.setContext(e.getContext());
                     entries_vec.push_back(std::move(entry));
@@ -1268,7 +1271,13 @@ Result<void> Raft::Step(Message& m) {
     // m.term() == term_
     switch (m_reader.getMsgType()) {
         case MessageType::MSG_HUP:
-            Hup(false);
+            if (promotable_) {
+                Hup(false);
+            } else {
+                RAFTPP_LOG_INFO(
+                    "received MsgHup from {} but is not promotable; ignored", m_reader.getFrom()
+                );
+            }
             return {};
 
         case MessageType::MSG_REQUEST_VOTE:
