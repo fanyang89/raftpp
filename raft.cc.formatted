@@ -1097,10 +1097,9 @@ Result<void> Raft::StepLeader(const Message& m) {
                         return RaftError(RaftErrorCode::ProposalDropped);
                     }
                     try {
-                        const std::string_view view(
+                        std::ignore = capnp_util::fromString<msg::ConfChangeV2>(std::string_view(
                             reinterpret_cast<const char*>(data.begin()), data.size()
-                        );
-                        std::ignore = capnp_util::fromString<msg::ConfChangeV2>(view);
+                        ));
                     } catch (const std::exception& e) {
                         RAFTPP_LOG_WARN("proposed ConfChangeV2 is invalid: {}; dropping", e.what());
                         return RaftError(RaftErrorCode::ProposalDropped);
