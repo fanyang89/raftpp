@@ -351,9 +351,11 @@ void Raft::Campaign(std::string_view campaign_type) {
         m_builder.setCommit(commit);
         m_builder.setCommitTerm(commit_term);
         if (campaign_type == kCampaignTransfer) {
-            m_builder.setContext(kj::arrayPtr(
-                reinterpret_cast<const kj::byte*>(campaign_type.data()), campaign_type.size()
-            ));
+            m_builder.setContext(
+                kj::arrayPtr(
+                    reinterpret_cast<const kj::byte*>(campaign_type.data()), campaign_type.size()
+                )
+            );
         }
 
         Send(m, messages_);
@@ -1141,7 +1143,8 @@ Result<void> Raft::StepLeader(const Message& m) {
             if (!CommitToCurrentTerm()) {
                 // Reject read only request when this leader has not committed any log entry
                 // in its term.
-                RAFTPP_LOG_INFO("leader has not yet committed in its term; dropping read index msg"
+                RAFTPP_LOG_INFO(
+                    "leader has not yet committed in its term; dropping read index msg"
                 );
                 return {};
             }
@@ -1296,8 +1299,8 @@ Result<void> Raft::Step(Message& m) {
                  m_reader.getTerm() > term_);
 
             if (can_vote && raft_log_.IsUpToDate(m_reader.getIndex(), m_reader.getLogTerm()) &&
-                (m_reader.getIndex() > raft_log_.LastIndex() || priority_ <= m_reader.getPriority()
-                )) {
+                (m_reader.getIndex() > raft_log_.LastIndex() ||
+                 priority_ <= m_reader.getPriority())) {
                 auto to_send = capnp_util::make<msg::Message>();
                 auto to_send_builder = capnp_util::builder<msg::Message>(to_send);
                 to_send_builder.setTo(m_reader.getFrom());

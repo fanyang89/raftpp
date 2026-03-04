@@ -26,12 +26,14 @@ void WALIndex::Insert(
         }
     }
 
-    entries_.push_back(IndexEntry{
-        .segment_id = segment_id,
-        .offset = offset,
-        .length = length,
-        .term = term,
-    });
+    entries_.push_back(
+        IndexEntry{
+            .segment_id = segment_id,
+            .offset = offset,
+            .length = length,
+            .term = term,
+        }
+    );
 }
 
 std::optional<IndexEntry> WALIndex::Lookup(uint64_t index) const {
