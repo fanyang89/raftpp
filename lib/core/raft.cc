@@ -3,6 +3,8 @@
 #include <random>
 #include <ranges>
 
+#include <kj/exception.h>
+
 #include "raftpp/core/conf_changer.h"
 #include "raftpp/core/conf_restore.h"
 #include "raftpp/core/util.h"
@@ -1113,7 +1115,13 @@ Result<void> Raft::StepLeader(const Message& m) {
                         RAFTPP_LOG_WARN("proposed ConfChangeV2 is invalid: {}; dropping", e.what());
                         return RaftError(RaftErrorCode::ProposalDropped);
                     } catch (...) {
-                        RAFTPP_LOG_WARN("proposed ConfChangeV2 is invalid: unknown error; dropping"
+                        RAFTPP_LOG_WARN(
+                            "proposed ConfChangeV2 is invalid: unknown error; dropping"
+                        );
+                        return RaftError(RaftErrorCode::ProposalDropped);
+                    } catch (...) {
+                        RAFTPP_LOG_WARN(
+                            "proposed ConfChangeV2 is invalid: unknown error; dropping"
                         );
                         return RaftError(RaftErrorCode::ProposalDropped);
                     }
