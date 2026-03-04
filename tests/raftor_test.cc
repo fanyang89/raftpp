@@ -82,8 +82,9 @@ class MockStateMachine : public StateMachine {
         return metadata;
     }
 
-    Result<void> RestoreSnapshot(const SnapshotMetadata& metadata, SnapshotReader& reader)
-        override {
+    Result<void> RestoreSnapshot(
+        const SnapshotMetadata& metadata, SnapshotReader& reader
+    ) override {
         std::lock_guard lock(mutex_);
         (void)metadata;
         std::array<uint8_t, 1024> buffer{};
@@ -455,8 +456,7 @@ TEST_CASE("three_node_read_index_from_follower_completes") {
     std::promise<bool> proposal_completed;
     auto proposal_future = proposal_completed.get_future();
     raftors[leader_id - 1]->Propose(
-        "readindex_warmup",
-        [&proposal_completed](Result<std::string> r) {
+        "readindex_warmup", [&proposal_completed](Result<std::string> r) {
             proposal_completed.set_value(r.has_value());
         }
     );

@@ -103,9 +103,11 @@ Result<void> WAL::Recover() {
     uint64_t last_idx = LastIndexUnlocked();
     auto hs_reader = capnp_util::reader<msg::HardState>(hard_state_);
     if (last_idx < hs_reader.getCommit()) {
-        return RaftError(FatalError{fmt::format(
-            "WAL inconsistent: last_index {} < committed {}", last_idx, hs_reader.getCommit()
-        )});
+        return RaftError(
+            FatalError{fmt::format(
+                "WAL inconsistent: last_index {} < committed {}", last_idx, hs_reader.getCommit()
+            )}
+        );
     }
 
     RAFTPP_LOG_DEBUG(
@@ -291,10 +293,12 @@ Result<void> WAL::Append(std::span<const Entry> entries) {
             // Truncate the index
             index_.TruncateFrom(first_entry_reader.getIndex());
         } else if (first_entry_reader.getIndex() != expected_index) {
-            return RaftError(FatalError{fmt::format(
-                "non-continuous entries: expected {}, got {}", expected_index,
-                first_entry_reader.getIndex()
-            )});
+            return RaftError(
+                FatalError{fmt::format(
+                    "non-continuous entries: expected {}, got {}", expected_index,
+                    first_entry_reader.getIndex()
+                )}
+            );
         }
     }
 
