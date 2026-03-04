@@ -139,7 +139,7 @@ TEST_SUITE("rpc") {
         auto encoded = HandshakeCodec::Encode(hs);
         CHECK(encoded.size() >= HandshakeCodec::kPrefixSize);
 
-        auto result = HandshakeCodec::Decode(encoded);
+        auto result = HandshakeCodec::Decode(encoded, Codec::kDefaultMaxMessageSize);
         REQUIRE(result.has_value());
         auto& [decoded, consumed] = *result;
         CHECK(consumed == encoded.size());
@@ -149,12 +149,25 @@ TEST_SUITE("rpc") {
         CHECK(decoded_reader.getClusterId() == 888);
     }
 
-    TEST_CASE("Handshake rejects incomplete buffer") {
-        std::vector<uint8_t> short_buf(HandshakeCodec::kPrefixSize - 1, 0);
+    TEST_CASE("Handshake handles incomplete buffer") {
+        RpcHandshake hs = capnp_util::make<raftpp::capnp::RpcHandshake>();
+        auto builder = capnp_util::builder<raftpp::capnp::RpcHandshake>(hs);
+        builder.setVersion(1);
+        builder.setNodeId(54321);
 
-        auto result = HandshakeCodec::Decode(short_buf);
+        auto encoded = HandshakeCodec::Encode(hs);
+
+        // Only provide partial prefix
+        std::span<const uint8_t> partial(encoded.data(), HandshakeCodec::kPrefixSize / 2);
+        auto result = HandshakeCodec::Decode(partial, Codec::kDefaultMaxMessageSize);
         REQUIRE(result.has_value());
-        CHECK(result->second == 0);  // Incomplete, returns 0 bytes consumed
+        CHECK(result->second == 0);
+
+        // Provide prefix but not full payload
+        std::span<const uint8_t> prefix_only(encoded.data(), HandshakeCodec::kPrefixSize + 1);
+        result = HandshakeCodec::Decode(prefix_only, Codec::kDefaultMaxMessageSize);
+        REQUIRE(result.has_value());
+        CHECK(result->second == 0);
     }
 
     TEST_CASE("PeerManager basic operations") {

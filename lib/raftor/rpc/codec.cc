@@ -202,7 +202,9 @@ std::vector<uint8_t> HandshakeCodec::Encode(const RpcHandshake& hs) {
     return buffer;
 }
 
-Result<std::pair<RpcHandshake, size_t>> HandshakeCodec::Decode(std::span<const uint8_t> buffer) {
+Result<std::pair<RpcHandshake, size_t>> HandshakeCodec::Decode(
+    std::span<const uint8_t> buffer, size_t max_size
+) {
     if (buffer.size() < kPrefixSize) {
         return std::pair<RpcHandshake, size_t>{RpcHandshake{}, 0};  // Incomplete
     }
@@ -218,7 +220,15 @@ Result<std::pair<RpcHandshake, size_t>> HandshakeCodec::Decode(std::span<const u
     uint32_t length;
     std::memcpy(&length, buffer.data() + 4, sizeof(length));
 
+    if (length > std::numeric_limits<size_t>::max() - kPrefixSize) {
+        return RaftError(RpcErrorCode::MessageTooLarge);
+    }
+
     size_t total_size = kPrefixSize + length;
+    if (total_size > max_size) {
+        return RaftError(RpcErrorCode::MessageTooLarge);
+    }
+
     if (buffer.size() < total_size) {
         return std::pair<RpcHandshake, size_t>{RpcHandshake{}, 0};  // Incomplete
     }

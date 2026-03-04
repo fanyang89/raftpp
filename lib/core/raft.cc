@@ -1101,8 +1101,18 @@ Result<void> Raft::StepLeader(const Message& m) {
                             reinterpret_cast<const char*>(data.begin()), data.size()
                         );
                         std::ignore = capnp_util::fromString<msg::ConfChangeV2>(view);
+                    } catch (const kj::Exception& e) {
+                        RAFTPP_LOG_WARN(
+                            "proposed ConfChangeV2 is invalid: {}; dropping",
+                            e.getDescription().cStr()
+                        );
+                        return RaftError(RaftErrorCode::ProposalDropped);
                     } catch (const std::exception& e) {
                         RAFTPP_LOG_WARN("proposed ConfChangeV2 is invalid: {}; dropping", e.what());
+                        return RaftError(RaftErrorCode::ProposalDropped);
+                    } catch (...) {
+                        RAFTPP_LOG_WARN("proposed ConfChangeV2 is invalid: unknown error; dropping"
+                        );
                         return RaftError(RaftErrorCode::ProposalDropped);
                     }
                 }

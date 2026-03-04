@@ -63,7 +63,9 @@ TEST_CASE("inflights: Add") {
 
     InflightsDebug inflight2(10);
     inflight2.start() = 5;
-    inflight2.buffer().insert(inflight2.buffer().end(), {0, 0, 0, 0, 0});
+    auto& buf2 = inflight2.buffer();
+    std::vector<uint64_t> padding{0, 0, 0, 0, 0};
+    buf2.insert(buf2.end(), padding.begin(), padding.end());
 
     for (uint64_t i = 0; i < 5; ++i) {
         inflight2.Add(i);

@@ -103,7 +103,9 @@ class HandshakeCodec {
     /// Decode a handshake message
     /// Returns (handshake, bytes_consumed) on success
     /// If buffer is incomplete, returns result with bytes_consumed = 0
-    static Result<std::pair<RpcHandshake, size_t>> Decode(std::span<const uint8_t> buffer);
+    static Result<std::pair<RpcHandshake, size_t>> Decode(
+        std::span<const uint8_t> buffer, size_t max_size = Codec::kDefaultMaxMessageSize
+    );
 };
 
 /// Parse address string "host:port" into components
