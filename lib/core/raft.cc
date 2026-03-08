@@ -668,39 +668,7 @@ void Raft::HandleSnapshot(const Message& m) {
     to_send_builder.setTo(m_reader.getFrom());
 
     // Copy snapshot from message reader
-    auto snap_reader = m_reader.getSnapshot();
-    auto snapshot = capnp_util::make<msg::Snapshot>();
-    auto snap_builder = capnp_util::builder<msg::Snapshot>(snapshot);
-    snap_builder.setData(snap_reader.getData());
-
-    auto snap_meta_src = snap_reader.getMetadata();
-    auto snap_meta_dst = snap_builder.initMetadata();
-    snap_meta_dst.setIndex(snap_meta_src.getIndex());
-    snap_meta_dst.setTerm(snap_meta_src.getTerm());
-
-    auto conf_src = snap_meta_src.getConfState();
-    auto conf_dst = snap_meta_dst.initConfState();
-    auto voters_src = conf_src.getVoters();
-    auto voters_dst = conf_dst.initVoters(voters_src.size());
-    for (size_t i = 0; i < voters_src.size(); ++i) {
-        voters_dst.set(i, voters_src[i]);
-    }
-    auto learners_src = conf_src.getLearners();
-    auto learners_dst = conf_dst.initLearners(learners_src.size());
-    for (size_t i = 0; i < learners_src.size(); ++i) {
-        learners_dst.set(i, learners_src[i]);
-    }
-    auto voters_out_src = conf_src.getVotersOutgoing();
-    auto voters_out_dst = conf_dst.initVotersOutgoing(voters_out_src.size());
-    for (size_t i = 0; i < voters_out_src.size(); ++i) {
-        voters_out_dst.set(i, voters_out_src[i]);
-    }
-    auto learners_next_src = conf_src.getLearnersNext();
-    auto learners_next_dst = conf_dst.initLearnersNext(learners_next_src.size());
-    for (size_t i = 0; i < learners_next_src.size(); ++i) {
-        learners_next_dst.set(i, learners_next_src[i]);
-    }
-    conf_dst.setAutoLeave(conf_src.getAutoLeave());
+    auto snapshot = CloneSnapshot(m_reader.getSnapshot());
 
     if (Restore(snapshot)) {
         to_send_builder.setIndex(raft_log_.LastIndex());
@@ -735,10 +703,7 @@ std::optional<Message> Raft::HandleReadyReadIndex(const Message& req, uint64_t i
     auto req_entries = req_reader.getEntries();
     auto m_entries = m_builder.initEntries(req_entries.size());
     for (size_t i = 0; i < req_entries.size(); ++i) {
-        auto src = req_entries[i];
-        auto dst = m_entries[i];
-        dst.setData(src.getData());
-        dst.setContext(src.getContext());
+        m_entries.setWithCaveats(i, req_entries[i]);
     }
 
     return m;
@@ -1108,14 +1073,7 @@ Result<void> Raft::StepLeader(const Message& m) {
                 std::vector<Entry> entries_vec;
                 entries_vec.reserve(entries.size());
                 for (const auto& e : entries) {
-                    auto entry = capnp_util::make<msg::Entry>();
-                    auto entry_builder = capnp_util::builder<msg::Entry>(entry);
-                    entry_builder.setEntryType(e.getEntryType());
-                    entry_builder.setTerm(e.getTerm());
-                    entry_builder.setIndex(e.getIndex());
-                    entry_builder.setData(e.getData());
-                    entry_builder.setContext(e.getContext());
-                    entries_vec.push_back(std::move(entry));
+                    entries_vec.push_back(CloneEntry(e));
                 }
                 if (!AppendEntry(std::move(entries_vec))) {
                     return RaftError(RaftErrorCode::ProposalDropped);
@@ -1363,14 +1321,7 @@ void Raft::HandleAppendEntries(const Message& m) {
     std::vector<Entry> entries_vec;
     entries_vec.reserve(entries_list.size());
     for (const auto& e : entries_list) {
-        auto entry = capnp_util::make<msg::Entry>();
-        auto entry_builder = capnp_util::builder<msg::Entry>(entry);
-        entry_builder.setEntryType(e.getEntryType());
-        entry_builder.setTerm(e.getTerm());
-        entry_builder.setIndex(e.getIndex());
-        entry_builder.setData(e.getData());
-        entry_builder.setContext(e.getContext());
-        entries_vec.push_back(std::move(entry));
+        entries_vec.push_back(CloneEntry(e));
     }
 
     const auto r = raft_log_.MaybeAppend(
@@ -1647,11 +1598,7 @@ Result<ConfState> Raft::ApplyConfChange(const ConfChangeV2& cc) {
         std::vector<ConfChangeSingle> ccs;
         ccs.reserve(changes_list.size());
         for (const auto& c : changes_list) {
-            auto single = capnp_util::make<msg::ConfChangeSingle>();
-            auto single_builder = capnp_util::builder<msg::ConfChangeSingle>(single);
-            single_builder.setChangeType(c.getChangeType());
-            single_builder.setNodeId(c.getNodeId());
-            ccs.push_back(std::move(single));
+            ccs.push_back(CloneConfChangeSingle(c));
         }
         if (const auto auto_leave = EnterJoint(cc)) {
             RAFTPP_LOG_INFO("ApplyConfChange: EnterJoint, auto_leave={}", *auto_leave);

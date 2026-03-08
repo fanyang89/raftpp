@@ -84,9 +84,15 @@ inline bool IsConfStateEquivalent(const ConfState& a, const ConfState& b) {
 inline Entry CloneEntry(const Entry& e) {
     return capnp_util::clone<msg::Entry>(e);
 }
+inline Entry CloneEntry(msg::Entry::Reader e) {
+    return capnp_util::clone<msg::Entry>(e);
+}
 
 // Clone a HardState
 inline HardState CloneHardState(const HardState& hs) {
+    return capnp_util::clone<msg::HardState>(hs);
+}
+inline HardState CloneHardState(msg::HardState::Reader hs) {
     return capnp_util::clone<msg::HardState>(hs);
 }
 
@@ -94,14 +100,31 @@ inline HardState CloneHardState(const HardState& hs) {
 inline ConfState CloneConfState(const ConfState& cs) {
     return capnp_util::clone<msg::ConfState>(cs);
 }
+inline ConfState CloneConfState(msg::ConfState::Reader cs) {
+    return capnp_util::clone<msg::ConfState>(cs);
+}
 
 // Clone a Snapshot
 inline Snapshot CloneSnapshot(const Snapshot& s) {
     return capnp_util::clone<msg::Snapshot>(s);
 }
+inline Snapshot CloneSnapshot(msg::Snapshot::Reader s) {
+    return capnp_util::clone<msg::Snapshot>(s);
+}
+
+// Clone a SnapshotMetadata
+inline SnapshotMetadata CloneSnapshotMetadata(const SnapshotMetadata& m) {
+    return capnp_util::clone<msg::SnapshotMetadata>(m);
+}
+inline SnapshotMetadata CloneSnapshotMetadata(msg::SnapshotMetadata::Reader m) {
+    return capnp_util::clone<msg::SnapshotMetadata>(m);
+}
 
 // Clone a Message
 inline Message CloneMessage(const Message& m) {
+    return capnp_util::clone<msg::Message>(m);
+}
+inline Message CloneMessage(msg::Message::Reader m) {
     return capnp_util::clone<msg::Message>(m);
 }
 
@@ -109,9 +132,15 @@ inline Message CloneMessage(const Message& m) {
 inline ConfChangeV2 CloneConfChangeV2(const ConfChangeV2& cc) {
     return capnp_util::clone<msg::ConfChangeV2>(cc);
 }
+inline ConfChangeV2 CloneConfChangeV2(msg::ConfChangeV2::Reader cc) {
+    return capnp_util::clone<msg::ConfChangeV2>(cc);
+}
 
 // Clone a ConfChangeSingle
 inline ConfChangeSingle CloneConfChangeSingle(const ConfChangeSingle& cc) {
+    return capnp_util::clone<msg::ConfChangeSingle>(cc);
+}
+inline ConfChangeSingle CloneConfChangeSingle(msg::ConfChangeSingle::Reader cc) {
     return capnp_util::clone<msg::ConfChangeSingle>(cc);
 }
 
