@@ -26,9 +26,9 @@
 #include <spdlog/fmt/fmt.h>
 
 #include "raftpp/core/capnp_util.h"
-#include "raftpp/logging.h"
 #include "raftpp/core/primitives.h"
 #include "raftpp/core/types.h"
+#include "raftpp/logging.h"
 #include "raftpp/raftor/rpc/codec.h"
 #include "raftpp/raftor/rpc/peer_manager.h"
 
@@ -556,7 +556,7 @@ void RdmaTransport::Impl::HandleCmEvent(const rdma_cm_event& event) {
             HandleConnectError(event.id, "unreachable");
             break;
         default:
-            RAFTPP_LOG_DEBUG("Unhandled RDMA CM event {}", event.event);
+            RAFTPP_LOG_DEBUG("Unhandled RDMA CM event {}", static_cast<int>(event.event));
             break;
     }
 }
@@ -758,7 +758,9 @@ bool RdmaTransport::Impl::SetupConnectionResources(Connection& conn) {
     int flags = fcntl(conn.comp_channel->fd, F_GETFL, 0);
     if (flags >= 0) {
         if (fcntl(conn.comp_channel->fd, F_SETFL, flags | O_NONBLOCK) != 0) {
-            RAFTPP_LOG_WARN("Failed to set RDMA completion channel non-blocking: {}", strerror(errno));
+            RAFTPP_LOG_WARN(
+                "Failed to set RDMA completion channel non-blocking: {}", strerror(errno)
+            );
         }
     }
 

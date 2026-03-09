@@ -682,11 +682,9 @@ TEST_SUITE("rpc::capnp") {
         for (int i = 0; i < 100; i++) {
             entries[i].setTerm(1);
             entries[i].setIndex(i + 1);
-            entries[i].setData(
-                kj::arrayPtr(
-                    reinterpret_cast<const kj::byte*>(large_data.data()), large_data.size()
-                )
-            );
+            entries[i].setData(kj::arrayPtr(
+                reinterpret_cast<const kj::byte*>(large_data.data()), large_data.size()
+            ));
         }
 
         t1.Send(std::span(&msg, 1));
