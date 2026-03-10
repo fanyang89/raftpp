@@ -366,11 +366,9 @@ Result<void> RawNode::Propose(const std::string& ctx, const std::string& data) {
 
     auto entries = m_builder.initEntries(1);
     auto entry_builder = entries[0];
-    entry_builder.setData(
-        kj::arrayPtr(reinterpret_cast<const kj::byte*>(data.data()), data.size())
+    entry_builder.setData(kj::arrayPtr(reinterpret_cast<const kj::byte*>(data.data()), data.size())
     );
-    entry_builder.setContext(
-        kj::arrayPtr(reinterpret_cast<const kj::byte*>(ctx.data()), ctx.size())
+    entry_builder.setContext(kj::arrayPtr(reinterpret_cast<const kj::byte*>(ctx.data()), ctx.size())
     );
 
     return raft_.Step(m);
@@ -393,8 +391,7 @@ Result<void> RawNode::ProposeConfChange(const std::string& ctx, const ConfChange
     entry_builder.setData(
         kj::arrayPtr(reinterpret_cast<const kj::byte*>(serialized.data()), serialized.size())
     );
-    entry_builder.setContext(
-        kj::arrayPtr(reinterpret_cast<const kj::byte*>(ctx.data()), ctx.size())
+    entry_builder.setContext(kj::arrayPtr(reinterpret_cast<const kj::byte*>(ctx.data()), ctx.size())
     );
 
     return raft_.Step(m);

@@ -31,13 +31,11 @@ RaftCore::RaftCore(const Config& config, const std::shared_ptr<Storage>& store)
       min_election_timeout_(config.MinElectionTick()),
       max_election_timeout_(config.MaxElectionTick()),
       priority_(0),
-      uncommitted_state_(
-          UncommittedState{
-              .max_uncommitted_size = config.max_uncommitted_size,
-              .uncommitted_size = 0,
-              .last_log_tail_index = 0
-          }
-      ),
+      uncommitted_state_(UncommittedState{
+          .max_uncommitted_size = config.max_uncommitted_size,
+          .uncommitted_size = 0,
+          .last_log_tail_index = 0
+      }),
       max_committed_size_per_ready_(config.max_committed_size_per_ready) {}
 
 bool RaftCore::TryBatching(
