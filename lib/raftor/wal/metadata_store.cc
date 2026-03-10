@@ -171,40 +171,39 @@ std::vector<uint8_t> MetadataStore::Serialize(const WALMetadata& meta) const {
     size_t total_size = sizeof(MetadataHeader) + sizeof(MetadataContent) + 4 +
         hard_state_bytes.size() + 4 + conf_state_bytes.size();
 
-    std::vector<uint8_t> data(total_size, 0);
-    uint8_t* ptr = data.data();
+    std::vector<uint8_t> data(total_size);
 
     // Skip header for now (we'll fill in CRC later)
-    MetadataHeader header;
-    ptr += sizeof(MetadataHeader);
+    size_t offset = sizeof(MetadataHeader);
 
     // Write MetadataContent
     MetadataContent content;
     content.first_index = meta.first_index;
     content.snapshot_index = meta.snapshot_index;
     content.snapshot_term = meta.snapshot_term;
-    std::memcpy(ptr, &content, sizeof(MetadataContent));
-    ptr += sizeof(MetadataContent);
+    std::memcpy(data.data() + offset, &content, sizeof(MetadataContent));
+    offset += sizeof(MetadataContent);
 
     // Write hard_state
     uint32_t hs_len = static_cast<uint32_t>(hard_state_bytes.size());
-    std::memcpy(ptr, &hs_len, sizeof(hs_len));
-    ptr += sizeof(hs_len);
+    std::memcpy(data.data() + offset, &hs_len, sizeof(hs_len));
+    offset += sizeof(hs_len);
     if (hs_len > 0) {
-        std::memcpy(ptr, hard_state_bytes.data(), hs_len);
-        ptr += hs_len;
+        std::memcpy(data.data() + offset, hard_state_bytes.data(), hs_len);
+        offset += hs_len;
     }
 
     // Write conf_state
     uint32_t cs_len = static_cast<uint32_t>(conf_state_bytes.size());
-    std::memcpy(ptr, &cs_len, sizeof(cs_len));
-    ptr += sizeof(cs_len);
+    std::memcpy(data.data() + offset, &cs_len, sizeof(cs_len));
+    offset += sizeof(cs_len);
     if (cs_len > 0) {
-        std::memcpy(ptr, conf_state_bytes.data(), cs_len);
+        std::memcpy(data.data() + offset, conf_state_bytes.data(), cs_len);
+        offset += cs_len;
     }
-    ptr += cs_len;
 
     // Compute CRC over everything after the CRC field
+    MetadataHeader header;
     size_t crc_offset = offsetof(MetadataHeader, crc) + sizeof(header.crc);
     CRC32C crc;
     crc.Update(data.data() + crc_offset, data.size() - crc_offset);

@@ -23,7 +23,9 @@ std::vector<uint8_t> Codec::Encode(
     // Serialize message to get payload size
     auto msg_bytes = capnp_util::toBytes(msg);
     header_builder.setPayloadSize(static_cast<uint32_t>(msg_bytes.size()));
-    header_builder.setMsgType(capnp_util::reader<msg::Message>(msg).getMsgType());
+    header_builder.setMsgType(
+        static_cast<capnp::MessageType>(static_cast<int>(capnp_util::reader<msg::Message>(msg).getMsgType()))
+    );
 
     // Serialize header
     auto header_bytes = capnp_util::toBytes(header);
@@ -205,7 +207,7 @@ std::vector<uint8_t> HandshakeCodec::Encode(const RpcHandshake& hs) {
 
 Result<std::pair<RpcHandshake, size_t>> HandshakeCodec::Decode(std::span<const uint8_t> buffer) {
     if (buffer.size() < kPrefixSize) {
-        return std::pair<RpcHandshake, size_t>{{}, 0};  // Incomplete
+        return std::make_pair(RpcHandshake{}, size_t{0});  // Incomplete
     }
 
     // Read magic
@@ -221,7 +223,7 @@ Result<std::pair<RpcHandshake, size_t>> HandshakeCodec::Decode(std::span<const u
 
     size_t total_size = kPrefixSize + length;
     if (buffer.size() < total_size) {
-        return std::pair<RpcHandshake, size_t>{{}, 0};  // Incomplete
+        return std::make_pair(RpcHandshake{}, size_t{0});  // Incomplete
     }
 
     // Parse RpcHandshake
@@ -237,7 +239,7 @@ Result<std::pair<RpcHandshake, size_t>> HandshakeCodec::Decode(std::span<const u
         return RaftError(RpcErrorCode::HandshakeParseFailed);
     }
 
-    return std::pair{std::move(hs), total_size};
+    return std::make_pair(std::move(hs), total_size);
 }
 
 Result<std::pair<std::string, int>> ParseAddress(const std::string& addr) {
