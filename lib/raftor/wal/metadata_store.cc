@@ -221,12 +221,12 @@ Result<WALMetadata> MetadataStore::Deserialize(const std::vector<uint8_t>& data)
         return RaftError(StorageErrorCode::MetadataFileTooSmall);
     }
 
-    const uint8_t* ptr = data.data();
+    size_t offset = 0;
 
     // Read and verify header
     MetadataHeader header;
-    std::memcpy(&header, ptr, sizeof(MetadataHeader));
-    ptr += sizeof(MetadataHeader);
+    std::memcpy(&header, data.data() + offset, sizeof(MetadataHeader));
+    offset += sizeof(MetadataHeader);
 
     if (!header.IsValid()) {
         return RaftError(StorageErrorCode::InvalidMetadataHeader);
@@ -242,8 +242,8 @@ Result<WALMetadata> MetadataStore::Deserialize(const std::vector<uint8_t>& data)
 
     // Read MetadataContent
     MetadataContent content;
-    std::memcpy(&content, ptr, sizeof(MetadataContent));
-    ptr += sizeof(MetadataContent);
+    std::memcpy(&content, data.data() + offset, sizeof(MetadataContent));
+    offset += sizeof(MetadataContent);
 
     WALMetadata meta;
     meta.first_index = content.first_index;
@@ -252,14 +252,14 @@ Result<WALMetadata> MetadataStore::Deserialize(const std::vector<uint8_t>& data)
 
     // Read hard_state
     uint32_t hs_len;
-    std::memcpy(&hs_len, ptr, sizeof(hs_len));
-    ptr += sizeof(hs_len);
+    std::memcpy(&hs_len, data.data() + offset, sizeof(hs_len));
+    offset += sizeof(hs_len);
 
     try {
         if (hs_len > 0) {
             // Allocate aligned buffer and copy data
             kj::Array<::capnp::word> aligned_words = kj::heapArray<::capnp::word>((hs_len + 7) / 8);
-            std::memcpy(aligned_words.begin(), ptr, hs_len);
+            std::memcpy(aligned_words.begin(), data.data() + offset, hs_len);
 
             size_t word_count = hs_len / sizeof(::capnp::word);
             meta.hard_state = capnp_util::fromWords<msg::HardState>(
@@ -269,18 +269,18 @@ Result<WALMetadata> MetadataStore::Deserialize(const std::vector<uint8_t>& data)
     } catch (...) {
         return RaftError(StorageErrorCode::HardStateParseError);
     }
-    ptr += hs_len;
+    offset += hs_len;
 
     // Read conf_state
     uint32_t cs_len;
-    std::memcpy(&cs_len, ptr, sizeof(cs_len));
-    ptr += sizeof(cs_len);
+    std::memcpy(&cs_len, data.data() + offset, sizeof(cs_len));
+    offset += sizeof(cs_len);
 
     try {
         if (cs_len > 0) {
             // Allocate aligned buffer and copy data
             kj::Array<::capnp::word> aligned_words = kj::heapArray<::capnp::word>((cs_len + 7) / 8);
-            std::memcpy(aligned_words.begin(), ptr, cs_len);
+            std::memcpy(aligned_words.begin(), data.data() + offset, cs_len);
 
             size_t word_count = cs_len / sizeof(::capnp::word);
             meta.conf_state = capnp_util::fromWords<msg::ConfState>(
