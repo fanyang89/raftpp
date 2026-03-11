@@ -435,11 +435,9 @@ TEST_CASE("raw_node: start") {
     storage->Append(rd3.entries).value();
     auto light_rd2 = raw_node.Advance(rd3);
     CHECK_EQ(light_rd2.commit_index, std::make_optional<uint64_t>(3));
-    CHECK(
-        raftpp::operator==(
-            light_rd2.committed_entries, MakeEntryVec(NewEntry(3, 2, "somedata", ""))
-        )
-    );
+    CHECK(raftpp::operator==(
+        light_rd2.committed_entries, MakeEntryVec(NewEntry(3, 2, "somedata", ""))
+    ));
 
     CHECK_FALSE(raw_node.HasReady());
 }
