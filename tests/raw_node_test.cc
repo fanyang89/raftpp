@@ -99,7 +99,7 @@ TEST_CASE("raw_node: step local message ignored") {
         auto builder = capnp_util::builder<msg::Message>(m);
         builder.setTo(0);
         builder.setFrom(0);
-        builder.setMsgType(msg_t);
+        builder.setMsgType(static_cast<MessageType>(static_cast<int>(msg_t)));
         builder.setTerm(1);
 
         const auto res = raw_node.Step(std::move(m));
@@ -212,7 +212,8 @@ void PrepareAsyncEntries(RawNode& raw_node, const std::shared_ptr<MemoryStorage>
     auto ar_builder = capnp_util::builder<msg::Message>(append_response);
     ar_builder.setFrom(2);
     ar_builder.setTo(1);
-    ar_builder.setMsgType(MessageType::MSG_APPEND_RESPONSE);
+    ar_builder.setMsgType(static_cast<MessageType>(static_cast<int>(MessageType::MSG_APPEND_RESPONSE
+    )));
     ar_builder.setTerm(1);
     ar_builder.setIndex(2);
     raw_node.Step(std::move(append_response)).value();
@@ -291,7 +292,9 @@ TEST_CASE("raw_node: async entry fetching to removed node") {
     ConfChangeV2 cc = capnp_util::make<msg::ConfChangeV2>();
     auto cc_builder = capnp_util::builder<msg::ConfChangeV2>(cc);
     auto changes = cc_builder.initChanges(1);
-    changes[0].setChangeType(ConfChangeType::REMOVE_NODE);
+    changes[0].setChangeType(
+        static_cast<ConfChangeType>(static_cast<int>(ConfChangeType::REMOVE_NODE))
+    );
     changes[0].setNodeId(2);
     std::ignore = raw_node.ApplyConfChange(cc);
 
@@ -351,7 +354,7 @@ TEST_CASE("raw_node: step local message ignored") {
         auto builder = capnp_util::builder<msg::Message>(m);
         builder.setTo(0);
         builder.setFrom(0);
-        builder.setMsgType(msg_t);
+        builder.setMsgType(static_cast<MessageType>(static_cast<int>(msg_t)));
         builder.setTerm(1);
 
         const auto res = raw_node.Step(std::move(m));
@@ -532,7 +535,8 @@ static ConfChangeV2 ToConfChangeV2(const ConfChange& cc) {
     auto cc_reader = capnp_util::reader<msg::ConfChange>(cc);
     auto builder = capnp_util::builder<msg::ConfChangeV2>(cc_v2);
     auto changes = builder.initChanges(1);
-    changes[0].setChangeType(cc_reader.getChangeType());
+    changes[0].setChangeType(static_cast<ConfChangeType>(static_cast<int>(cc_reader.getChangeType())
+    ));
     changes[0].setNodeId(cc_reader.getNodeId());
     return cc_v2;
 }
@@ -582,7 +586,8 @@ TEST_CASE("raw_node: propose add duplicate node") {
 
     ConfChange cc1 = capnp_util::make<msg::ConfChange>();
     auto cc1_builder = capnp_util::builder<msg::ConfChange>(cc1);
-    cc1_builder.setChangeType(ConfChangeType::ADD_NODE);
+    cc1_builder.setChangeType(static_cast<ConfChangeType>(static_cast<int>(ConfChangeType::ADD_NODE)
+    ));
     cc1_builder.setNodeId(1);
     propose_conf_change_and_apply(cc1);
 
@@ -592,7 +597,8 @@ TEST_CASE("raw_node: propose add duplicate node") {
     // The new node join should be ok
     ConfChange cc2 = capnp_util::make<msg::ConfChange>();
     auto cc2_builder = capnp_util::builder<msg::ConfChange>(cc2);
-    cc2_builder.setChangeType(ConfChangeType::ADD_NODE);
+    cc2_builder.setChangeType(static_cast<ConfChangeType>(static_cast<int>(ConfChangeType::ADD_NODE)
+    ));
     cc2_builder.setNodeId(2);
     propose_conf_change_and_apply(cc2);
 }
@@ -622,7 +628,9 @@ TEST_CASE("raw_node: propose add learner node") {
     // Propose add learner node and check apply state
     ConfChange cc = capnp_util::make<msg::ConfChange>();
     auto cc_builder = capnp_util::builder<msg::ConfChange>(cc);
-    cc_builder.setChangeType(ConfChangeType::ADD_LEARNER_NODE);
+    cc_builder.setChangeType(
+        static_cast<ConfChangeType>(static_cast<int>(ConfChangeType::ADD_LEARNER_NODE))
+    );
     cc_builder.setNodeId(2);
     ConfChangeV2 cc_v2 = ToConfChangeV2(cc);
     raw_node.ProposeConfChange("", cc_v2).value();
@@ -838,7 +846,8 @@ TEST_CASE("raw_node: propose and conf change - simple add node") {
     bool proposed = false;
     ConfChange cc = capnp_util::make<msg::ConfChange>();
     auto cc_builder = capnp_util::builder<msg::ConfChange>(cc);
-    cc_builder.setChangeType(ConfChangeType::ADD_NODE);
+    cc_builder.setChangeType(static_cast<ConfChangeType>(static_cast<int>(ConfChangeType::ADD_NODE))
+    );
     cc_builder.setNodeId(2);
     ConfChangeV2 cc_v2 = ToConfChangeV2(cc);
     std::string ccdata = capnp_util::toString(cc_v2);
@@ -926,7 +935,9 @@ TEST_CASE("raw_node: propose and conf change - add learner") {
             raw_node.Propose("", "somedata").value();
             ConfChange cc = capnp_util::make<msg::ConfChange>();
             auto cc_builder = capnp_util::builder<msg::ConfChange>(cc);
-            cc_builder.setChangeType(ConfChangeType::ADD_LEARNER_NODE);
+            cc_builder.setChangeType(
+                static_cast<ConfChangeType>(static_cast<int>(ConfChangeType::ADD_LEARNER_NODE))
+            );
             cc_builder.setNodeId(2);
             ConfChangeV2 cc_v2 = ToConfChangeV2(cc);
             raw_node.ProposeConfChange("", cc_v2).value();
@@ -970,7 +981,9 @@ TEST_CASE("raw_node: joint auto leave") {
     ConfChangeV2 cc_v2 = capnp_util::make<msg::ConfChangeV2>();
     auto cc_builder = capnp_util::builder<msg::ConfChangeV2>(cc_v2);
     auto changes = cc_builder.initChanges(1);
-    changes[0].setChangeType(ConfChangeType::ADD_LEARNER_NODE);
+    changes[0].setChangeType(
+        static_cast<ConfChangeType>(static_cast<int>(ConfChangeType::ADD_LEARNER_NODE))
+    );
     changes[0].setNodeId(2);
     cc_builder.setTransition(ConfChangeTransition::IMPLICIT);
     std::string ccdata = capnp_util::toString(cc_v2);
@@ -997,7 +1010,9 @@ TEST_CASE("raw_node: joint auto leave") {
                     auto msg_builder = capnp_util::builder<msg::Message>(msg);
                     msg_builder.setTo(1);
                     msg_builder.setFrom(1);
-                    msg_builder.setMsgType(MessageType::MSG_HEARTBEAT_RESPONSE);
+                    msg_builder.setMsgType(static_cast<MessageType>(
+                        static_cast<int>(MessageType::MSG_HEARTBEAT_RESPONSE)
+                    ));
                     msg_builder.setTerm(
                         capnp_util::reader<msg::HardState>(raw_node.GetStatus().hs).getTerm() + 1
                     );

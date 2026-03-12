@@ -735,7 +735,8 @@ Result<void> RaftorImpl::AddNode(uint64_t id, const std::string& addr) {
     ConfChangeV2 cc = capnp_util::make<msg::ConfChangeV2>();
     auto builder = capnp_util::builder<msg::ConfChangeV2>(cc);
     auto changes = builder.initChanges(1);
-    changes[0].setChangeType(ConfChangeType::ADD_NODE);
+    changes[0].setChangeType(static_cast<ConfChangeType>(static_cast<int>(ConfChangeType::ADD_NODE))
+    );
     changes[0].setNodeId(id);
     builder.setContext(kj::arrayPtr(reinterpret_cast<const kj::byte*>(addr.data()), addr.size())
     );  // Store address in context
@@ -760,7 +761,9 @@ Result<void> RaftorImpl::RemoveNode(uint64_t id) {
     ConfChangeV2 cc = capnp_util::make<msg::ConfChangeV2>();
     auto builder = capnp_util::builder<msg::ConfChangeV2>(cc);
     auto changes = builder.initChanges(1);
-    changes[0].setChangeType(ConfChangeType::REMOVE_NODE);
+    changes[0].setChangeType(
+        static_cast<ConfChangeType>(static_cast<int>(ConfChangeType::REMOVE_NODE))
+    );
     changes[0].setNodeId(id);
 
     std::string ctx = GenerateProposalContext();

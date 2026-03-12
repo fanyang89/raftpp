@@ -58,7 +58,8 @@ Result<void> RawNode::RequestSnapshot() {
 void RawNode::TransferLeader(const uint64_t transferee) {
     Message m = capnp_util::make<msg::Message>();
     auto builder = capnp_util::builder<msg::Message>(m);
-    builder.setMsgType(MessageType::MSG_TRANSFER_LEADER);
+    builder.setMsgType(static_cast<MessageType>(static_cast<int>(MessageType::MSG_TRANSFER_LEADER))
+    );
     builder.setFrom(transferee);
     std::ignore = raft_.Step(m);
 }
@@ -66,7 +67,7 @@ void RawNode::TransferLeader(const uint64_t transferee) {
 void RawNode::ReadIndex(const std::string& ctx) {
     Message m = capnp_util::make<msg::Message>();
     auto builder = capnp_util::builder<msg::Message>(m);
-    builder.setMsgType(MessageType::MSG_READ_INDEX);
+    builder.setMsgType(static_cast<MessageType>(static_cast<int>(MessageType::MSG_READ_INDEX)));
 
     auto entries = builder.initEntries(1);
     entries[0].setData(kj::arrayPtr(reinterpret_cast<const kj::byte*>(ctx.data()), ctx.size()));
@@ -89,7 +90,7 @@ Status RawNode::GetStatus() {
 void RawNode::ReportUnreachable(uint64_t id) {
     Message m = capnp_util::make<msg::Message>();
     auto builder = capnp_util::builder<msg::Message>(m);
-    builder.setMsgType(MessageType::MSG_UNREACHABLE);
+    builder.setMsgType(static_cast<MessageType>(static_cast<int>(MessageType::MSG_UNREACHABLE)));
     builder.setFrom(id);
     std::ignore = raft_.Step(m);
 }
@@ -98,7 +99,7 @@ void RawNode::ReportSnapshot(const uint64_t id, const SnapshotStatus status) {
     const auto reject = status == SnapshotStatus::Failure;
     Message m = capnp_util::make<msg::Message>();
     auto builder = capnp_util::builder<msg::Message>(m);
-    builder.setMsgType(MessageType::MSG_SNAP_STATUS);
+    builder.setMsgType(static_cast<MessageType>(static_cast<int>(MessageType::MSG_SNAP_STATUS)));
     builder.setFrom(id);
     builder.setReject(reject);
     std::ignore = raft_.Step(m);
@@ -354,14 +355,14 @@ bool RawNode::Tick() {
 Result<void> RawNode::Campaign() {
     Message m = capnp_util::make<msg::Message>();
     auto builder = capnp_util::builder<msg::Message>(m);
-    builder.setMsgType(MessageType::MSG_HUP);
+    builder.setMsgType(static_cast<MessageType>(static_cast<int>(MessageType::MSG_HUP)));
     return raft_.Step(m);
 }
 
 Result<void> RawNode::Propose(const std::string& ctx, const std::string& data) {
     Message m = capnp_util::make<msg::Message>();
     auto m_builder = capnp_util::builder<msg::Message>(m);
-    m_builder.setMsgType(MessageType::MSG_PROPOSE);
+    m_builder.setMsgType(static_cast<MessageType>(static_cast<int>(MessageType::MSG_PROPOSE)));
     m_builder.setFrom(raft_.id());
 
     auto entries = m_builder.initEntries(1);
@@ -385,7 +386,9 @@ Result<void> RawNode::ProposeConfChange(const std::string& ctx, const ConfChange
 
     auto entries = m_builder.initEntries(1);
     auto entry_builder = entries[0];
-    entry_builder.setEntryType(EntryType::ENTRY_CONF_CHANGE_V2);
+    entry_builder.setEntryType(
+        static_cast<EntryType>(static_cast<int>(EntryType::ENTRY_CONF_CHANGE_V2))
+    );
 
     const std::string serialized = capnp_util::toString(cc);
     entry_builder.setData(

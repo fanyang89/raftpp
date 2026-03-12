@@ -22,7 +22,8 @@ Message AcceptAndReply(const Message& m) {
     CHECK_EQ(reader.getMsgType(), MessageType::MSG_APPEND);
     Message reply = capnp_util::make<msg::Message>();
     auto builder = capnp_util::builder<msg::Message>(reply);
-    builder.setMsgType(MessageType::MSG_APPEND_RESPONSE);
+    builder.setMsgType(static_cast<MessageType>(static_cast<int>(MessageType::MSG_APPEND_RESPONSE))
+    );
     builder.setFrom(reader.getTo());
     builder.setTo(reader.getFrom());
     builder.setTerm(reader.getTerm());
@@ -79,7 +80,7 @@ void TestUpdateTermFromMessage(StateRole state) {
 
     Message m = capnp_util::make<msg::Message>();
     auto builder = capnp_util::builder<msg::Message>(m);
-    builder.setMsgType(MessageType::MSG_APPEND);
+    builder.setMsgType(static_cast<MessageType>(static_cast<int>(MessageType::MSG_APPEND)));
     builder.setTerm(2);
     r.Step(m);
 
@@ -324,7 +325,9 @@ TEST_CASE("raft paper: leader election in one round rpc") {
         for (const auto& [id, vote] : votes) {
             Message m = capnp_util::make<msg::Message>();
             auto builder = capnp_util::builder<msg::Message>(m);
-            builder.setMsgType(MessageType::MSG_REQUEST_VOTE_RESPONSE);
+            builder.setMsgType(
+                static_cast<MessageType>(static_cast<int>(MessageType::MSG_REQUEST_VOTE_RESPONSE))
+            );
             builder.setFrom(id);
             builder.setTo(1);
             builder.setTerm(r->term());
@@ -358,7 +361,8 @@ TEST_CASE("raft paper: follower vote") {
 
         Message m = capnp_util::make<msg::Message>();
         auto builder = capnp_util::builder<msg::Message>(m);
-        builder.setMsgType(MessageType::MSG_REQUEST_VOTE);
+        builder.setMsgType(static_cast<MessageType>(static_cast<int>(MessageType::MSG_REQUEST_VOTE))
+        );
         builder.setFrom(nvote);
         builder.setTo(1);
         builder.setTerm(1);
@@ -382,7 +386,7 @@ TEST_CASE("raft paper: candidate fallback") {
 
     Message m1 = capnp_util::make<msg::Message>();
     auto m1_builder = capnp_util::builder<msg::Message>(m1);
-    m1_builder.setMsgType(MessageType::MSG_APPEND);
+    m1_builder.setMsgType(static_cast<MessageType>(static_cast<int>(MessageType::MSG_APPEND)));
     m1_builder.setFrom(2);
     m1_builder.setTo(1);
     m1_builder.setTerm(2);
@@ -397,7 +401,7 @@ TEST_CASE("raft paper: candidate fallback") {
 
     Message m2 = capnp_util::make<msg::Message>();
     auto m2_builder = capnp_util::builder<msg::Message>(m2);
-    m2_builder.setMsgType(MessageType::MSG_APPEND);
+    m2_builder.setMsgType(static_cast<MessageType>(static_cast<int>(MessageType::MSG_APPEND)));
     m2_builder.setFrom(2);
     m2_builder.setTo(1);
     m2_builder.setTerm(3);
@@ -566,7 +570,7 @@ TEST_CASE("raft paper: vote request") {
 
         Message m = capnp_util::make<msg::Message>();
         auto builder = capnp_util::builder<msg::Message>(m);
-        builder.setMsgType(MessageType::MSG_APPEND);
+        builder.setMsgType(static_cast<MessageType>(static_cast<int>(MessageType::MSG_APPEND)));
         builder.setFrom(2);
         builder.setTo(1);
         builder.setTerm(wterm - 1);
@@ -650,7 +654,8 @@ TEST_CASE("raft paper: voter") {
 
         Message m = capnp_util::make<msg::Message>();
         auto builder = capnp_util::builder<msg::Message>(m);
-        builder.setMsgType(MessageType::MSG_REQUEST_VOTE);
+        builder.setMsgType(static_cast<MessageType>(static_cast<int>(MessageType::MSG_REQUEST_VOTE))
+        );
         builder.setFrom(2);
         builder.setTo(1);
         builder.setTerm(3);
@@ -718,7 +723,9 @@ TEST_CASE("raft paper: leader only commits log from current term") {
 
         Message resp = capnp_util::make<msg::Message>();
         auto resp_builder = capnp_util::builder<msg::Message>(resp);
-        resp_builder.setMsgType(MessageType::MSG_APPEND_RESPONSE);
+        resp_builder.setMsgType(
+            static_cast<MessageType>(static_cast<int>(MessageType::MSG_APPEND_RESPONSE))
+        );
         resp_builder.setFrom(2);
         resp_builder.setTo(1);
         resp_builder.setTerm(r->term());

@@ -21,7 +21,8 @@ Message MakeProposeMessage() {
 Message MakeAppendResponse(uint64_t index) {
     Message m = capnp_util::make<msg::Message>();
     auto builder = capnp_util::builder<msg::Message>(m);
-    builder.setMsgType(MessageType::MSG_APPEND_RESPONSE);
+    builder.setMsgType(static_cast<MessageType>(static_cast<int>(MessageType::MSG_APPEND_RESPONSE))
+    );
     builder.setFrom(2);
     builder.setTo(1);
     builder.setIndex(index);
@@ -31,7 +32,8 @@ Message MakeAppendResponse(uint64_t index) {
 Message MakeHeartbeatResponse() {
     Message m = capnp_util::make<msg::Message>();
     auto builder = capnp_util::builder<msg::Message>(m);
-    builder.setMsgType(MessageType::MSG_HEARTBEAT_RESPONSE);
+    builder.setMsgType(static_cast<MessageType>(static_cast<int>(MessageType::MSG_HEARTBEAT_RESPONSE
+    )));
     builder.setFrom(2);
     builder.setTo(1);
     return m;

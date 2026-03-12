@@ -59,7 +59,9 @@ bool RaftCore::TryBatching(
                 // Copy existing entries
                 for (const auto& e : existing_entries) {
                     auto entry = capnp_util::make<msg::Entry>([&](auto entry_builder) {
-                        entry_builder.setEntryType(e.getEntryType());
+                        entry_builder.setEntryType(
+                            static_cast<EntryType>(static_cast<int>(e.getEntryType()))
+                        );
                         entry_builder.setTerm(e.getTerm());
                         entry_builder.setIndex(e.getIndex());
                         entry_builder.setData(e.getData());
@@ -79,7 +81,9 @@ bool RaftCore::TryBatching(
                 for (size_t i = 0; i < all_entries.size(); ++i) {
                     auto src_reader = capnp_util::reader<msg::Entry>(all_entries[i]);
                     auto dst = entries_builder[i];
-                    dst.setEntryType(src_reader.getEntryType());
+                    dst.setEntryType(
+                        static_cast<EntryType>(static_cast<int>(src_reader.getEntryType()))
+                    );
                     dst.setTerm(src_reader.getTerm());
                     dst.setIndex(src_reader.getIndex());
                     dst.setData(src_reader.getData());
@@ -103,7 +107,7 @@ void RaftCore::PrepareSendEntries(
     Message& message, Progress& pr, const uint64_t term, const std::vector<Entry>& entries
 ) const {
     auto msg_builder = capnp_util::builder<msg::Message>(message);
-    msg_builder.setMsgType(MessageType::MSG_APPEND);
+    msg_builder.setMsgType(static_cast<MessageType>(static_cast<int>(MessageType::MSG_APPEND)));
     msg_builder.setIndex(pr.next_idx() - 1);
     msg_builder.setLogTerm(term);
 
@@ -111,7 +115,7 @@ void RaftCore::PrepareSendEntries(
     for (size_t i = 0; i < entries.size(); ++i) {
         auto src_reader = capnp_util::reader<msg::Entry>(entries[i]);
         auto dst = entries_builder[i];
-        dst.setEntryType(src_reader.getEntryType());
+        dst.setEntryType(static_cast<EntryType>(static_cast<int>(src_reader.getEntryType())));
         dst.setTerm(src_reader.getTerm());
         dst.setIndex(src_reader.getIndex());
         dst.setData(src_reader.getData());
@@ -184,7 +188,9 @@ bool RaftCore::PrepareSendSnapshot(Message& m, Progress& pr, uint64_t to) {
         return false;
     }
 
-    capnp_util::builder<msg::Message>(m).setMsgType(MessageType::MSG_SNAPSHOT);
+    capnp_util::builder<msg::Message>(m).setMsgType(
+        static_cast<MessageType>(static_cast<int>(MessageType::MSG_SNAPSHOT))
+    );
 
     auto snapshot_r = raft_log_.GetSnapshot(pr.pending_request_snapshot(), to);
     if (!snapshot_r) {
