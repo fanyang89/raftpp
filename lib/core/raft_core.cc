@@ -60,14 +60,7 @@ bool RaftCore::TryBatching(
 
                 // Copy existing entries
                 for (const auto& e : existing_entries) {
-                    auto entry = capnp_util::make<msg::Entry>([&](auto entry_builder) {
-                        entry_builder.setEntryType(e.getEntryType());
-                        entry_builder.setTerm(e.getTerm());
-                        entry_builder.setIndex(e.getIndex());
-                        entry_builder.setData(e.getData());
-                        entry_builder.setContext(e.getContext());
-                    });
-                    all_entries.push_back(std::move(entry));
+                    all_entries.push_back(capnp_util::clone<msg::Entry>(e));
                 }
 
                 // Add new entries
@@ -79,13 +72,7 @@ bool RaftCore::TryBatching(
                 auto msg_builder = capnp_util::builder<msg::Message>(msg);
                 auto entries_builder = msg_builder.initEntries(all_entries.size());
                 for (size_t i = 0; i < all_entries.size(); ++i) {
-                    auto src_reader = capnp_util::reader<msg::Entry>(all_entries[i]);
-                    auto dst = entries_builder[i];
-                    dst.setEntryType(src_reader.getEntryType());
-                    dst.setTerm(src_reader.getTerm());
-                    dst.setIndex(src_reader.getIndex());
-                    dst.setData(src_reader.getData());
-                    dst.setContext(src_reader.getContext());
+                    entries_builder.setWithCaveats(i, capnp_util::reader<msg::Entry>(all_entries[i]));
                 }
 
                 const auto size = all_entries.size();
@@ -111,13 +98,7 @@ void RaftCore::PrepareSendEntries(
 
     auto entries_builder = msg_builder.initEntries(entries.size());
     for (size_t i = 0; i < entries.size(); ++i) {
-        auto src_reader = capnp_util::reader<msg::Entry>(entries[i]);
-        auto dst = entries_builder[i];
-        dst.setEntryType(src_reader.getEntryType());
-        dst.setTerm(src_reader.getTerm());
-        dst.setIndex(src_reader.getIndex());
-        dst.setData(src_reader.getData());
-        dst.setContext(src_reader.getContext());
+        entries_builder.setWithCaveats(i, capnp_util::reader<msg::Entry>(entries[i]));
     }
 
     msg_builder.setCommit(raft_log_.committed());
@@ -209,41 +190,7 @@ bool RaftCore::PrepareSendSnapshot(Message& m, Progress& pr, uint64_t to) {
         auto snap_builder = m_builder.initSnapshot();
         auto src_reader = capnp_util::reader<msg::Snapshot>(snapshot);
         snap_builder.setData(src_reader.getData());
-
-        // Copy metadata
-        auto meta_builder = snap_builder.initMetadata();
-        meta_builder.setIndex(s_index);
-        meta_builder.setTerm(s_term);
-
-        // Copy conf state
-        auto src_conf = snap_meta.getConfState();
-        auto conf_builder = meta_builder.initConfState();
-
-        auto voters = src_conf.getVoters();
-        auto voters_builder = conf_builder.initVoters(voters.size());
-        for (size_t i = 0; i < voters.size(); ++i) {
-            voters_builder.set(i, voters[i]);
-        }
-
-        auto learners = src_conf.getLearners();
-        auto learners_builder = conf_builder.initLearners(learners.size());
-        for (size_t i = 0; i < learners.size(); ++i) {
-            learners_builder.set(i, learners[i]);
-        }
-
-        auto voters_out = src_conf.getVotersOutgoing();
-        auto voters_out_builder = conf_builder.initVotersOutgoing(voters_out.size());
-        for (size_t i = 0; i < voters_out.size(); ++i) {
-            voters_out_builder.set(i, voters_out[i]);
-        }
-
-        auto learners_next = src_conf.getLearnersNext();
-        auto learners_next_builder = conf_builder.initLearnersNext(learners_next.size());
-        for (size_t i = 0; i < learners_next.size(); ++i) {
-            learners_next_builder.set(i, learners_next[i]);
-        }
-
-        conf_builder.setAutoLeave(src_conf.getAutoLeave());
+        snap_builder.setMetadata(src_reader.getMetadata());
 
         pr.BecomeSnapshot(s_index);
         return true;
