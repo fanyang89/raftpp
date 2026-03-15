@@ -108,8 +108,7 @@ Result<size_t> Codec::FrameSize(std::span<const uint8_t> buffer, size_t max_size
             reinterpret_cast<const ::capnp::word*>(buffer.data() + kPrefixSize);
         size_t word_count = header_len / sizeof(::capnp::word);
 
-        ::capnp::FlatArrayMessageReader reader(
-            kj::ArrayPtr<const ::capnp::word>(words, word_count)
+        ::capnp::FlatArrayMessageReader reader(kj::ArrayPtr<const ::capnp::word>(words, word_count)
         );
         auto header_reader = reader.getRoot<capnp::RpcHeader>();
 
@@ -174,9 +173,9 @@ Result<Codec::DecodeResult> Codec::Decode(std::span<const uint8_t> buffer, size_
         const ::capnp::word* words =
             reinterpret_cast<const ::capnp::word*>(buffer.data() + header_end);
         size_t word_count = header_reader.getPayloadSize() / sizeof(::capnp::word);
-        msg = capnp_util::fromWords<msg::Message>(
-            kj::ArrayPtr<const ::capnp::word>(words, word_count)
-        );
+        msg =
+            capnp_util::fromWords<msg::Message>(kj::ArrayPtr<const ::capnp::word>(words, word_count)
+            );
     } catch (...) {
         return RaftError(RpcErrorCode::PayloadParseFailed);
     }
@@ -205,7 +204,7 @@ std::vector<uint8_t> HandshakeCodec::Encode(const RpcHandshake& hs) {
 
 Result<std::pair<RpcHandshake, size_t>> HandshakeCodec::Decode(std::span<const uint8_t> buffer) {
     if (buffer.size() < kPrefixSize) {
-        return std::pair<RpcHandshake, size_t>{{}, 0};  // Incomplete
+        return std::make_pair(RpcHandshake{}, size_t{0});  // Incomplete
     }
 
     // Read magic
@@ -221,7 +220,7 @@ Result<std::pair<RpcHandshake, size_t>> HandshakeCodec::Decode(std::span<const u
 
     size_t total_size = kPrefixSize + length;
     if (buffer.size() < total_size) {
-        return std::pair<RpcHandshake, size_t>{{}, 0};  // Incomplete
+        return std::make_pair(RpcHandshake{}, size_t{0});  // Incomplete
     }
 
     // Parse RpcHandshake
