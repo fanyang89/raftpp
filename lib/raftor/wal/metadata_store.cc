@@ -179,11 +179,11 @@ std::vector<uint8_t> MetadataStore::Serialize(const WALMetadata& meta) const {
     offset += sizeof(MetadataHeader);
 
     // Write MetadataContent
-    MetadataContent content;
-    content.first_index = meta.first_index;
-    content.snapshot_index = meta.snapshot_index;
-    content.snapshot_term = meta.snapshot_term;
-    std::memcpy(data.data() + offset, &content, sizeof(MetadataContent));
+    MetadataContent content_struct;
+    content_struct.first_index = meta.first_index;
+    content_struct.snapshot_index = meta.snapshot_index;
+    content_struct.snapshot_term = meta.snapshot_term;
+    std::memcpy(data.data() + offset, &content_struct, sizeof(MetadataContent));
     offset += sizeof(MetadataContent);
 
     // Write hard_state
