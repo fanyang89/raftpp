@@ -18,12 +18,16 @@ std::vector<uint8_t> Codec::Encode(
     header_builder.setFromNode(from_node);
     header_builder.setToNode(to_node);
     header_builder.setRequestId(request_id);
-    header_builder.setCompression(static_cast<::raftpp::capnp::CompressionType>(static_cast<int>(capnp::CompressionType::COMPRESSION_NONE)));
+    header_builder.setCompression(static_cast<::raftpp::capnp::CompressionType>(
+        static_cast<int>(capnp::CompressionType::COMPRESSION_NONE)
+    ));
 
     // Serialize message to get payload size
     auto msg_bytes = capnp_util::toBytes(msg);
     header_builder.setPayloadSize(static_cast<uint32_t>(msg_bytes.size()));
-    header_builder.setMsgType(static_cast<::raftpp::capnp::MessageType>(static_cast<int>(capnp_util::reader<msg::Message>(msg).getMsgType())));
+    header_builder.setMsgType(static_cast<::raftpp::capnp::MessageType>(
+        static_cast<int>(capnp_util::reader<msg::Message>(msg).getMsgType())
+    ));
 
     // Serialize header
     auto header_bytes = capnp_util::toBytes(header);
@@ -58,9 +62,13 @@ size_t Codec::FrameOverhead() {
         header_builder.setFromNode(0);
         header_builder.setToNode(0);
         header_builder.setRequestId(0);
-        header_builder.setCompression(static_cast<::raftpp::capnp::CompressionType>(static_cast<int>(capnp::CompressionType::COMPRESSION_NONE)));
+        header_builder.setCompression(static_cast<::raftpp::capnp::CompressionType>(
+            static_cast<int>(capnp::CompressionType::COMPRESSION_NONE)
+        ));
         header_builder.setPayloadSize(0);
-        header_builder.setMsgType(static_cast<::raftpp::capnp::MessageType>(static_cast<int>(capnp::MessageType::MSG_HUP)));
+        header_builder.setMsgType(
+            static_cast<::raftpp::capnp::MessageType>(static_cast<int>(capnp::MessageType::MSG_HUP))
+        );
         auto header_bytes = capnp_util::toBytes(header);
         return kPrefixSize + header_bytes.size();
     }();
@@ -71,7 +79,9 @@ size_t Codec::MessageOverhead() {
     static const size_t overhead = []() {
         auto msg = capnp_util::make<msg::Message>();
         auto builder = capnp_util::builder<msg::Message>(msg);
-        builder.setMsgType(static_cast<::raftpp::capnp::MessageType>(static_cast<int>(MessageType::MSG_HUP)));
+        builder.setMsgType(
+            static_cast<::raftpp::capnp::MessageType>(static_cast<int>(MessageType::MSG_HUP))
+        );
         builder.initEntries(0);
         auto msg_bytes = capnp_util::toBytes(msg);
         return msg_bytes.size();
@@ -108,8 +118,7 @@ Result<size_t> Codec::FrameSize(std::span<const uint8_t> buffer, size_t max_size
             reinterpret_cast<const ::capnp::word*>(buffer.data() + kPrefixSize);
         size_t word_count = header_len / sizeof(::capnp::word);
 
-        ::capnp::FlatArrayMessageReader reader(
-            kj::ArrayPtr<const ::capnp::word>(words, word_count)
+        ::capnp::FlatArrayMessageReader reader(kj::ArrayPtr<const ::capnp::word>(words, word_count)
         );
         auto header_reader = reader.getRoot<capnp::RpcHeader>();
 
@@ -174,9 +183,9 @@ Result<Codec::DecodeResult> Codec::Decode(std::span<const uint8_t> buffer, size_
         const ::capnp::word* words =
             reinterpret_cast<const ::capnp::word*>(buffer.data() + header_end);
         size_t word_count = header_reader.getPayloadSize() / sizeof(::capnp::word);
-        msg = capnp_util::fromWords<msg::Message>(
-            kj::ArrayPtr<const ::capnp::word>(words, word_count)
-        );
+        msg =
+            capnp_util::fromWords<msg::Message>(kj::ArrayPtr<const ::capnp::word>(words, word_count)
+            );
     } catch (...) {
         return RaftError(RpcErrorCode::PayloadParseFailed);
     }

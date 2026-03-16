@@ -20,7 +20,9 @@ TEST_SUITE("rpc") {
     TEST_CASE("Codec encode/decode round-trip") {
         Message msg = capnp_util::make<msg::Message>();
         auto builder = capnp_util::builder<msg::Message>(msg);
-        builder.setMsgType(static_cast<::raftpp::capnp::MessageType>(static_cast<int>(MessageType::MSG_APPEND)));
+        builder.setMsgType(
+            static_cast<::raftpp::capnp::MessageType>(static_cast<int>(MessageType::MSG_APPEND))
+        );
         builder.setFrom(1);
         builder.setTo(2);
         builder.setTerm(5);
@@ -58,7 +60,9 @@ TEST_SUITE("rpc") {
     TEST_CASE("Codec handles incomplete buffer") {
         Message msg = capnp_util::make<msg::Message>();
         auto builder = capnp_util::builder<msg::Message>(msg);
-        builder.setMsgType(static_cast<::raftpp::capnp::MessageType>(static_cast<int>(MessageType::MSG_HEARTBEAT)));
+        builder.setMsgType(
+            static_cast<::raftpp::capnp::MessageType>(static_cast<int>(MessageType::MSG_HEARTBEAT))
+        );
         builder.setFrom(1);
         builder.setTo(2);
 
@@ -88,7 +92,9 @@ TEST_SUITE("rpc") {
     TEST_CASE("Codec rejects oversized message") {
         Message msg = capnp_util::make<msg::Message>();
         auto builder = capnp_util::builder<msg::Message>(msg);
-        builder.setMsgType(static_cast<::raftpp::capnp::MessageType>(static_cast<int>(MessageType::MSG_SNAPSHOT)));
+        builder.setMsgType(
+            static_cast<::raftpp::capnp::MessageType>(static_cast<int>(MessageType::MSG_SNAPSHOT))
+        );
         builder.setFrom(1);
         builder.setTo(2);
 
@@ -103,7 +109,9 @@ TEST_SUITE("rpc") {
     TEST_CASE("Codec handles message with entries") {
         Message msg = capnp_util::make<msg::Message>();
         auto builder = capnp_util::builder<msg::Message>(msg);
-        builder.setMsgType(static_cast<::raftpp::capnp::MessageType>(static_cast<int>(MessageType::MSG_APPEND)));
+        builder.setMsgType(
+            static_cast<::raftpp::capnp::MessageType>(static_cast<int>(MessageType::MSG_APPEND))
+        );
         builder.setFrom(1);
         builder.setTo(2);
         builder.setTerm(3);

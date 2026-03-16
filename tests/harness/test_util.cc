@@ -326,29 +326,23 @@ Entry NewEntry(
     builder.setIndex(index);
     builder.setTerm(term);
     if (data.has_value()) {
-        builder.setData(
-            ::capnp::Data::Reader(
-                reinterpret_cast<const ::capnp::byte*>(data->data()), data->size()
-            )
-        );
+        builder.setData(::capnp::Data::Reader(
+            reinterpret_cast<const ::capnp::byte*>(data->data()), data->size()
+        ));
         // Always set context when data is set, to match Raft's internal behavior
         // (HandleAppendEntries always calls setContext, even if empty)
         if (context.has_value()) {
-            builder.setContext(
-                ::capnp::Data::Reader(
-                    reinterpret_cast<const ::capnp::byte*>(context->data()), context->size()
-                )
-            );
+            builder.setContext(::capnp::Data::Reader(
+                reinterpret_cast<const ::capnp::byte*>(context->data()), context->size()
+            ));
         } else {
             // Set empty context to match Raft's behavior
             builder.setContext(::capnp::Data::Reader(nullptr, 0));
         }
     } else if (context.has_value()) {
-        builder.setContext(
-            ::capnp::Data::Reader(
-                reinterpret_cast<const ::capnp::byte*>(context->data()), context->size()
-            )
-        );
+        builder.setContext(::capnp::Data::Reader(
+            reinterpret_cast<const ::capnp::byte*>(context->data()), context->size()
+        ));
     }
     return e;
 }
@@ -396,7 +390,9 @@ ConfChangeV2 MakeRemoveNodeCC(const uint64_t node_id) {
     ConfChangeV2 cc = capnp_util::make<msg::ConfChangeV2>();
     auto builder = capnp_util::builder<msg::ConfChangeV2>(cc);
     auto changes = builder.initChanges(1);
-    changes[0].setChangeType(static_cast<::raftpp::capnp::ConfChangeType>(static_cast<int>(ConfChangeType::REMOVE_NODE)));
+    changes[0].setChangeType(
+        static_cast<::raftpp::capnp::ConfChangeType>(static_cast<int>(ConfChangeType::REMOVE_NODE))
+    );
     changes[0].setNodeId(node_id);
     return cc;
 }
@@ -405,7 +401,9 @@ ConfChangeV2 MakeAddNodeCC(const uint64_t node_id) {
     ConfChangeV2 cc = capnp_util::make<msg::ConfChangeV2>();
     auto builder = capnp_util::builder<msg::ConfChangeV2>(cc);
     auto changes = builder.initChanges(1);
-    changes[0].setChangeType(static_cast<::raftpp::capnp::ConfChangeType>(static_cast<int>(ConfChangeType::ADD_NODE)));
+    changes[0].setChangeType(
+        static_cast<::raftpp::capnp::ConfChangeType>(static_cast<int>(ConfChangeType::ADD_NODE))
+    );
     changes[0].setNodeId(node_id);
     return cc;
 }
@@ -414,7 +412,9 @@ ConfChangeV2 MakeAddLearnerCC(const uint64_t node_id) {
     ConfChangeV2 cc = capnp_util::make<msg::ConfChangeV2>();
     auto builder = capnp_util::builder<msg::ConfChangeV2>(cc);
     auto changes = builder.initChanges(1);
-    changes[0].setChangeType(static_cast<::raftpp::capnp::ConfChangeType>(static_cast<int>(ConfChangeType::ADD_LEARNER_NODE)));
+    changes[0].setChangeType(static_cast<::raftpp::capnp::ConfChangeType>(
+        static_cast<int>(ConfChangeType::ADD_LEARNER_NODE)
+    ));
     changes[0].setNodeId(node_id);
     return cc;
 }
@@ -610,7 +610,9 @@ void CommitNoopEntry(Network& network, MemoryStorage& storage, Raft& raft) {
             // Create response
             Message resp = capnp_util::make<msg::Message>();
             auto resp_builder = capnp_util::builder<msg::Message>(resp);
-            resp_builder.setMsgType(static_cast<::raftpp::capnp::MessageType>(static_cast<int>(MessageType::MSG_APPEND_RESPONSE)));
+            resp_builder.setMsgType(static_cast<::raftpp::capnp::MessageType>(
+                static_cast<int>(MessageType::MSG_APPEND_RESPONSE)
+            ));
             resp_builder.setFrom(msg_reader.getTo());
             resp_builder.setTo(msg_reader.getFrom());
             resp_builder.setTerm(raft.term());

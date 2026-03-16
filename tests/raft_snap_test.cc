@@ -35,7 +35,9 @@ TEST_CASE("sending snapshot set pending snapshot") {
 
     Message m = capnp_util::make<msg::Message>();
     auto builder = capnp_util::builder<msg::Message>(m);
-    builder.setMsgType(static_cast<::raftpp::capnp::MessageType>(static_cast<int>(MessageType::MSG_APPEND_RESPONSE)));
+    builder.setMsgType(static_cast<::raftpp::capnp::MessageType>(
+        static_cast<int>(MessageType::MSG_APPEND_RESPONSE)
+    ));
     builder.setFrom(2);
     builder.setTo(1);
     auto& voter_2 = r->progress_tracker().progress_map().at(2);
@@ -88,7 +90,9 @@ TEST_CASE("snapshot failure") {
 
     Message m = capnp_util::make<msg::Message>();
     auto builder = capnp_util::builder<msg::Message>(m);
-    builder.setMsgType(static_cast<::raftpp::capnp::MessageType>(static_cast<int>(MessageType::MSG_SNAP_STATUS)));
+    builder.setMsgType(
+        static_cast<::raftpp::capnp::MessageType>(static_cast<int>(MessageType::MSG_SNAP_STATUS))
+    );
     builder.setFrom(2);
     builder.setTo(1);
     builder.setReject(true);
@@ -117,7 +121,9 @@ TEST_CASE("snapshot succeed") {
 
     Message m = capnp_util::make<msg::Message>();
     auto builder = capnp_util::builder<msg::Message>(m);
-    builder.setMsgType(static_cast<::raftpp::capnp::MessageType>(static_cast<int>(MessageType::MSG_SNAP_STATUS)));
+    builder.setMsgType(
+        static_cast<::raftpp::capnp::MessageType>(static_cast<int>(MessageType::MSG_SNAP_STATUS))
+    );
     builder.setFrom(2);
     builder.setTo(1);
     builder.setReject(false);
@@ -146,7 +152,9 @@ TEST_CASE("snapshot abort") {
 
     Message m = capnp_util::make<msg::Message>();
     auto builder = capnp_util::builder<msg::Message>(m);
-    builder.setMsgType(static_cast<::raftpp::capnp::MessageType>(static_cast<int>(MessageType::MSG_APPEND_RESPONSE)));
+    builder.setMsgType(static_cast<::raftpp::capnp::MessageType>(
+        static_cast<int>(MessageType::MSG_APPEND_RESPONSE)
+    ));
     builder.setFrom(2);
     builder.setTo(1);
     builder.setIndex(11);
@@ -216,7 +224,9 @@ TEST_CASE("request snapshot") {
     // Advance matched.
     Message m = capnp_util::make<msg::Message>();
     auto builder = capnp_util::builder<msg::Message>(m);
-    builder.setMsgType(static_cast<::raftpp::capnp::MessageType>(static_cast<int>(MessageType::MSG_APPEND_RESPONSE)));
+    builder.setMsgType(static_cast<::raftpp::capnp::MessageType>(
+        static_cast<int>(MessageType::MSG_APPEND_RESPONSE)
+    ));
     builder.setFrom(2);
     builder.setTo(1);
     builder.setIndex(11);
@@ -256,7 +266,9 @@ TEST_CASE("request snapshot") {
     CHECK_EQ(msg_reader.getSnapshot().getMetadata().getIndex(), request_snapshot_idx);
 
     // Append/heartbeats does not set the state from snapshot to probe.
-    builder.setMsgType(static_cast<::raftpp::capnp::MessageType>(static_cast<int>(MessageType::MSG_APPEND_RESPONSE)));
+    builder.setMsgType(static_cast<::raftpp::capnp::MessageType>(
+        static_cast<int>(MessageType::MSG_APPEND_RESPONSE)
+    ));
     builder.setIndex(11);
     res = r.Step(m);
     (void)res;
@@ -266,7 +278,9 @@ TEST_CASE("request snapshot") {
     CHECK(voter_2.IsPaused());
 
     // However snapshot status report does set the stat to probe.
-    builder.setMsgType(static_cast<::raftpp::capnp::MessageType>(static_cast<int>(MessageType::MSG_SNAP_STATUS)));
+    builder.setMsgType(
+        static_cast<::raftpp::capnp::MessageType>(static_cast<int>(MessageType::MSG_SNAP_STATUS))
+    );
     res = r.Step(m);
     (void)res;
     CHECK_EQ(voter_2.state(), ProgressState::Probe);

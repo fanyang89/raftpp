@@ -298,7 +298,9 @@ Result<void> ReadyProcessor::ApplyEntry(const Entry& entry) {
             auto cc_v1_reader = capnp_util::reader<msg::ConfChange>(cc_v1);
             auto cc_builder = capnp_util::builder<msg::ConfChangeV2>(cc);
             auto single = cc_builder.initChanges(1)[0];
-            single.setChangeType(static_cast<::raftpp::capnp::ConfChangeType>(static_cast<int>(cc_v1_reader.getChangeType())));
+            single.setChangeType(static_cast<::raftpp::capnp::ConfChangeType>(
+                static_cast<int>(cc_v1_reader.getChangeType())
+            ));
             single.setNodeId(cc_v1_reader.getNodeId());
             cc_builder.setContext(cc_v1_reader.getContext());
         } else {
@@ -436,7 +438,8 @@ void ReadyProcessor::MaybeCompletePendingReads() {
     // This is on a hot path: avoid allocating a new vector on every invocation.
     const auto applied_index = applied_index_;
     auto new_end = std::remove_if(
-        pending_reads_.begin(), pending_reads_.end(), [&](const PendingRead& pending) {
+        pending_reads_.begin(), pending_reads_.end(),
+        [&](const PendingRead& pending) {
             if (!proposal_tracker_.IsReadPending(pending.ctx)) {
                 return true;
             }
