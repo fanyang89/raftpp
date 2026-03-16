@@ -1,8 +1,8 @@
 #include <algorithm>
+#include <cstring>
+
 #include <doctest/doctest.h>
 #include <nlohmann/json.hpp>
-
-#include <cstring>
 
 #include "kv_store_state_machine.h"
 #include "raftpp/core/capnp_util.h"

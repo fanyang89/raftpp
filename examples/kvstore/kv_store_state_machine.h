@@ -35,8 +35,7 @@ class KvStoreStateMachine : public raftpp::raftor::StateMachine, public IKVStore
         return data_.erase(key) > 0;
     }
 
-    [[nodiscard]] raftpp::Result<raftpp::raftor::ApplyResult> Apply(
-        const raftpp::Entry& entry
+    [[nodiscard]] raftpp::Result<raftpp::raftor::ApplyResult> Apply(const raftpp::Entry& entry
     ) override;
 
     [[nodiscard]] raftpp::Result<raftpp::SnapshotMetadata> TakeSnapshot(
