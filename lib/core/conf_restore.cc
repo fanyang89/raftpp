@@ -16,7 +16,7 @@ std::pair<std::vector<ConfChangeSingle>, std::vector<ConfChangeSingle>> ToConfCh
         ConfChangeSingle s = capnp_util::make<msg::ConfChangeSingle>();
         auto builder = capnp_util::builder<msg::ConfChangeSingle>(s);
         builder.setNodeId(id);
-        builder.setChangeType(ConfChangeType::ADD_NODE);
+        builder.setChangeType(static_cast<::raftpp::capnp::ConfChangeType>(static_cast<int>(ConfChangeType::ADD_NODE)));
         outgoing.emplace_back(std::move(s));
     }
 
@@ -24,7 +24,7 @@ std::pair<std::vector<ConfChangeSingle>, std::vector<ConfChangeSingle>> ToConfCh
         ConfChangeSingle s = capnp_util::make<msg::ConfChangeSingle>();
         auto builder = capnp_util::builder<msg::ConfChangeSingle>(s);
         builder.setNodeId(id);
-        builder.setChangeType(ConfChangeType::REMOVE_NODE);
+        builder.setChangeType(static_cast<::raftpp::capnp::ConfChangeType>(static_cast<int>(ConfChangeType::REMOVE_NODE)));
         incoming.emplace_back(std::move(s));
     }
 
@@ -32,7 +32,7 @@ std::pair<std::vector<ConfChangeSingle>, std::vector<ConfChangeSingle>> ToConfCh
         ConfChangeSingle s = capnp_util::make<msg::ConfChangeSingle>();
         auto builder = capnp_util::builder<msg::ConfChangeSingle>(s);
         builder.setNodeId(id);
-        builder.setChangeType(ConfChangeType::ADD_NODE);
+        builder.setChangeType(static_cast<::raftpp::capnp::ConfChangeType>(static_cast<int>(ConfChangeType::ADD_NODE)));
         incoming.emplace_back(std::move(s));
     }
 
@@ -40,7 +40,7 @@ std::pair<std::vector<ConfChangeSingle>, std::vector<ConfChangeSingle>> ToConfCh
         ConfChangeSingle s = capnp_util::make<msg::ConfChangeSingle>();
         auto builder = capnp_util::builder<msg::ConfChangeSingle>(s);
         builder.setNodeId(id);
-        builder.setChangeType(ConfChangeType::ADD_LEARNER_NODE);
+        builder.setChangeType(static_cast<::raftpp::capnp::ConfChangeType>(static_cast<int>(ConfChangeType::ADD_LEARNER_NODE)));
         incoming.emplace_back(std::move(s));
     }
 
@@ -48,7 +48,7 @@ std::pair<std::vector<ConfChangeSingle>, std::vector<ConfChangeSingle>> ToConfCh
         ConfChangeSingle s = capnp_util::make<msg::ConfChangeSingle>();
         auto builder = capnp_util::builder<msg::ConfChangeSingle>(s);
         builder.setNodeId(id);
-        builder.setChangeType(ConfChangeType::ADD_LEARNER_NODE);
+        builder.setChangeType(static_cast<::raftpp::capnp::ConfChangeType>(static_cast<int>(ConfChangeType::ADD_LEARNER_NODE)));
         incoming.emplace_back(std::move(s));
     }
 

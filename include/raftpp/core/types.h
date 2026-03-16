@@ -54,7 +54,7 @@ inline Entry MakeEntry(uint64_t index, uint64_t term, EntryType type = EntryType
     return capnp_util::make<msg::Entry>([&](auto builder) {
         builder.setIndex(index);
         builder.setTerm(term);
-        builder.setEntryType(type);
+        builder.setEntryType(static_cast<::raftpp::capnp::EntryType>(static_cast<int>(type)));
     });
 }
 

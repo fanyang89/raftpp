@@ -43,13 +43,13 @@ static std::vector<ConfChangeSingle> ParseConfChange(const std::string& input) {
 
         switch (op) {
             case 'v':
-                builder.setChangeType(ConfChangeType::ADD_NODE);
+                builder.setChangeType(static_cast<::raftpp::capnp::ConfChangeType>(static_cast<int>(ConfChangeType::ADD_NODE)));
                 break;
             case 'l':
-                builder.setChangeType(ConfChangeType::ADD_LEARNER_NODE);
+                builder.setChangeType(static_cast<::raftpp::capnp::ConfChangeType>(static_cast<int>(ConfChangeType::ADD_LEARNER_NODE)));
                 break;
             case 'r':
-                builder.setChangeType(ConfChangeType::REMOVE_NODE);
+                builder.setChangeType(static_cast<::raftpp::capnp::ConfChangeType>(static_cast<int>(ConfChangeType::REMOVE_NODE)));
                 break;
             default:
                 throw std::runtime_error("unknown token " + token);

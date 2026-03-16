@@ -18,12 +18,12 @@ std::vector<uint8_t> Codec::Encode(
     header_builder.setFromNode(from_node);
     header_builder.setToNode(to_node);
     header_builder.setRequestId(request_id);
-    header_builder.setCompression(capnp::CompressionType::COMPRESSION_NONE);
+    header_builder.setCompression(static_cast<::raftpp::capnp::CompressionType>(static_cast<int>(capnp::CompressionType::COMPRESSION_NONE)));
 
     // Serialize message to get payload size
     auto msg_bytes = capnp_util::toBytes(msg);
     header_builder.setPayloadSize(static_cast<uint32_t>(msg_bytes.size()));
-    header_builder.setMsgType(capnp_util::reader<msg::Message>(msg).getMsgType());
+    header_builder.setMsgType(static_cast<::raftpp::capnp::MessageType>(static_cast<int>(capnp_util::reader<msg::Message>(msg).getMsgType())));
 
     // Serialize header
     auto header_bytes = capnp_util::toBytes(header);
@@ -58,9 +58,9 @@ size_t Codec::FrameOverhead() {
         header_builder.setFromNode(0);
         header_builder.setToNode(0);
         header_builder.setRequestId(0);
-        header_builder.setCompression(capnp::CompressionType::COMPRESSION_NONE);
+        header_builder.setCompression(static_cast<::raftpp::capnp::CompressionType>(static_cast<int>(capnp::CompressionType::COMPRESSION_NONE)));
         header_builder.setPayloadSize(0);
-        header_builder.setMsgType(capnp::MessageType::MSG_HUP);
+        header_builder.setMsgType(static_cast<::raftpp::capnp::MessageType>(static_cast<int>(capnp::MessageType::MSG_HUP)));
         auto header_bytes = capnp_util::toBytes(header);
         return kPrefixSize + header_bytes.size();
     }();
@@ -71,7 +71,7 @@ size_t Codec::MessageOverhead() {
     static const size_t overhead = []() {
         auto msg = capnp_util::make<msg::Message>();
         auto builder = capnp_util::builder<msg::Message>(msg);
-        builder.setMsgType(MessageType::MSG_HUP);
+        builder.setMsgType(static_cast<::raftpp::capnp::MessageType>(static_cast<int>(MessageType::MSG_HUP)));
         builder.initEntries(0);
         auto msg_bytes = capnp_util::toBytes(msg);
         return msg_bytes.size();
@@ -205,7 +205,7 @@ std::vector<uint8_t> HandshakeCodec::Encode(const RpcHandshake& hs) {
 
 Result<std::pair<RpcHandshake, size_t>> HandshakeCodec::Decode(std::span<const uint8_t> buffer) {
     if (buffer.size() < kPrefixSize) {
-        return std::pair<RpcHandshake, size_t>{{}, 0};  // Incomplete
+        return std::make_pair(RpcHandshake{}, 0);  // Incomplete
     }
 
     // Read magic
@@ -221,7 +221,7 @@ Result<std::pair<RpcHandshake, size_t>> HandshakeCodec::Decode(std::span<const u
 
     size_t total_size = kPrefixSize + length;
     if (buffer.size() < total_size) {
-        return std::pair<RpcHandshake, size_t>{{}, 0};  // Incomplete
+        return std::make_pair(RpcHandshake{}, 0);  // Incomplete
     }
 
     // Parse RpcHandshake
@@ -237,7 +237,7 @@ Result<std::pair<RpcHandshake, size_t>> HandshakeCodec::Decode(std::span<const u
         return RaftError(RpcErrorCode::HandshakeParseFailed);
     }
 
-    return std::pair{std::move(hs), total_size};
+    return std::make_pair(std::move(hs), total_size);
 }
 
 Result<std::pair<std::string, int>> ParseAddress(const std::string& addr) {
@@ -259,7 +259,7 @@ Result<std::pair<std::string, int>> ParseAddress(const std::string& addr) {
         return RaftError(RpcErrorCode::AddressPortOutOfRange);
     }
 
-    return std::pair{host, port};
+    return std::make_pair(host, port);
 }
 
 }  // namespace raftpp::raftor::rpc

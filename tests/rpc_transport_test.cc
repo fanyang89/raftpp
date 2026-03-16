@@ -175,7 +175,7 @@ Message MakeMessage(uint64_t from, uint64_t to, MessageType type = MessageType::
     auto builder = capnp_util::builder<msg::Message>(msg);
     builder.setFrom(from);
     builder.setTo(to);
-    builder.setMsgType(type);
+    builder.setMsgType(static_cast<::raftpp::capnp::MessageType>(static_cast<int>(type)));
     builder.setTerm(1);
     return msg;
 }
@@ -673,7 +673,7 @@ TEST_SUITE("rpc::capnp") {
         auto builder = capnp_util::builder<msg::Message>(msg);
         builder.setFrom(1);
         builder.setTo(2);
-        builder.setMsgType(MessageType::MSG_APPEND);
+        builder.setMsgType(static_cast<::raftpp::capnp::MessageType>(static_cast<int>(MessageType::MSG_APPEND)));
         builder.setTerm(1);
 
         // Add many entries with large data
@@ -729,7 +729,7 @@ TEST_SUITE("rpc::capnp") {
         auto builder = capnp_util::builder<msg::Message>(msg);
         builder.setFrom(1);
         builder.setTo(2);
-        builder.setMsgType(MessageType::MSG_APPEND);
+        builder.setMsgType(static_cast<::raftpp::capnp::MessageType>(static_cast<int>(MessageType::MSG_APPEND)));
         builder.setTerm(5);
         builder.setIndex(100);
         builder.setCommit(50);

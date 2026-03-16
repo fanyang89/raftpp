@@ -298,7 +298,7 @@ Result<void> ReadyProcessor::ApplyEntry(const Entry& entry) {
             auto cc_v1_reader = capnp_util::reader<msg::ConfChange>(cc_v1);
             auto cc_builder = capnp_util::builder<msg::ConfChangeV2>(cc);
             auto single = cc_builder.initChanges(1)[0];
-            single.setChangeType(cc_v1_reader.getChangeType());
+            single.setChangeType(static_cast<::raftpp::capnp::ConfChangeType>(static_cast<int>(cc_v1_reader.getChangeType())));
             single.setNodeId(cc_v1_reader.getNodeId());
             cc_builder.setContext(cc_v1_reader.getContext());
         } else {

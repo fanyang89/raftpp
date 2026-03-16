@@ -49,7 +49,7 @@ Message MakeMessage(uint64_t from, uint64_t to, MessageType type = MessageType::
     auto builder = capnp_util::builder<msg::Message>(msg);
     builder.setFrom(from);
     builder.setTo(to);
-    builder.setMsgType(type);
+    builder.setMsgType(static_cast<::raftpp::capnp::MessageType>(static_cast<int>(type)));
     builder.setTerm(1);
     return msg;
 }
