@@ -28,6 +28,10 @@ using ConfState = capnp::ConfState;
 using ConfChange = capnp::ConfChange;
 using ConfChangeSingle = capnp::ConfChangeSingle;
 using ConfChangeV2 = capnp::ConfChangeV2;
+using EntryType = capnp::EntryType;
+using MessageType = capnp::MessageType;
+using ConfChangeType = capnp::ConfChangeType;
+using ConfChangeTransition = capnp::ConfChangeTransition;
 }  // namespace msg
 
 // Main type aliases - use unique_ptr for direct ownership
@@ -54,7 +58,7 @@ inline Entry MakeEntry(uint64_t index, uint64_t term, EntryType type = EntryType
     return capnp_util::make<msg::Entry>([&](auto builder) {
         builder.setIndex(index);
         builder.setTerm(term);
-        builder.setEntryType(type);
+        builder.setEntryType(capnp_util::cast_enum<msg::EntryType>(type));
     });
 }
 

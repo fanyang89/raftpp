@@ -165,4 +165,9 @@ bool EqualMessages(
     return true;
 }
 
+template <typename Target, typename Source>
+inline Target cast_enum(Source s) {
+    return static_cast<Target>(static_cast<int>(s));
+}
+
 }  // namespace raftpp::capnp_util
