@@ -110,6 +110,11 @@ inline ConfState CloneConfState(const ConfState& cs) {
     return capnp_util::clone<msg::ConfState>(cs);
 }
 
+// Clone a ConfState from a Reader
+inline ConfState CloneConfState(msg::ConfState::Reader cs) {
+    return capnp_util::clone<msg::ConfState>(cs);
+}
+
 // Clone a Snapshot
 inline Snapshot CloneSnapshot(const Snapshot& s) {
     return capnp_util::clone<msg::Snapshot>(s);
