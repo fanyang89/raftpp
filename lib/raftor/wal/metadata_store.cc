@@ -252,11 +252,17 @@ Result<WALMetadata> MetadataStore::Deserialize(const std::vector<uint8_t>& data)
 
     // Read hard_state
     uint32_t hs_len;
+    if (offset + sizeof(hs_len) > data.size()) {
+        return RaftError(StorageErrorCode::MetadataFileTooSmall);
+    }
     std::memcpy(&hs_len, data.data() + offset, sizeof(hs_len));
     offset += sizeof(hs_len);
 
     try {
         if (hs_len > 0) {
+            if (offset + hs_len > data.size()) {
+                return RaftError(StorageErrorCode::MetadataFileTooSmall);
+            }
             // Allocate aligned buffer and copy data
             kj::Array<::capnp::word> aligned_words = kj::heapArray<::capnp::word>((hs_len + 7) / 8);
             std::memcpy(aligned_words.begin(), data.data() + offset, hs_len);
@@ -273,11 +279,17 @@ Result<WALMetadata> MetadataStore::Deserialize(const std::vector<uint8_t>& data)
 
     // Read conf_state
     uint32_t cs_len;
+    if (offset + sizeof(cs_len) > data.size()) {
+        return RaftError(StorageErrorCode::MetadataFileTooSmall);
+    }
     std::memcpy(&cs_len, data.data() + offset, sizeof(cs_len));
     offset += sizeof(cs_len);
 
     try {
         if (cs_len > 0) {
+            if (offset + cs_len > data.size()) {
+                return RaftError(StorageErrorCode::MetadataFileTooSmall);
+            }
             // Allocate aligned buffer and copy data
             kj::Array<::capnp::word> aligned_words = kj::heapArray<::capnp::word>((cs_len + 7) / 8);
             std::memcpy(aligned_words.begin(), data.data() + offset, cs_len);
@@ -286,11 +298,11 @@ Result<WALMetadata> MetadataStore::Deserialize(const std::vector<uint8_t>& data)
             meta.conf_state = capnp_util::fromWords<msg::ConfState>(
                 kj::ArrayPtr<const ::capnp::word>(aligned_words.begin(), word_count)
             );
+            offset += cs_len;
         }
     } catch (...) {
         return RaftError(StorageErrorCode::ConfStateParseError);
     }
-    offset += cs_len;
 
     if (!meta.hard_state) {
         meta.hard_state = capnp_util::make<msg::HardState>();
