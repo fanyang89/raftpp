@@ -10,20 +10,26 @@ tasks:
   fmt:
     desc: Format all C++ source files with clang-format
     platforms: [linux, darwin]
+    vars:
+      CF:
+        sh: command -v clang-format-18 2>/dev/null || command -v clang-format
     cmds:
       - >
         find include lib tests -type f \( -name '*.cc' -o -name '*.h' -o -name '*.hpp' \)
         ! -path '*/generated/*' ! -name '*.pb.*'
-        -exec clang-format --style=file -i {} +
+        -exec {{.CF}} --style=file -i {} +
 
   check-fmt:
     desc: Check formatting without modifying files
     platforms: [linux, darwin]
+    vars:
+      CF:
+        sh: command -v clang-format-18 2>/dev/null || command -v clang-format
     cmds:
       - >
         find include lib tests -type f \( -name '*.cc' -o -name '*.h' -o -name '*.hpp' \)
         ! -path '*/generated/*' ! -name '*.pb.*'
-        -exec clang-format --style=file --dry-run --Werror {} +
+        -exec {{.CF}} --style=file --dry-run --Werror {} +
 
   cmake:
     desc: Configure CMake with debug preset
