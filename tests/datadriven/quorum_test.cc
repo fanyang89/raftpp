@@ -26,7 +26,7 @@ class TestAckIndexer final : public AckedIndexer {
 
     void Remove(uint64_t id) { data_.erase(id); }
 
-    bool Contains(uint64_t id) const { return data_.contains(id); }
+    bool Contains(uint64_t id) const { return data_.count(id) != 0; }
 
     void Retain(const std::function<bool(uint64_t, Index)>& predicate) {
         absl::erase_if(data_, [&predicate](const auto& kv) {
@@ -337,7 +337,7 @@ static std::string TestQuorum(const TestData& data) {
         Set<uint64_t> seen;
         size_t p = 0;
         for (uint64_t id : all_ids) {
-            if (!seen.contains(id) && p < votes.size()) {
+            if (!seen.count(id) != 0 && p < votes.size()) {
                 if (votes[p].index > 0) {  // Non-pending
                     vote_map[id] = (votes[p].index != 1);
                 }

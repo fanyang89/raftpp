@@ -2,7 +2,7 @@
 
 #include <cstring>
 #include <memory>
-#include <span>
+#include <nonstd/span.hpp>
 #include <stdexcept>
 #include <vector>
 
@@ -95,7 +95,7 @@ inline std::vector<uint8_t> toBytes(const std::unique_ptr<capnp::MallocMessageBu
 
 // Parse message from bytes
 template <typename T>
-std::unique_ptr<capnp::MallocMessageBuilder> fromBytes(std::span<const uint8_t> bytes) {
+std::unique_ptr<capnp::MallocMessageBuilder> fromBytes(nonstd::span<const uint8_t> bytes) {
     if (bytes.size() % sizeof(capnp::word) != 0) {
         throw std::runtime_error("Cap'n Proto buffer size is not a multiple of word size");
     }
@@ -145,7 +145,7 @@ inline std::string toString(const std::unique_ptr<capnp::MallocMessageBuilder>& 
 template <typename T>
 std::unique_ptr<capnp::MallocMessageBuilder> fromString(std::string_view str) {
     return fromBytes<T>(
-        std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(str.data()), str.size())
+        nonstd::span<const uint8_t>(reinterpret_cast<const uint8_t*>(str.data()), str.size())
     );
 }
 

@@ -36,7 +36,7 @@ class TempFileSnapshotWriter final : public SnapshotWriter {
   public:
     explicit TempFileSnapshotWriter(std::FILE* file) : file_(file) {}
 
-    Result<void> Write(std::span<const uint8_t> chunk) override {
+    Result<void> Write(nonstd::span<const uint8_t> chunk) override {
         const size_t bytes_written = std::fwrite(chunk.data(), 1, chunk.size(), file_);
         if (bytes_written != chunk.size()) {
             return RaftError(
@@ -120,45 +120,45 @@ bool TryGetRdmaMaxFrameSize(uint64_t payload_max, size_t* max_frame_size) {
 
 Result<void> RaftorConfig::Validate() const {
     if (node_id == 0) {
-        return std::unexpected(RaftError(ConfigErrorCode::InvalidNodeId));
+        return nonstd::make_unexpected(RaftError(ConfigErrorCode::InvalidNodeId));
     }
     if (listen_addr.empty()) {
-        return std::unexpected(RaftError(ConfigErrorCode::ListenAddressEmpty));
+        return nonstd::make_unexpected(RaftError(ConfigErrorCode::ListenAddressEmpty));
     }
     if (data_dir.empty()) {
-        return std::unexpected(RaftError(ConfigErrorCode::DataDirectoryEmpty));
+        return nonstd::make_unexpected(RaftError(ConfigErrorCode::DataDirectoryEmpty));
     }
     if (election_tick <= heartbeat_tick) {
-        return std::unexpected(RaftError(ConfigErrorCode::ElectionTickTooSmall));
+        return nonstd::make_unexpected(RaftError(ConfigErrorCode::ElectionTickTooSmall));
     }
     if (transport_kind == TransportKind::Rdma) {
         if (rdma.recv_buffer_count == 0 || rdma.send_buffer_count == 0 || rdma.buffer_size == 0 ||
             rdma.cq_depth == 0 || rdma.qp_depth == 0) {
-            return std::unexpected(RaftError(ConfigErrorCode::RdmaConfigInvalid));
+            return nonstd::make_unexpected(RaftError(ConfigErrorCode::RdmaConfigInvalid));
         }
         if (rdma.recv_buffer_count > rdma.qp_depth || rdma.send_buffer_count > rdma.qp_depth) {
-            return std::unexpected(RaftError(ConfigErrorCode::RdmaConfigInvalid));
+            return nonstd::make_unexpected(RaftError(ConfigErrorCode::RdmaConfigInvalid));
         }
         if (rdma.max_inline_data > rdma.buffer_size) {
-            return std::unexpected(RaftError(ConfigErrorCode::RdmaConfigInvalid));
+            return nonstd::make_unexpected(RaftError(ConfigErrorCode::RdmaConfigInvalid));
         }
         constexpr auto kMaxU32 = std::numeric_limits<uint32_t>::max();
         if (rdma.buffer_size > kMaxU32 || rdma.recv_buffer_count > kMaxU32 ||
             rdma.send_buffer_count > kMaxU32 || rdma.cq_depth > kMaxU32 ||
             rdma.qp_depth > kMaxU32 || rdma.max_inline_data > kMaxU32) {
-            return std::unexpected(RaftError(ConfigErrorCode::RdmaConfigInvalid));
+            return nonstd::make_unexpected(RaftError(ConfigErrorCode::RdmaConfigInvalid));
         }
         size_t max_frame_size = 0;
         if (!TryGetRdmaMaxFrameSize(max_size_per_message, &max_frame_size)) {
-            return std::unexpected(RaftError(ConfigErrorCode::RdmaConfigInvalid));
+            return nonstd::make_unexpected(RaftError(ConfigErrorCode::RdmaConfigInvalid));
         }
         if (rdma.buffer_size < max_frame_size) {
-            return std::unexpected(RaftError(ConfigErrorCode::RdmaConfigInvalid));
+            return nonstd::make_unexpected(RaftError(ConfigErrorCode::RdmaConfigInvalid));
         }
         const auto cq_needed =
             static_cast<uint64_t>(rdma.recv_buffer_count) + rdma.send_buffer_count;
         if (cq_needed > rdma.cq_depth) {
-            return std::unexpected(RaftError(ConfigErrorCode::RdmaConfigInvalid));
+            return nonstd::make_unexpected(RaftError(ConfigErrorCode::RdmaConfigInvalid));
         }
     }
     return {};
@@ -315,7 +315,7 @@ Result<void> RaftorImpl::Start() {
     if (started_.exchange(true)) {
         telemetry::RecordError(span.span(), "already started");
         RAFTPP_LOG_WARN("Start ignored: Raftor {} already started", config_.node_id);
-        return std::unexpected(RaftError(RaftErrorCode::AlreadyStarted));
+        return nonstd::make_unexpected(RaftError(RaftErrorCode::AlreadyStarted));
     }
 
     // Start transport
@@ -359,12 +359,12 @@ void RaftorImpl::Stop() {
     // Fail requests still waiting in the cross-thread queues.
     while (auto item = proposal_queue_.TryPop()) {
         if (item->callback) {
-            item->callback(std::unexpected(shutdown_error));
+            item->callback(nonstd::make_unexpected(shutdown_error));
         }
     }
     while (auto item = read_index_queue_.TryPop()) {
         if (item->callback) {
-            item->callback(std::unexpected(shutdown_error));
+            item->callback(nonstd::make_unexpected(shutdown_error));
         }
     }
 
@@ -690,7 +690,7 @@ Result<std::string> RaftorImpl::ProposeSync(std::string data, std::chrono::milli
         if (completed->exchange(true)) {
             return future.get();
         }
-        return std::unexpected(RaftError(RpcErrorCode::Timeout));
+        return nonstd::make_unexpected(RaftError(RpcErrorCode::Timeout));
     }
 
     return future.get();
@@ -731,7 +731,7 @@ Result<void> RaftorImpl::ReadIndexSync(std::string ctx, std::chrono::millisecond
         if (completed->exchange(true)) {
             return future.get();
         }
-        return std::unexpected(RaftError(RpcErrorCode::Timeout));
+        return nonstd::make_unexpected(RaftError(RpcErrorCode::Timeout));
     }
 
     return future.get();
@@ -963,7 +963,7 @@ Result<std::unique_ptr<Raftor>> Raftor::Create(
             }
 
             if (!node_id_found) {
-                return std::unexpected(RaftError(ConfigErrorCode::NodeIdNotInInitialPeers));
+                return nonstd::make_unexpected(RaftError(ConfigErrorCode::NodeIdNotInInitialPeers));
             }
 
             RAFTPP_LOG_INFO(
@@ -1008,7 +1008,7 @@ Result<std::unique_ptr<Raftor>> Raftor::Create(
             transport = std::make_unique<rpc::RdmaTransport>(transport_config, config.rdma);
 #else
             RAFTPP_LOG_WARN("RDMA transport requested but not enabled at build time");
-            return std::unexpected(RaftError(ConfigErrorCode::RdmaNotEnabled));
+            return nonstd::make_unexpected(RaftError(ConfigErrorCode::RdmaNotEnabled));
 #endif
             break;
     }
@@ -1028,7 +1028,7 @@ Result<std::unique_ptr<Raftor>> Raftor::Create(
     // Cast to WALStorage if possible
     auto wal_storage = std::dynamic_pointer_cast<wal::WALStorage>(storage);
     if (!wal_storage) {
-        return std::unexpected(RaftError(RaftErrorCode::IncompatibleStorage));
+        return nonstd::make_unexpected(RaftError(RaftErrorCode::IncompatibleStorage));
     }
 
     return std::make_unique<RaftorImpl>(

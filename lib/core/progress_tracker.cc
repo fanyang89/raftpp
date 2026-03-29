@@ -69,7 +69,7 @@ void ProgressTracker::RecordVote(uint64_t id, bool vote) {
 
 bool ProgressTracker::HasQuorum(const Set<uint64_t>& potential_quorum) const {
     const auto checkFn = [&potential_quorum](const uint64_t id) -> bool {
-        return potential_quorum.contains(id);
+        return potential_quorum.count(id) != 0;
     };
     return conf_.voters.GetVoteResult(checkFn) == VoteResult::Won;
 }
@@ -101,12 +101,12 @@ Progress* ProgressTracker::get(const uint64_t id) {
 }
 
 Progress& ProgressTracker::at(const uint64_t id) {
-    ASSERT(progress_.contains(id));
+    ASSERT(progress_.count(id) != 0);
     return progress_.at(id);
 }
 
 const Progress& ProgressTracker::at(const uint64_t id) const {
-    ASSERT(progress_.contains(id));
+    ASSERT(progress_.count(id) != 0);
     return progress_.at(id);
 }
 

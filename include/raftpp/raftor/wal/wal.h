@@ -3,7 +3,7 @@
 #include <memory>
 #include <optional>
 #include <shared_mutex>
-#include <span>
+#include <nonstd/span.hpp>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -32,7 +32,7 @@ class WAL {
 
     // Append entries to the log
     // Entries must be continuous with the current last_index
-    [[nodiscard]] Result<void> Append(std::span<const Entry> entries);
+    [[nodiscard]] Result<void> Append(nonstd::span<const Entry> entries);
 
     // Save hard state
     [[nodiscard]] Result<void> SaveHardState(const HardState& hs);
@@ -106,7 +106,7 @@ class WAL {
     }
 
     // Write a record to the current segment
-    [[nodiscard]] Result<void> WriteRecord(RecordType type, std::span<const uint8_t> data);
+    [[nodiscard]] Result<void> WriteRecord(RecordType type, nonstd::span<const uint8_t> data);
 
     // Flush the write buffer to the current segment
     [[nodiscard]] Result<void> FlushWriteBuffer();

@@ -83,7 +83,7 @@ Result<void> Restore(ProgressTracker& tracker, uint64_t next_idx, const ConfStat
             IncrChangeMap& prs = p->second;
 
             for (const ConfChangeSingle& i : incoming) {
-                if (const auto r = changer.Apply(cfg, prs, std::span{&i, 1}); !r) {
+                if (const auto r = changer.Apply(cfg, prs, nonstd::span{&i, 1}); !r) {
                     return r.error();
                 }
             }

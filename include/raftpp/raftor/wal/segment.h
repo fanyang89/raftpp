@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
-#include <span>
+#include <nonstd/span.hpp>
 #include <string>
 #include <vector>
 
@@ -16,8 +16,8 @@ class SegmentIo {
   public:
     virtual ~SegmentIo() = default;
 
-    virtual Result<void> PWrite(int fd, uint64_t offset, std::span<const uint8_t> data) = 0;
-    virtual Result<void> PRead(int fd, uint64_t offset, std::span<uint8_t> data) = 0;
+    virtual Result<void> PWrite(int fd, uint64_t offset, nonstd::span<const uint8_t> data) = 0;
+    virtual Result<void> PRead(int fd, uint64_t offset, nonstd::span<uint8_t> data) = 0;
     virtual Result<void> Sync(int fd) = 0;
 };
 
@@ -63,7 +63,7 @@ class Segment {
     );
 
     // Append data to the segment
-    [[nodiscard]] Result<void> Append(std::span<const uint8_t> data);
+    [[nodiscard]] Result<void> Append(nonstd::span<const uint8_t> data);
 
     // Read data from a specific offset
     [[nodiscard]] Result<std::vector<uint8_t>> Read(uint64_t offset, uint32_t length) const;

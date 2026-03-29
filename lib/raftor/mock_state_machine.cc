@@ -10,7 +10,7 @@ Result<ApplyResult> MockStateMachine::Apply(const Entry& entry) {
     ++apply_count_;
     if (should_fail_apply_) {
         ++apply_failure_count_;
-        return std::unexpected(RaftError(RaftErrorCode::ProposalDropped));
+        return nonstd::make_unexpected(RaftError(RaftErrorCode::ProposalDropped));
     }
 
     auto reader = capnp_util::reader<msg::Entry>(entry);
@@ -31,15 +31,15 @@ Result<SnapshotMetadata> MockStateMachine::TakeSnapshot(
     ++snapshot_count_;
     if (should_fail_snapshot_) {
         ++snapshot_failure_count_;
-        return std::unexpected(RaftError(StorageErrorCode::SnapshotTemporarilyUnavailable));
+        return nonstd::make_unexpected(RaftError(StorageErrorCode::SnapshotTemporarilyUnavailable));
     }
 
     if (auto write_result = writer.Write(
-            std::span<const uint8_t>(snapshot_payload_.data(), snapshot_payload_.size())
+            nonstd::span<const uint8_t>(snapshot_payload_.data(), snapshot_payload_.size())
         );
         !write_result) {
         ++snapshot_failure_count_;
-        return std::unexpected(write_result.error());
+        return nonstd::make_unexpected(write_result.error());
     }
 
     auto metadata = capnp_util::make<msg::SnapshotMetadata>();
@@ -60,7 +60,7 @@ Result<void> MockStateMachine::RestoreSnapshot(
     ++restore_count_;
     if (should_fail_restore_) {
         ++restore_failure_count_;
-        return std::unexpected(RaftError(StorageErrorCode::Unavailable));
+        return nonstd::make_unexpected(RaftError(StorageErrorCode::Unavailable));
     }
 
     auto meta_reader = capnp_util::reader<msg::SnapshotMetadata>(metadata);
@@ -73,7 +73,7 @@ Result<void> MockStateMachine::RestoreSnapshot(
         auto read_result = reader.Read(buffer);
         if (!read_result) {
             ++restore_failure_count_;
-            return std::unexpected(read_result.error());
+            return nonstd::make_unexpected(read_result.error());
         }
         const size_t bytes_read = *read_result;
         if (bytes_read == 0) {

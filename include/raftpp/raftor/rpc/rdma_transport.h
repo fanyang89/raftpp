@@ -22,7 +22,7 @@ class RdmaTransport : public Transport {
     void Stop() override;
     void AddPeer(uint64_t id, const std::string& addr) override;
     void RemovePeer(uint64_t id) override;
-    void Send(std::span<const Message> messages) override;
+    void Send(nonstd::span<const Message> messages) override;
     void SetMessageCallback(MessageCallback cb) override;
     void SetErrorCallback(ErrorCallback cb) override;
     void Poll(std::chrono::milliseconds timeout) override;

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <span>
+#include <nonstd/span.hpp>
 #include <vector>
 
 #include "raftpp/core/error.h"
@@ -64,13 +64,13 @@ class Codec {
     /// If the buffer is incomplete (not enough data), returns result with bytes_consumed = 0.
     /// Returns error if the message is invalid or too large.
     static Result<DecodeResult> Decode(
-        std::span<const uint8_t> buffer, size_t max_size = kDefaultMaxMessageSize
+        nonstd::span<const uint8_t> buffer, size_t max_size = kDefaultMaxMessageSize
     );
 
     /// Check if buffer has a complete frame
     /// Returns the total frame size if complete, 0 if incomplete, or error
     static Result<size_t> FrameSize(
-        std::span<const uint8_t> buffer, size_t max_size = kDefaultMaxMessageSize
+        nonstd::span<const uint8_t> buffer, size_t max_size = kDefaultMaxMessageSize
     );
 
     /// Legacy header size for backward compatibility references
@@ -104,7 +104,7 @@ class HandshakeCodec {
     /// Returns (handshake, bytes_consumed) on success
     /// If buffer is incomplete, returns result with bytes_consumed = 0
     static Result<std::pair<RpcHandshake, size_t>> Decode(
-        std::span<const uint8_t> buffer, size_t max_size = Codec::kDefaultMaxMessageSize
+        nonstd::span<const uint8_t> buffer, size_t max_size = Codec::kDefaultMaxMessageSize
     );
 };
 

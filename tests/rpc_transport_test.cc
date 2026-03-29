@@ -273,7 +273,7 @@ TEST_SUITE("rpc::capnp") {
 
         // Send message from t1 to t2
         auto msg = MakeMessage(1, 2);
-        t1.Send(std::span(&msg, 1));
+        t1.Send(nonstd::span(&msg, 1));
 
         // Wait for message to arrive
         bool received = WaitForBoth(t1, t2, [&] { return collector2.Count() >= 1; }, 2s);
@@ -314,11 +314,11 @@ TEST_SUITE("rpc::capnp") {
 
         // Send from t1 to t2
         auto msg1 = MakeMessage(1, 2);
-        t1.Send(std::span(&msg1, 1));
+        t1.Send(nonstd::span(&msg1, 1));
 
         // Send from t2 to t1
         auto msg2 = MakeMessage(2, 1);
-        t2.Send(std::span(&msg2, 1));
+        t2.Send(nonstd::span(&msg2, 1));
 
         // Wait for both messages
         bool received = WaitForBoth(
@@ -357,7 +357,7 @@ TEST_SUITE("rpc::capnp") {
         // Send 3 messages
         for (int i = 0; i < 3; i++) {
             auto msg = MakeMessage(1, 2);
-            t1.Send(std::span(&msg, 1));
+            t1.Send(nonstd::span(&msg, 1));
         }
 
         bool received = WaitForBoth(t1, t2, [&] { return callback_count >= 3; }, 2s);
@@ -395,7 +395,7 @@ TEST_SUITE("rpc::capnp") {
         PollBoth(t1, t2, 500ms);
 
         auto msg = MakeMessage(1, 2);
-        t1.Send(std::span(&msg, 1));
+        t1.Send(nonstd::span(&msg, 1));
 
         auto poll_thread_id = std::this_thread::get_id();
         bool received = WaitForBoth(
@@ -470,7 +470,7 @@ TEST_SUITE("rpc::capnp") {
         transport.AddPeer(2, fmt::format("127.0.0.1:{}", unreachable_port));
 
         auto msg = MakeMessage(1, 2);
-        transport.Send(std::span(&msg, 1));
+        transport.Send(nonstd::span(&msg, 1));
 
         auto start = std::chrono::steady_clock::now();
         transport.Stop();
@@ -502,7 +502,7 @@ TEST_SUITE("rpc::capnp") {
 
         for (size_t i = 0; i < 1100; ++i) {
             auto msg = MakeMessage(1, 2);
-            transport.Send(std::span(&msg, 1));
+            transport.Send(nonstd::span(&msg, 1));
         }
 
         auto poll_thread_id = std::this_thread::get_id();
@@ -555,11 +555,11 @@ TEST_SUITE("rpc::capnp") {
 
         // Send to t2
         auto msg2 = MakeMessage(1, 2);
-        t1.Send(std::span(&msg2, 1));
+        t1.Send(nonstd::span(&msg2, 1));
 
         // Send to t3
         auto msg3 = MakeMessage(1, 3);
-        t1.Send(std::span(&msg3, 1));
+        t1.Send(nonstd::span(&msg3, 1));
 
         bool received = WaitForAll(
             t1, t2, t3, [&] { return collector2.Count() >= 1 && collector3.Count() >= 1; }, 2s
@@ -596,7 +596,7 @@ TEST_SUITE("rpc::capnp") {
         PollBoth(t1, t2, 500ms);
 
         auto msg = MakeMessage(1, 2);
-        t1.Send(std::span(&msg, 1));
+        t1.Send(nonstd::span(&msg, 1));
 
         bool received = WaitForBoth(t1, t2, [&] { return collector_old.Count() >= 1; }, 2s);
         CHECK(received);
@@ -616,7 +616,7 @@ TEST_SUITE("rpc::capnp") {
         PollBoth(t1, t3, 500ms);
 
         auto msg2 = MakeMessage(1, 2);
-        t1.Send(std::span(&msg2, 1));
+        t1.Send(nonstd::span(&msg2, 1));
 
         bool received_new = WaitForBoth(t1, t3, [&] { return collector_new.Count() >= 1; }, 2s);
         CHECK(received_new);
@@ -639,7 +639,7 @@ TEST_SUITE("rpc::capnp") {
 
         // Send to unknown peer - should be silently dropped
         auto msg = MakeMessage(1, 999);  // peer 999 doesn't exist
-        transport.Send(std::span(&msg, 1));
+        transport.Send(nonstd::span(&msg, 1));
 
         // No crash, no hang
         PollFor(transport, 100ms);
@@ -689,7 +689,7 @@ TEST_SUITE("rpc::capnp") {
             );
         }
 
-        t1.Send(std::span(&msg, 1));
+        t1.Send(nonstd::span(&msg, 1));
 
         bool received = WaitForBoth(t1, t2, [&] { return collector.Count() >= 1; }, 3s);
         CHECK(received);
@@ -744,7 +744,7 @@ TEST_SUITE("rpc::capnp") {
             );
         }
 
-        t1.Send(std::span(&msg, 1));
+        t1.Send(nonstd::span(&msg, 1));
 
         bool received = WaitForBoth(t1, t2, [&] { return collector.Count() >= 1; }, 2s);
         REQUIRE(received);
@@ -792,7 +792,7 @@ TEST_SUITE("rpc::capnp") {
 
         // Try sending a message
         auto msg = MakeMessage(1, 2);
-        t1.Send(std::span(&msg, 1));
+        t1.Send(nonstd::span(&msg, 1));
 
         bool received = WaitForBoth(t1, t2, [&] { return collector.Count() >= 1; }, 2s);
         CHECK(received);

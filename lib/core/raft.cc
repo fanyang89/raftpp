@@ -1,8 +1,8 @@
 #include "raftpp/core/raft.h"
 
 #include <exception>
+#include <numeric>
 #include <random>
-#include <ranges>
 
 #include "raftpp/core/conf_changer.h"
 #include "raftpp/core/conf_restore.h"
@@ -19,7 +19,7 @@ bool UncommittedState::IsNoLimit() const {
     return max_uncommitted_size == std::numeric_limits<size_t>::max();
 }
 
-bool UncommittedState::MaybeIncreaseUncommittedSize(std::span<const Entry> entries) {
+bool UncommittedState::MaybeIncreaseUncommittedSize(nonstd::span<const Entry> entries) {
     if (IsNoLimit()) {
         return true;
     }
@@ -37,19 +37,17 @@ bool UncommittedState::MaybeIncreaseUncommittedSize(std::span<const Entry> entri
     return false;
 }
 
-bool UncommittedState::MaybeReduceUncommittedSize(std::span<const Entry> entries) {
+bool UncommittedState::MaybeReduceUncommittedSize(nonstd::span<const Entry> entries) {
     if (IsNoLimit() || entries.empty()) {
         return true;
     }
 
-    const std::size_t size = std::ranges::fold_left(
-        entries | std::views::drop_while([this](const Entry& e) {
-            return capnp_util::reader<msg::Entry>(e).getIndex() <= last_log_tail_index;
-        }) | std::views::transform([](const Entry& e) {
-            return capnp_util::reader<msg::Entry>(e).getData().size();
-        }),
-        std::size_t{0}, std::plus{}
-    );
+    std::size_t size = 0;
+    for (const auto& e : entries) {
+        if (capnp_util::reader<msg::Entry>(e).getIndex() > last_log_tail_index) {
+            size += capnp_util::reader<msg::Entry>(e).getData().size();
+        }
+    }
 
     if (size > uncommitted_size) {
         uncommitted_size = 0;
@@ -167,7 +165,7 @@ void Raft::LoadState(const HardState& hs) {
     vote_ = hs_reader.getVote();
 }
 
-bool Raft::MaybeIncreaseUncommittedSize(const std::span<const Entry> entries) {
+bool Raft::MaybeIncreaseUncommittedSize(const nonstd::span<const Entry> entries) {
     return uncommitted_state_.MaybeIncreaseUncommittedSize(entries);
 }
 
@@ -487,8 +485,7 @@ void Raft::MaybeCommitByVote(const Message& m) {
     // Paginate the scan, to avoid a potentially unlimited memory spike.
     const uint64_t low = last_commit + 1;
     const uint64_t high = raft_log_.committed() + 1;
-    if (constexpr auto ctx = GetEntriesContext(GetEntriesFor::CommitByVote);
-        HasUnappliedConfChanges(low, high, ctx)) {
+    if (HasUnappliedConfChanges(low, high, GetEntriesContext::Empty(false))) {
         // The candidate doesn't have to step down in theory, here just for best
         // safety as we assume quorum won't change during election.
         const auto term = term_;
@@ -645,7 +642,7 @@ bool Raft::Restore(const Snapshot& snapshot) {
     for (const auto voter : cs.getVotersOutgoing()) {
         cs_ids.insert(voter);
     }
-    if (!cs_ids.contains(id_)) {
+    if (!cs_ids.count(id_) != 0) {
         RAFTPP_LOG_WARN("attempted to restore snapshot but it is not in the ConfState");
         return false;
     }
@@ -979,7 +976,7 @@ void Raft::HandleTransferLeader(const Message& m) {
     }
     Progress& pr = *p;
 
-    if (progress_tracker_.conf().learners.contains(from)) {
+    if (progress_tracker_.conf().learners.count(from) != 0) {
         return;
     }
 
@@ -1056,7 +1053,7 @@ Result<void> Raft::StepLeader(const Message& m) {
                 PANIC("stepped empty MsgProp");
             }
 
-            if (!progress_tracker_.progress_map().contains(id_)) {
+            if (!progress_tracker_.progress_map().count(id_) != 0) {
                 return RaftError(RaftErrorCode::ProposalDropped);
             }
 

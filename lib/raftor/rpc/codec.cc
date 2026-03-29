@@ -86,7 +86,7 @@ size_t Codec::MessageOverhead() {
     return overhead;
 }
 
-Result<size_t> Codec::FrameSize(std::span<const uint8_t> buffer, size_t max_size) {
+Result<size_t> Codec::FrameSize(nonstd::span<const uint8_t> buffer, size_t max_size) {
     if (buffer.size() < kPrefixSize) {
         return 0;  // Incomplete prefix
     }
@@ -131,7 +131,7 @@ Result<size_t> Codec::FrameSize(std::span<const uint8_t> buffer, size_t max_size
     }
 }
 
-Result<Codec::DecodeResult> Codec::Decode(std::span<const uint8_t> buffer, size_t max_size) {
+Result<Codec::DecodeResult> Codec::Decode(nonstd::span<const uint8_t> buffer, size_t max_size) {
     if (buffer.size() < kPrefixSize) {
         return DecodeResult{{}, {}, 0};  // Incomplete
     }
@@ -211,7 +211,7 @@ std::vector<uint8_t> HandshakeCodec::Encode(const RpcHandshake& hs) {
 }
 
 Result<std::pair<RpcHandshake, size_t>> HandshakeCodec::Decode(
-    std::span<const uint8_t> buffer, size_t max_size
+    nonstd::span<const uint8_t> buffer, size_t max_size
 ) {
     if (buffer.size() < kPrefixSize) {
         return std::make_pair(RpcHandshake{}, size_t{0});  // Incomplete

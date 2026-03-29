@@ -209,7 +209,7 @@ TEST_CASE("confchange datadriven") {
                         << " match=" << pr->matched() << " next=" << pr->next_idx();
 
                     // Add learner marker
-                    if (tr.conf().learners.contains(id)) {
+                    if (tr.conf().learners.count(id) != 0) {
                         buf << " learner";
                     }
                     buf << "\n";

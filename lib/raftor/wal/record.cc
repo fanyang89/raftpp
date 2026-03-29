@@ -4,7 +4,7 @@
 
 namespace raftpp::raftor::wal {
 
-void RecordBuilder::SetPayload(std::span<const uint8_t> payload) {
+void RecordBuilder::SetPayload(nonstd::span<const uint8_t> payload) {
     payload_.assign(payload.begin(), payload.end());
 }
 
@@ -42,7 +42,7 @@ std::vector<uint8_t> RecordBuilder::Build() const {
     return result;
 }
 
-RecordParser::RecordParser(std::span<const uint8_t> data) {
+RecordParser::RecordParser(nonstd::span<const uint8_t> data) {
     if (data.size() < sizeof(RecordHeader)) {
         return;
     }

@@ -44,21 +44,29 @@ struct ToStringVisitor {
 
 namespace raftpp {
 
-bool StorageErrorOther::operator==(const StorageErrorOther&) const = default;
+bool StorageErrorOther::operator==(const StorageErrorOther& o) const {
+    return message == o.message;
+}
 
-bool InvalidConfigError::operator==(const InvalidConfigError&) const = default;
+bool InvalidConfigError::operator==(const InvalidConfigError& o) const {
+    return message == o.message;
+}
 
 RaftError ConfChangeError::ToError() const {
     return RaftError{*this};
 }
 
-bool ConfChangeError::operator==(const ConfChangeError&) const = default;
+bool ConfChangeError::operator==(const ConfChangeError& o) const {
+    return message == o.message;
+}
 
 RaftError FatalError::ToError() const {
     return RaftError{*this};
 }
 
-bool FatalError::operator==(const FatalError&) const = default;
+bool FatalError::operator==(const FatalError& o) const {
+    return message == o.message;
+}
 
 RaftError InvalidConfigError::ToError() const {
     return RaftError{*this};

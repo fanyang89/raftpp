@@ -13,7 +13,7 @@ class SnapshotDataReader final : public SnapshotReader {
   public:
     explicit SnapshotDataReader(::capnp::Data::Reader data) : data_(data) {}
 
-    Result<size_t> Read(std::span<uint8_t> out) override {
+    Result<size_t> Read(nonstd::span<uint8_t> out) override {
         if (offset_ >= data_.size()) {
             return 0;
         }
@@ -164,7 +164,7 @@ Result<void> ReadyProcessor::PersistEntries(const Ready& rd) {
     if (auto result = storage_->Append(rd.entries); !result) {
         RAFTPP_LOG_ERROR("Failed to persist entries: {}", result.error().ToString());
         telemetry::RecordErrorIf(span.span(), result);
-        return std::unexpected(RaftError(RaftErrorCode::ProposalDropped));
+        return nonstd::make_unexpected(RaftError(RaftErrorCode::ProposalDropped));
     }
 
     return {};
@@ -188,7 +188,7 @@ Result<void> ReadyProcessor::PersistHardState(const Ready& rd) {
         if (auto result = storage_->Sync(); !result) {
             RAFTPP_LOG_ERROR("Failed to sync storage: {}", result.error().ToString());
             telemetry::RecordErrorIf(span.span(), result);
-            return std::unexpected(RaftError(RaftErrorCode::ProposalDropped));
+            return nonstd::make_unexpected(RaftError(RaftErrorCode::ProposalDropped));
         }
     }
 
@@ -228,7 +228,7 @@ Result<void> ReadyProcessor::ApplySnapshot(const Ready& rd) {
     if (auto result = storage_->ApplySnapshot(snapshot); !result) {
         RAFTPP_LOG_ERROR("Failed to apply snapshot to storage: {}", result.error().ToString());
         telemetry::RecordErrorIf(span.span(), result);
-        return std::unexpected(RaftError(RaftErrorCode::ProposalDropped));
+        return nonstd::make_unexpected(RaftError(RaftErrorCode::ProposalDropped));
     }
 
     applied_index_ = snap_meta.getIndex();
@@ -289,10 +289,10 @@ Result<void> ReadyProcessor::ApplyEntry(const Entry& entry) {
                 const ::capnp::word* words = reinterpret_cast<const ::capnp::word*>(data.begin());
                 size_t word_count = data.size() / sizeof(::capnp::word);
                 cc_v1 = capnp_util::fromBytes<msg::ConfChange>(
-                    std::span<const uint8_t>(data.begin(), data.size())
+                    nonstd::span<const uint8_t>(data.begin(), data.size())
                 );
             } catch (...) {
-                return std::unexpected(RaftError(RaftErrorCode::ProposalDropped));
+                return nonstd::make_unexpected(RaftError(RaftErrorCode::ProposalDropped));
             }
 
             auto cc_v1_reader = capnp_util::reader<msg::ConfChange>(cc_v1);
@@ -308,10 +308,10 @@ Result<void> ReadyProcessor::ApplyEntry(const Entry& entry) {
 
             try {
                 cc = capnp_util::fromBytes<msg::ConfChangeV2>(
-                    std::span<const uint8_t>(data.begin(), data.size())
+                    nonstd::span<const uint8_t>(data.begin(), data.size())
                 );
             } catch (...) {
-                return std::unexpected(RaftError(RaftErrorCode::ProposalDropped));
+                return nonstd::make_unexpected(RaftError(RaftErrorCode::ProposalDropped));
             }
         }
 

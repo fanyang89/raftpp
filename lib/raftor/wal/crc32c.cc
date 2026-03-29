@@ -10,7 +10,7 @@ void CRC32C::Update(const void* data, const size_t len) {
     crc_ = crc32c::Extend(crc_, static_cast<const uint8_t*>(data), len);
 }
 
-void CRC32C::Update(const std::span<const uint8_t> data) {
+void CRC32C::Update(const nonstd::span<const uint8_t> data) {
     crc_ = crc32c::Extend(crc_, data.data(), data.size());
 }
 
@@ -28,7 +28,7 @@ uint32_t CRC32C::Compute(const void* data, const size_t len) {
     return c.Finalize();
 }
 
-uint32_t CRC32C::Compute(const std::span<const uint8_t> data) {
+uint32_t CRC32C::Compute(const nonstd::span<const uint8_t> data) {
     CRC32C c;
     c.Update(data);
     return c.Finalize();

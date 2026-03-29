@@ -21,5 +21,5 @@ target_link_libraries(raftpp-proto PUBLIC
     CapnProto::kj-async
 )
 
-# Set C++ standard (required by Cap'n Proto)
-target_compile_features(raftpp-proto PUBLIC cxx_std_23)
+# Link C++17 polyfills
+target_link_libraries(raftpp-proto PUBLIC nonstd::expected-lite nonstd::span-lite)

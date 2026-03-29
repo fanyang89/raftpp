@@ -27,7 +27,7 @@ class ConfChanger {
     explicit ConfChanger(ProgressTracker& tracker);
 
     [[nodiscard]] Result<std::pair<TrackerConfiguration, MapChange>> EnterJoint(
-        bool auto_leave, std::span<const ConfChangeSingle>
+        bool auto_leave, nonstd::span<const ConfChangeSingle>
     );
 
     [[nodiscard]] Result<
@@ -39,11 +39,11 @@ class ConfChanger {
     ) const;
 
     [[nodiscard]] Result<std::pair<TrackerConfiguration, MapChange>> Simple(
-        std::span<const ConfChangeSingle> ccs
+        nonstd::span<const ConfChangeSingle> ccs
     ) const;
 
     [[nodiscard]] static Result<void> Apply(
-        TrackerConfiguration& cfg, IncrChangeMap& prs, std::span<const ConfChangeSingle> ccs
+        TrackerConfiguration& cfg, IncrChangeMap& prs, nonstd::span<const ConfChangeSingle> ccs
     );
 
     [[nodiscard]] Result<std::pair<TrackerConfiguration, IncrChangeMap>> CheckAndCopy() const;

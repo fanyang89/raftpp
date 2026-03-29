@@ -266,9 +266,9 @@ TEST_CASE("ReadOnly: Advance single") {
     REQUIRE_EQ(result.size(), 1);
     CHECK_EQ(result[0].index, 10);
     CHECK_EQ(GetCtxFromStatus(result[0]), ctx);
-    CHECK(result[0].acks.contains(self_id));
-    CHECK(result[0].acks.contains(2));
-    CHECK(result[0].acks.contains(3));
+    CHECK(result[0].acks.count(self_id) != 0);
+    CHECK(result[0].acks.count(2) != 0);
+    CHECK(result[0].acks.count(3) != 0);
 
     // After advance, pending count should be 0
     CHECK_EQ(ro.PendingReadCount(), 0);

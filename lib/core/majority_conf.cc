@@ -31,7 +31,7 @@ std::pair<uint64_t, bool> MajorityConfig::CommittedIndex(
         // Use default value (0, 0) if no acked index is available
         matched.emplace_back(x.value_or(Index{0, 0}));
     }
-    std::ranges::sort(matched, [](const Index lhs, const Index rhs) {
+    std::sort(matched.begin(), matched.end(), [](const Index lhs, const Index rhs) {
         return lhs.index > rhs.index;
     });
 

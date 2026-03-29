@@ -72,7 +72,7 @@ Result<void> CapnpTransport::Start() {
     // Validate address format early.
     if (auto addr_result = ParseAddress(config_.listen_addr); !addr_result) {
         telemetry::RecordErrorIf(span.span(), addr_result);
-        return std::unexpected(addr_result.error());
+        return nonstd::make_unexpected(addr_result.error());
     }
 
     running_ = true;
@@ -126,7 +126,7 @@ void CapnpTransport::RemovePeer(uint64_t id) {
     peers_.erase(id);
 }
 
-void CapnpTransport::Send(std::span<const Message> messages) {
+void CapnpTransport::Send(nonstd::span<const Message> messages) {
     telemetry::ScopedSpan span("raftor.transport.send", config_.node_id);
     span.span()->SetAttribute("raft.message.count", static_cast<int64_t>(messages.size()));
 
@@ -388,14 +388,14 @@ void CapnpTransport::RpcLoop(std::promise<Result<void>> start_promise) {
             }
         }
     } catch (const kj::Exception& e) {
-        set_start(std::unexpected(RaftError(RpcErrorCode::BindFailed)));
+        set_start(nonstd::make_unexpected(RaftError(RpcErrorCode::BindFailed)));
         RAFTPP_LOG_ERROR("Cap'n Proto RPC loop failed: {}", e.getDescription().cStr());
         EnqueueError(0, e.getDescription().cStr());
     } catch (const std::exception& e) {
-        set_start(std::unexpected(RaftError(RpcErrorCode::BindFailed)));
+        set_start(nonstd::make_unexpected(RaftError(RpcErrorCode::BindFailed)));
         RAFTPP_LOG_ERROR("Cap'n Proto RPC loop failed: {}", e.what());
     } catch (...) {
-        set_start(std::unexpected(RaftError(RpcErrorCode::BindFailed)));
+        set_start(nonstd::make_unexpected(RaftError(RpcErrorCode::BindFailed)));
         RAFTPP_LOG_ERROR("Cap'n Proto RPC loop failed: unknown error");
     }
 }

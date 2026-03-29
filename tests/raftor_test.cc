@@ -71,7 +71,7 @@ class MockStateMachine : public StateMachine {
         std::lock_guard lock(mutex_);
         const std::array<uint8_t, 4> snapshot_payload = {'s', 'n', 'a', 'p'};
         if (auto write_result = writer.Write(snapshot_payload); !write_result) {
-            return std::unexpected(write_result.error());
+            return nonstd::make_unexpected(write_result.error());
         }
 
         auto metadata = capnp_util::make<msg::SnapshotMetadata>();
@@ -91,7 +91,7 @@ class MockStateMachine : public StateMachine {
         while (true) {
             auto read_result = reader.Read(buffer);
             if (!read_result) {
-                return std::unexpected(read_result.error());
+                return nonstd::make_unexpected(read_result.error());
             }
             if (*read_result == 0) {
                 break;
@@ -168,7 +168,7 @@ Result<TestNode> CreateTestNode(
 
     auto raftor_result = Raftor::Create(node.config, std::move(state_machine));
     if (!raftor_result) {
-        return std::unexpected(raftor_result.error());
+        return nonstd::make_unexpected(raftor_result.error());
     }
     node.raftor = std::move(*raftor_result);
 

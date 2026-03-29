@@ -60,7 +60,7 @@ class Raft : public RaftCore {
     void Ping();
 
     [[nodiscard]] bool MaybeCommit();
-    [[nodiscard]] bool MaybeIncreaseUncommittedSize(std::span<const Entry> entries);
+    [[nodiscard]] bool MaybeIncreaseUncommittedSize(nonstd::span<const Entry> entries);
     void MaybeCommitByVote(const Message& m);
 
     void SendAppend(uint64_t to);

@@ -136,7 +136,7 @@ struct RdmaTransport::Impl {
     void Stop();
     void AddPeer(uint64_t id, const std::string& addr);
     void RemovePeer(uint64_t id);
-    void Send(std::span<const Message> messages);
+    void Send(nonstd::span<const Message> messages);
     void SetMessageCallback(MessageCallback cb);
     void SetErrorCallback(ErrorCallback cb);
     void Poll(std::chrono::milliseconds timeout);
@@ -169,7 +169,7 @@ struct RdmaTransport::Impl {
 
     void PostHandshake(Connection& conn);
     bool PostRecv(Connection& conn, RecvBuffer& buffer);
-    bool PostSend(Connection& conn, std::span<const uint8_t> payload);
+    bool PostSend(Connection& conn, nonstd::span<const uint8_t> payload);
     void HandleRecv(RecvBuffer& buffer, size_t len);
     void ReleaseSendBuffer(Connection& conn, SendBuffer* buffer);
     bool HasIncomingCapacity();
@@ -227,7 +227,7 @@ struct RdmaTransport::Impl {
 
 Result<void> RdmaTransport::Impl::Start() {
     if (config_.listen_addr.empty()) {
-        return std::unexpected(RaftError(ConfigErrorCode::ListenAddressEmpty));
+        return nonstd::make_unexpected(RaftError(ConfigErrorCode::ListenAddressEmpty));
     }
 
     std::lock_guard lock(lifecycle_mutex_);
@@ -291,7 +291,7 @@ void RdmaTransport::Impl::RemovePeer(uint64_t id) {
     remove_queue_.push(id);
 }
 
-void RdmaTransport::Impl::Send(std::span<const Message> messages) {
+void RdmaTransport::Impl::Send(nonstd::span<const Message> messages) {
     Map<uint64_t, std::vector<Message>> batches;
 
     for (const auto& msg : messages) {
@@ -421,8 +421,8 @@ void RdmaTransport::Impl::RdmaLoop(std::promise<Result<void>> start_promise) {
             if (!ShouldDial(peer_id)) {
                 continue;
             }
-            if (HasConnection(peer_id) || peer_connections_.contains(peer_id) ||
-                connecting_peers_.contains(peer_id)) {
+            if (HasConnection(peer_id) || peer_connections_.count(peer_id) != 0 ||
+                connecting_peers_.count(peer_id) != 0) {
                 continue;
             }
             auto addr = GetPeerAddr(peer_id);
@@ -450,7 +450,7 @@ Result<void> RdmaTransport::Impl::SetupListener() {
     event_channel_ = rdma_create_event_channel();
     if (!event_channel_) {
         SPDLOG_ERROR("rdma_create_event_channel failed: {}", strerror(errno));
-        return std::unexpected(RaftError(RpcErrorCode::BindFailed));
+        return nonstd::make_unexpected(RaftError(RpcErrorCode::BindFailed));
     }
 
     int flags = fcntl(event_channel_->fd, F_GETFL, 0);
@@ -463,25 +463,25 @@ Result<void> RdmaTransport::Impl::SetupListener() {
     if (rdma_create_id(event_channel_, &listener_, nullptr, RDMA_PS_TCP) != 0) {
         SPDLOG_ERROR("rdma_create_id failed: {}", strerror(errno));
         TeardownListener();
-        return std::unexpected(RaftError(RpcErrorCode::BindFailed));
+        return nonstd::make_unexpected(RaftError(RpcErrorCode::BindFailed));
     }
 
     auto addr_result = ResolveSockaddr(config_.listen_addr);
     if (!addr_result) {
         TeardownListener();
-        return std::unexpected(addr_result.error());
+        return nonstd::make_unexpected(addr_result.error());
     }
 
     if (rdma_bind_addr(listener_, reinterpret_cast<sockaddr*>(&addr_result.value())) != 0) {
         SPDLOG_ERROR("rdma_bind_addr failed: {}", strerror(errno));
         TeardownListener();
-        return std::unexpected(RaftError(RpcErrorCode::BindFailed));
+        return nonstd::make_unexpected(RaftError(RpcErrorCode::BindFailed));
     }
 
     if (rdma_listen(listener_, kListenBacklog) != 0) {
         SPDLOG_ERROR("rdma_listen failed: {}", strerror(errno));
         TeardownListener();
-        return std::unexpected(RaftError(RpcErrorCode::ListenFailed));
+        return nonstd::make_unexpected(RaftError(RpcErrorCode::ListenFailed));
     }
 
     return {};
@@ -1118,7 +1118,7 @@ bool RdmaTransport::Impl::PostRecv(Connection& conn, RecvBuffer& buffer) {
     return true;
 }
 
-bool RdmaTransport::Impl::PostSend(Connection& conn, std::span<const uint8_t> payload) {
+bool RdmaTransport::Impl::PostSend(Connection& conn, nonstd::span<const uint8_t> payload) {
     if (payload.size() > rdma_config_.buffer_size) {
         SPDLOG_WARN("rdma send payload too large: {}", payload.size());
         return false;
@@ -1177,7 +1177,7 @@ void RdmaTransport::Impl::HandleRecv(RecvBuffer& buffer, size_t len) {
 
     uint32_t magic = 0;
     std::memcpy(&magic, buffer.storage.get(), sizeof(magic));
-    std::span<const uint8_t> payload(buffer.storage.get(), len);
+    nonstd::span<const uint8_t> payload(buffer.storage.get(), len);
 
     if (magic == HandshakeCodec::kMagic) {
         auto result = HandshakeCodec::Decode(payload, config_.max_message_size);
@@ -1387,7 +1387,7 @@ void RdmaTransport::Impl::EnqueueError(uint64_t peer_id, std::string error) {
 Result<sockaddr_storage> RdmaTransport::Impl::ResolveSockaddr(const std::string& addr) const {
     auto addr_result = ParseAddress(addr);
     if (!addr_result) {
-        return std::unexpected(addr_result.error());
+        return nonstd::make_unexpected(addr_result.error());
     }
 
     auto& [host, port] = *addr_result;
@@ -1399,7 +1399,7 @@ Result<sockaddr_storage> RdmaTransport::Impl::ResolveSockaddr(const std::string&
     addrinfo* info = nullptr;
     int rc = getaddrinfo(host.c_str(), std::to_string(port).c_str(), &hints, &info);
     if (rc != 0 || !info) {
-        return std::unexpected(RaftError(RpcErrorCode::AddressPortInvalid));
+        return nonstd::make_unexpected(RaftError(RpcErrorCode::AddressPortInvalid));
     }
 
     std::unique_ptr<addrinfo, AddrInfoDeleter> guard(info);
@@ -1455,7 +1455,7 @@ void RdmaTransport::RemovePeer(uint64_t id) {
     impl_->RemovePeer(id);
 }
 
-void RdmaTransport::Send(std::span<const Message> messages) {
+void RdmaTransport::Send(nonstd::span<const Message> messages) {
     impl_->Send(messages);
 }
 

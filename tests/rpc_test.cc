@@ -65,13 +65,13 @@ TEST_SUITE("rpc") {
         auto encoded = Codec::Encode(msg);
 
         // Only provide partial prefix
-        std::span<const uint8_t> partial(encoded.data(), Codec::kPrefixSize / 2);
+        nonstd::span<const uint8_t> partial(encoded.data(), Codec::kPrefixSize / 2);
         auto result = Codec::Decode(partial, Codec::kDefaultMaxMessageSize);
         REQUIRE(result.has_value());
         CHECK(result->bytes_consumed == 0);  // Should return 0 bytes consumed
 
         // Provide prefix but not full header/payload
-        std::span<const uint8_t> prefix_only(encoded.data(), Codec::kPrefixSize + 1);
+        nonstd::span<const uint8_t> prefix_only(encoded.data(), Codec::kPrefixSize + 1);
         result = Codec::Decode(prefix_only, Codec::kDefaultMaxMessageSize);
         REQUIRE(result.has_value());
         CHECK(result->bytes_consumed == 0);
