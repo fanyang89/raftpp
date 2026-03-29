@@ -23,7 +23,7 @@ jobs:
 
       - uses: RafikFarhad/clang-format-github-action@v6
         with:
-          sources: "include/**/*.h,include/**/*.hpp,lib/**/*.cc,tests/**/*.cc"
+          sources: "include/**/*.h,include/**/*.hpp,lib/**/*.cc,tests/**/*.cc,examples/**/*.h,examples/**/*.cc"
           style: file
 
   lint:
