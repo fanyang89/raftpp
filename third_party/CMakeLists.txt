@@ -13,7 +13,7 @@ CPMAddPackage(
     "SPDLOG_FMT_EXTERNAL OFF")
 CPMAddPackage(
   URI "https://github.com/abseil/abseil-cpp.git"
-  GIT_TAG "20250512.1")
+  GIT_TAG "20260107.1")
 
 if(RAFTPP_BUILD_TESTING)
   CPMAddPackage(URI "https://github.com/fanyang89/doctest.git" GIT_TAG master)
