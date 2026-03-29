@@ -85,6 +85,16 @@ inline Entry CloneEntry(const Entry& e) {
     return capnp_util::clone<msg::Entry>(e);
 }
 
+// Clone a SnapshotMetadata
+inline SnapshotMetadata CloneSnapshotMetadata(const SnapshotMetadata& sm) {
+    return capnp_util::clone<msg::SnapshotMetadata>(sm);
+}
+
+// Clone a SnapshotMetadata from a Reader
+inline SnapshotMetadata CloneSnapshotMetadata(msg::SnapshotMetadata::Reader sm) {
+    return capnp_util::clone<msg::SnapshotMetadata>(sm);
+}
+
 // Clone a HardState
 inline HardState CloneHardState(const HardState& hs) {
     return capnp_util::clone<msg::HardState>(hs);
