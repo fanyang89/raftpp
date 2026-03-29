@@ -24,6 +24,4 @@ target_link_libraries(raftor-rpc PUBLIC
   CapnProto::kj-async
   spdlog
   libassert::assert
-  absl::flat_hash_map
-  absl::flat_hash_set
   opentelemetry-cpp::api)

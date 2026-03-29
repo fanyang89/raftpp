@@ -1,7 +1,7 @@
 #include "test_util.h"
 
-#include <absl/strings/str_join.h>
 #include <spdlog/fmt/fmt.h>
+#include <spdlog/fmt/ranges.h>
 
 #include "raftpp/core/capnp_util.h"
 #include "raftpp/core/raft_core.h"
@@ -24,11 +24,14 @@ doctest::String toString(const std::vector<Entry>& entries) {
     for (const auto& e : entries) {
         auto reader = capnp_util::reader<msg::Entry>(e);
         auto data = reader.getData();
-        entries_strings.emplace_back(fmt::format(
-            "Entry {{ index={} term={} size={} }}", reader.getIndex(), reader.getTerm(), data.size()
-        ));
+        entries_strings.emplace_back(
+            fmt::format(
+                "Entry {{ index={} term={} size={} }}", reader.getIndex(), reader.getTerm(),
+                data.size()
+            )
+        );
     }
-    const auto s = absl::StrJoin(entries_strings, ",\n");
+    const auto s = fmt::format("{}", fmt::join(entries_strings, ",\n"));
     if (s.empty()) {
         return "[]";
     }
