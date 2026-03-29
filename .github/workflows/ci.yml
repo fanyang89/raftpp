@@ -79,6 +79,7 @@ jobs:
         run: |
           TOOLCHAIN=cmake/${{ matrix.compiler }}-toolchain.cmake
           cmake --preset=${{ matrix.build_type }} \
+            -B build \
             -DCMAKE_TOOLCHAIN_FILE=$TOOLCHAIN \
             -DRAFTPP_WITH_RDMA=OFF \
             ${{ matrix.sanitizer && format('-DRAFTPP_SANITIZE={0}', matrix.sanitizer) || '' }}
@@ -129,7 +130,8 @@ jobs:
       - name: Configure CMake
         run: |
           TOOLCHAIN=cmake/${{ matrix.compiler }}-toolchain.cmake
-          cmake --preset=${{ matrix.build_type == 'Debug' && 'debug' || 'release' }} \
+          cmake --preset=${{ matrix.build_type == 'Debug' && 'Debug' || 'Release' }} \
+            -B build \
             -DCMAKE_TOOLCHAIN_FILE=$TOOLCHAIN \
             -DRAFTPP_WITH_RDMA=OFF \
             ${{ matrix.sanitizer && format('-DRAFTPP_SANITIZE={0}', matrix.sanitizer) || '' }}

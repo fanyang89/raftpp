@@ -58,16 +58,16 @@ task fmt      # Format code with clang-format
 
 ```bash
 # Enable sanitizers
-cmake --preset=Debug -DRAFTPP_SANITIZE=address
+cmake --preset=Debug -B build -DRAFTPP_SANITIZE=address
 
 # Enable thread sanitizer
-cmake --preset=Debug -DRAFTPP_SANITIZE=thread
+cmake --preset=Debug -B build -DRAFTPP_SANITIZE=thread
 
 # Enable RDMA transport (requires rdma-core)
-cmake --preset=Debug -DRAFTPP_WITH_RDMA=ON
+cmake --preset=Debug -B build -DRAFTPP_WITH_RDMA=ON
 
 # Enable io_uring (Linux, requires system liburing via pkg-config)
-cmake --preset=Debug -DRAFTPP_WITH_LIBURING=ON
+cmake --preset=Debug -B build -DRAFTPP_WITH_LIBURING=ON
 ```
 
 ## Quick Start
@@ -229,7 +229,7 @@ while (raw_node.HasReady()) {
 For ultra-low-latency clusters, enable RDMA transport:
 
 ```bash
-cmake --preset=Debug -DRAFTPP_WITH_RDMA=ON
+cmake --preset=Debug -B build -DRAFTPP_WITH_RDMA=ON
 ```
 
 Requires rdma-core user-space libraries (`libibverbs`, `librdmacm`).
