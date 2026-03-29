@@ -38,7 +38,7 @@ std::string FormatCodeLocation(std::string_view filepath, std::string_view line)
 
     const std::string_view rendered_path =
         !filepath.empty() && filepath.front() == '/' ? filepath : Basename(filepath);
-    return fmt::format("{}:{}", rendered_path, line);
+    return fmt::format("[{}:{}]", rendered_path, line);
 }
 
 spdlog::level::level_enum ToSpdlogLevel(Severity severity) {

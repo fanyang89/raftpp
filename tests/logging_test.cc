@@ -246,7 +246,7 @@ TEST_CASE("logging: spdlog output renders repository file as clickable basename"
         std::string_view("clickable log")
     );
 
-    CHECK(logger.output().find("raftor.cc:123 clickable log") != std::string::npos);
+    CHECK(logger.output().find("[raftor.cc:123] clickable log") != std::string::npos);
 }
 
 TEST_CASE("logging: spdlog output keeps external absolute filepath") {
@@ -257,7 +257,7 @@ TEST_CASE("logging: spdlog output keeps external absolute filepath") {
         opentelemetry::logs::Severity::kWarn, kExternalPath, 7, std::string_view("external log")
     );
 
-    CHECK(logger.output().find("/tmp/external/file.cc:7 external log") != std::string::npos);
+    CHECK(logger.output().find("[/tmp/external/file.cc:7] external log") != std::string::npos);
 }
 
 TEST_SUITE_END();
