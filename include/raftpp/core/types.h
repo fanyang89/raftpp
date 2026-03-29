@@ -28,6 +28,7 @@ using ConfState = capnp::ConfState;
 using ConfChange = capnp::ConfChange;
 using ConfChangeSingle = capnp::ConfChangeSingle;
 using ConfChangeV2 = capnp::ConfChangeV2;
+
 using EntryType = capnp::EntryType;
 using MessageType = capnp::MessageType;
 using ConfChangeType = capnp::ConfChangeType;

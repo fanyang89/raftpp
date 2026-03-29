@@ -181,8 +181,7 @@ Result<void> ConfChanger::Apply(
     return {};
 }
 
-Result<std::pair<TrackerConfiguration, MapChange>> ConfChanger::Simple(
-    const ConfChangeSingle& ccs
+Result<std::pair<TrackerConfiguration, MapChange>> ConfChanger::Simple(const ConfChangeSingle& ccs
 ) const {
     std::vector<ConfChangeSingle> v;
     v.emplace_back(capnp_util::clone<msg::ConfChangeSingle>(ccs));

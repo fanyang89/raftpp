@@ -165,6 +165,7 @@ bool EqualMessages(
     return true;
 }
 
+// Helper for double static casting of enums for Cap'n Proto compatibility
 template <typename Target, typename Source>
 inline Target cast_enum(Source s) {
     return static_cast<Target>(static_cast<int>(s));
