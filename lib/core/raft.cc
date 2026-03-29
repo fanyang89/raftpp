@@ -675,12 +675,7 @@ void Raft::HandleSnapshot(const Message& m) {
     );
     to_send_builder.setTo(m_reader.getFrom());
 
-    // Copy snapshot from message reader
-    auto snap_reader = m_reader.getSnapshot();
-    auto snapshot = capnp_util::make<msg::Snapshot>();
-    auto snap_builder = capnp_util::builder<msg::Snapshot>(snapshot);
-    snap_builder.setData(snap_reader.getData());
-    snap_builder.setMetadata(snap_reader.getMetadata());
+    auto snapshot = capnp_util::clone<msg::Snapshot>(m_reader.getSnapshot());
 
     if (Restore(snapshot)) {
         to_send_builder.setIndex(raft_log_.LastIndex());
