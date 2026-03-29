@@ -46,7 +46,8 @@ task fmt      # Format code with clang-format
 Enable sanitizers via CMake:
 
 ```bash
-cmake --preset=dev -DRAFTPP_SANITIZE=address
+cmake --preset=debug -DRAFTPP_SANITIZE=address
+cmake --preset=debug -DRAFTPP_SANITIZE=thread
 ```
 
 ## Architecture

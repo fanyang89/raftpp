@@ -50,14 +50,17 @@ jobs:
         run: task lint
 
   build-and-test:
-    name: "${{ matrix.compiler }} / ${{ matrix.build_type }}${{ matrix.sanitizer && ' / ASan' || '' }}"
+    name: "${{ matrix.compiler }} / ${{ matrix.build_type }}${{ matrix.sanitizer && format(' / {0}', matrix.sanitizer) || '' }}"
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         compiler: [clang, gcc]
         build_type: [Debug, Release]
-        sanitizer: [address, ""]
+        sanitizer: [address, thread, ""]
+        exclude:
+          - build_type: Release
+            sanitizer: thread
     steps:
       - uses: actions/checkout@v5
 
