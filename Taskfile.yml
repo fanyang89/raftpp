@@ -64,6 +64,36 @@ tasks:
     cmds:
       - ./build/tests/raftpp-tests
 
+  unit-test-asan:
+    desc: Build and run unit tests with ASan
+    cmds:
+      - cmake --preset=debug -B build-asan -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN:-cmake/clang-toolchain.cmake} -DRAFTPP_SANITIZE=address
+      - cmake --build build-asan --target raftpp-tests
+      - ./build-asan/tests/raftpp-tests
+
+  unit-test-tsan:
+    desc: Build and run unit tests with TSan
+    cmds:
+      - cmake --preset=debug -B build-tsan -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN:-cmake/clang-toolchain.cmake} -DRAFTPP_SANITIZE=thread
+      - cmake --build build-tsan --target raftpp-tests
+      - ./build-tsan/tests/raftpp-tests
+
+  unit-test-release:
+    desc: Build and run unit tests with release preset
+    cmds:
+      - cmake --preset=release -B build-release -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN:-cmake/clang-toolchain.cmake}
+      - cmake --build build-release --target raftpp-tests
+      - ./build-release/tests/raftpp-tests
+
+  unit-test-all:
+    desc: Build and run ASan, TSan, and release unit tests
+    aliases:
+      - ut-all
+    cmds:
+      - task: unit-test-asan
+      - task: unit-test-tsan
+      - task: unit-test-release
+
   data-driven-test:
     desc: Run data-driven tests
     aliases:
