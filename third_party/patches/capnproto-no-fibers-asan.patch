@@ -1,0 +1,13 @@
+--- a/c++/src/kj/async.c++
++++ b/c++/src/kj/async.c++
+@@ -1469,8 +1469,10 @@
+ 
+     auto& stack = *reinterpret_cast<FiberStack*>(ptr);
+ 
++#if KJ_USE_FIBERS
+     __sanitizer_finish_switch_fiber(nullptr,
+         &stack.impl->originalBottom, &stack.impl->originalSize);
++#endif
+ 
+     // We first switch to the fiber inside of the FiberStack constructor. This is just for
+     // initialization purposes, and we're expected to switch back immediately.

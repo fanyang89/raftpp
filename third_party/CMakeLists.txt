@@ -39,6 +39,8 @@ CPMAddPackage(
     "BUILD_TESTING OFF"
     "WITH_OPENSSL OFF"
     "WITH_FIBERS OFF"
+  PATCHES
+    ${CMAKE_CURRENT_SOURCE_DIR}/patches/capnproto-no-fibers-asan.patch
 )
 
 # OpenTelemetry API (header-only, no-op by default)
