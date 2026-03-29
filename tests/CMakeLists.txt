@@ -6,6 +6,7 @@ add_executable(
   test_main.cc
   test_util.cc
   inflights_test.cc
+  logging_test.cc
   log_unstable_test.cc
   log_test.cc
   progress_test.cc

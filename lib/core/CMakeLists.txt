@@ -22,6 +22,7 @@ add_library(raftpp
   util.cc)
 
 target_include_directories(raftpp PUBLIC ${RAFTPP_INCLUDE_DIR})
+target_compile_definitions(raftpp PUBLIC RAFTPP_SOURCE_ROOT="${PROJECT_SOURCE_DIR}/")
 
 target_link_libraries(raftpp PUBLIC raftpp-proto)
 target_link_libraries(raftpp PUBLIC spdlog)

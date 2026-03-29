@@ -15,6 +15,17 @@
 
 namespace raftpp::logging {
 
+inline std::string_view TrimSourceRoot(std::string_view file) {
+#ifdef RAFTPP_SOURCE_ROOT
+    constexpr std::string_view kSourceRoot = RAFTPP_SOURCE_ROOT;
+    if (file.size() >= kSourceRoot.size() &&
+        file.compare(0, kSourceRoot.size(), kSourceRoot) == 0) {
+        return file.substr(kSourceRoot.size());
+    }
+#endif
+    return file;
+}
+
 enum class LogLevel {
     kTrace,
     kDebug,
@@ -40,6 +51,7 @@ inline void LogWithLocation(
     if (!logger) {
         return;
     }
+    const auto trimmed_file = TrimSourceRoot(file);
     std::string message;
     try {
         message = fmt::vformat(format, fmt::make_format_args(args...));
@@ -52,7 +64,7 @@ inline void LogWithLocation(
             opentelemetry::logs::Severity::kError,
             opentelemetry::nostd::string_view{message.data(), message.size()},
             opentelemetry::common::MakeAttributes(
-                {{"code.filepath", opentelemetry::nostd::string_view{file}},
+                {{"code.filepath", opentelemetry::nostd::string_view{trimmed_file}},
                  {"code.lineno", static_cast<int64_t>(line)}}
             )
         );
@@ -61,7 +73,7 @@ inline void LogWithLocation(
     logger->EmitLogRecord(
         severity, opentelemetry::nostd::string_view{message.data(), message.size()},
         opentelemetry::common::MakeAttributes(
-            {{"code.filepath", opentelemetry::nostd::string_view{file}},
+            {{"code.filepath", opentelemetry::nostd::string_view{trimmed_file}},
              {"code.lineno", static_cast<int64_t>(line)}}
         )
     );
@@ -74,10 +86,11 @@ inline void LogWithLocation(
     if (!logger) {
         return;
     }
+    const auto trimmed_file = TrimSourceRoot(file);
     logger->EmitLogRecord(
         severity, opentelemetry::nostd::string_view{message},
         opentelemetry::common::MakeAttributes(
-            {{"code.filepath", opentelemetry::nostd::string_view{file}},
+            {{"code.filepath", opentelemetry::nostd::string_view{trimmed_file}},
              {"code.lineno", static_cast<int64_t>(line)}}
         )
     );
