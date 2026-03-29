@@ -166,9 +166,9 @@ raftpp::Result<raftpp::SnapshotMetadata> KvStoreStateMachine::TakeSnapshot(
 ) {
     std::lock_guard lock(mutex_);
     std::string data_str = serializeData(data_);
-    auto write_result = writer.Write(std::span<const uint8_t>(
-        reinterpret_cast<const uint8_t*>(data_str.data()), data_str.size()
-    ));
+    auto write_result = writer.Write(
+        std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(data_str.data()), data_str.size())
+    );
     if (!write_result) {
         return std::unexpected(write_result.error());
     }
