@@ -50,7 +50,7 @@ if(RAFTPP_WITH_LIBURING)
       GIT_TAG "liburing-2.12"
       CONFIGURE_COMMAND
         ${CMAKE_COMMAND} -E env CC=${CMAKE_C_COMPILER} ./configure
-        --prefix=${LIBURING_INSTALL_DIR} --enable-static
+        --prefix=${LIBURING_INSTALL_DIR}
       BUILD_COMMAND make
       INSTALL_COMMAND make install
       BUILD_IN_SOURCE 1
