@@ -172,37 +172,37 @@ std::vector<uint8_t> MetadataStore::Serialize(const WALMetadata& meta) const {
         hard_state_bytes.size() + 4 + conf_state_bytes.size();
 
     std::vector<uint8_t> data(total_size, 0);
-    uint8_t* ptr = data.data();
+    size_t offset = 0;
 
     // Skip header for now (we'll fill in CRC later)
     MetadataHeader header;
-    ptr += sizeof(MetadataHeader);
+    offset += sizeof(MetadataHeader);
 
     // Write MetadataContent
     MetadataContent content;
     content.first_index = meta.first_index;
     content.snapshot_index = meta.snapshot_index;
     content.snapshot_term = meta.snapshot_term;
-    std::memcpy(ptr, &content, sizeof(MetadataContent));
-    ptr += sizeof(MetadataContent);
+    std::memcpy(data.data() + offset, &content, sizeof(MetadataContent));
+    offset += sizeof(MetadataContent);
 
     // Write hard_state
     uint32_t hs_len = static_cast<uint32_t>(hard_state_bytes.size());
-    std::memcpy(ptr, &hs_len, sizeof(hs_len));
-    ptr += sizeof(hs_len);
+    std::memcpy(data.data() + offset, &hs_len, sizeof(hs_len));
+    offset += sizeof(hs_len);
     if (hs_len > 0) {
-        std::memcpy(ptr, hard_state_bytes.data(), hs_len);
-        ptr += hs_len;
+        std::memcpy(data.data() + offset, hard_state_bytes.data(), hs_len);
+        offset += hs_len;
     }
 
     // Write conf_state
     uint32_t cs_len = static_cast<uint32_t>(conf_state_bytes.size());
-    std::memcpy(ptr, &cs_len, sizeof(cs_len));
-    ptr += sizeof(cs_len);
+    std::memcpy(data.data() + offset, &cs_len, sizeof(cs_len));
+    offset += sizeof(cs_len);
     if (cs_len > 0) {
-        std::memcpy(ptr, conf_state_bytes.data(), cs_len);
+        std::memcpy(data.data() + offset, conf_state_bytes.data(), cs_len);
+        offset += cs_len;
     }
-    ptr += cs_len;
 
     // Compute CRC over everything after the CRC field
     size_t crc_offset = offsetof(MetadataHeader, crc) + sizeof(header.crc);
@@ -221,12 +221,12 @@ Result<WALMetadata> MetadataStore::Deserialize(const std::vector<uint8_t>& data)
         return RaftError(StorageErrorCode::MetadataFileTooSmall);
     }
 
-    const uint8_t* ptr = data.data();
+    size_t offset = 0;
 
     // Read and verify header
     MetadataHeader header;
-    std::memcpy(&header, ptr, sizeof(MetadataHeader));
-    ptr += sizeof(MetadataHeader);
+    std::memcpy(&header, data.data() + offset, sizeof(MetadataHeader));
+    offset += sizeof(MetadataHeader);
 
     if (!header.IsValid()) {
         return RaftError(StorageErrorCode::InvalidMetadataHeader);
@@ -242,8 +242,8 @@ Result<WALMetadata> MetadataStore::Deserialize(const std::vector<uint8_t>& data)
 
     // Read MetadataContent
     MetadataContent content;
-    std::memcpy(&content, ptr, sizeof(MetadataContent));
-    ptr += sizeof(MetadataContent);
+    std::memcpy(&content, data.data() + offset, sizeof(MetadataContent));
+    offset += sizeof(MetadataContent);
 
     WALMetadata meta;
     meta.first_index = content.first_index;
@@ -252,14 +252,20 @@ Result<WALMetadata> MetadataStore::Deserialize(const std::vector<uint8_t>& data)
 
     // Read hard_state
     uint32_t hs_len;
-    std::memcpy(&hs_len, ptr, sizeof(hs_len));
-    ptr += sizeof(hs_len);
+    if (offset + sizeof(hs_len) > data.size()) {
+        return RaftError(StorageErrorCode::MetadataFileTooSmall);
+    }
+    std::memcpy(&hs_len, data.data() + offset, sizeof(hs_len));
+    offset += sizeof(hs_len);
 
     try {
         if (hs_len > 0) {
+            if (offset + hs_len > data.size()) {
+                return RaftError(StorageErrorCode::MetadataFileTooSmall);
+            }
             // Allocate aligned buffer and copy data
             kj::Array<::capnp::word> aligned_words = kj::heapArray<::capnp::word>((hs_len + 7) / 8);
-            std::memcpy(aligned_words.begin(), ptr, hs_len);
+            std::memcpy(aligned_words.begin(), data.data() + offset, hs_len);
 
             size_t word_count = hs_len / sizeof(::capnp::word);
             meta.hard_state = capnp_util::fromWords<msg::HardState>(
@@ -269,23 +275,30 @@ Result<WALMetadata> MetadataStore::Deserialize(const std::vector<uint8_t>& data)
     } catch (...) {
         return RaftError(StorageErrorCode::HardStateParseError);
     }
-    ptr += hs_len;
+    offset += hs_len;
 
     // Read conf_state
     uint32_t cs_len;
-    std::memcpy(&cs_len, ptr, sizeof(cs_len));
-    ptr += sizeof(cs_len);
+    if (offset + sizeof(cs_len) > data.size()) {
+        return RaftError(StorageErrorCode::MetadataFileTooSmall);
+    }
+    std::memcpy(&cs_len, data.data() + offset, sizeof(cs_len));
+    offset += sizeof(cs_len);
 
     try {
         if (cs_len > 0) {
+            if (offset + cs_len > data.size()) {
+                return RaftError(StorageErrorCode::MetadataFileTooSmall);
+            }
             // Allocate aligned buffer and copy data
             kj::Array<::capnp::word> aligned_words = kj::heapArray<::capnp::word>((cs_len + 7) / 8);
-            std::memcpy(aligned_words.begin(), ptr, cs_len);
+            std::memcpy(aligned_words.begin(), data.data() + offset, cs_len);
 
             size_t word_count = cs_len / sizeof(::capnp::word);
             meta.conf_state = capnp_util::fromWords<msg::ConfState>(
                 kj::ArrayPtr<const ::capnp::word>(aligned_words.begin(), word_count)
             );
+            offset += cs_len;
         }
     } catch (...) {
         return RaftError(StorageErrorCode::ConfStateParseError);
