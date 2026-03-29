@@ -91,7 +91,7 @@ tasks:
     env:
       LLVM_PROFILE_FILE: build/raftpp-%p.profraw
     vars:
-      PROF_DATA: build-coverage/coverage.profdata
+      PROF_DATA: build/coverage.profdata
     cmds:
       # build
       - cmake --preset=relwithdebinfo -DRAFTPP_COVERAGE=ON -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN:-cmake/clang-toolchain.cmake}
