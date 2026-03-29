@@ -1,5 +1,6 @@
 #include "raftpp/core/raft.h"
 
+#include <exception>
 #include <random>
 #include <ranges>
 
@@ -1093,12 +1094,29 @@ Result<void> Raft::StepLeader(const Message& m) {
             for (size_t i = 0; i < entries.size(); i++) {
                 auto ent = entries[i];
                 if (ent.getEntryType() == EntryType::ENTRY_CONF_CHANGE_V2) {
-                    // Parse ConfChangeV2 from entry data
                     auto data = ent.getData();
-                    kj::ArrayPtr<const kj::byte> data_ptr(data.begin(), data.size());
-
-                    // Validate it can be parsed (just check if data exists for now)
                     if (data.size() == 0) {
+                        RAFTPP_LOG_WARN("proposed ConfChangeV2 has no data; dropping");
+                        return RaftError(RaftErrorCode::ProposalDropped);
+                    }
+                    try {
+                        const std::string_view view(
+                            reinterpret_cast<const char*>(data.begin()), data.size()
+                        );
+                        std::ignore = capnp_util::fromString<msg::ConfChangeV2>(view);
+                    } catch (const kj::Exception& e) {
+                        RAFTPP_LOG_WARN(
+                            "proposed ConfChangeV2 is invalid: {}; dropping",
+                            e.getDescription().cStr()
+                        );
+                        return RaftError(RaftErrorCode::ProposalDropped);
+                    } catch (const std::exception& e) {
+                        RAFTPP_LOG_WARN("proposed ConfChangeV2 is invalid: {}; dropping", e.what());
+                        return RaftError(RaftErrorCode::ProposalDropped);
+                    } catch (...) {
+                        RAFTPP_LOG_WARN(
+                            "proposed ConfChangeV2 is invalid: unknown error; dropping"
+                        );
                         return RaftError(RaftErrorCode::ProposalDropped);
                     }
                 }
@@ -1268,7 +1286,13 @@ Result<void> Raft::Step(Message& m) {
     // m.term() == term_
     switch (m_reader.getMsgType()) {
         case MessageType::MSG_HUP:
-            Hup(false);
+            if (promotable_) {
+                Hup(false);
+            } else {
+                RAFTPP_LOG_INFO(
+                    "received MsgHup from {} but is not promotable; ignored", m_reader.getFrom()
+                );
+            }
             return {};
 
         case MessageType::MSG_REQUEST_VOTE:

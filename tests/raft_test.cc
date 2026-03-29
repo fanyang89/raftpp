@@ -129,6 +129,41 @@ TEST_CASE("raft: leader election") {
     }
 }
 
+TEST_CASE("raft: learner ignores hup") {
+    auto storage = std::make_shared<MemoryStorage>();
+    storage->SetRaftState(MakeRaftState(MakeHardState(1, 0, 0), MakeConfState({2, 3}, {1})));
+
+    Config cfg = NewTestConfig(1, 5, 1);
+    auto sm = NewTestRaftWithConfig(cfg, storage);
+
+    Message hup = NewMessage(1, 1, MessageType::MSG_HUP);
+    REQUIRE(sm.Step(hup).has_value());
+
+    CHECK_EQ(sm->state(), StateRole::Follower);
+    CHECK_EQ(sm->term(), 1);
+    CHECK(sm.msgs().empty());
+}
+
+TEST_CASE("raft: invalid conf change v2 proposal dropped") {
+    auto storage = std::make_shared<MemoryStorage>();
+    auto sm = NewTestRaft(1, {1}, 5, 1, storage);
+
+    Message hup = NewMessage(1, 1, MessageType::MSG_HUP);
+    REQUIRE(sm.Step(hup).has_value());
+    CHECK_EQ(sm->state(), StateRole::Leader);
+    CHECK_EQ(sm->raft_log().LastIndex(), 1);
+
+    Entry invalid = NewEntry(0, 0, "not-capnp");
+    capnp_util::builder<msg::Entry>(invalid).setEntryType(EntryType::ENTRY_CONF_CHANGE_V2);
+    Message propose =
+        NewMessageWithEntries(1, 1, MessageType::MSG_PROPOSE, MakeEntryVec(std::move(invalid)));
+
+    auto result = sm.Step(propose);
+    CHECK_FALSE(result.has_value());
+    CHECK(result.error() == RaftErrorCode::ProposalDropped);
+    CHECK_EQ(sm->raft_log().LastIndex(), 1);
+}
+
 TEST_CASE("raft: log replication") {
     auto network = CreateTestNetwork(3);
 
