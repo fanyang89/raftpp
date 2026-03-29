@@ -37,37 +37,7 @@ Result<void> MemoryStorageCore::ApplySnapshot(const Snapshot& snapshot) {
     }
 
     // Copy snapshot metadata
-    snapshot_metadata_ = capnp_util::make<msg::SnapshotMetadata>();
-    auto meta_builder = capnp_util::builder<msg::SnapshotMetadata>(snapshot_metadata_);
-    meta_builder.setIndex(meta.getIndex());
-    meta_builder.setTerm(meta.getTerm());
-    auto meta_conf = meta_builder.initConfState();
-    auto src_conf = meta.getConfState();
-    // Copy conf state voters
-    auto voters = src_conf.getVoters();
-    auto voters_builder = meta_conf.initVoters(voters.size());
-    for (size_t i = 0; i < voters.size(); ++i) {
-        voters_builder.set(i, voters[i]);
-    }
-    // Copy learners
-    auto learners = src_conf.getLearners();
-    auto learners_builder = meta_conf.initLearners(learners.size());
-    for (size_t i = 0; i < learners.size(); ++i) {
-        learners_builder.set(i, learners[i]);
-    }
-    // Copy voters_outgoing
-    auto voters_outgoing = src_conf.getVotersOutgoing();
-    auto voters_outgoing_builder = meta_conf.initVotersOutgoing(voters_outgoing.size());
-    for (size_t i = 0; i < voters_outgoing.size(); ++i) {
-        voters_outgoing_builder.set(i, voters_outgoing[i]);
-    }
-    // Copy learners_next
-    auto learners_next = src_conf.getLearnersNext();
-    auto learners_next_builder = meta_conf.initLearnersNext(learners_next.size());
-    for (size_t i = 0; i < learners_next.size(); ++i) {
-        learners_next_builder.set(i, learners_next[i]);
-    }
-    meta_conf.setAutoLeave(src_conf.getAutoLeave());
+    snapshot_metadata_ = CloneSnapshotMetadata(meta);
 
     auto hard_state_builder = capnp_util::builder<msg::HardState>(raft_state_.hard_state);
     auto current_term = hard_state_builder.getTerm();
@@ -76,25 +46,7 @@ Result<void> MemoryStorageCore::ApplySnapshot(const Snapshot& snapshot) {
     entries_.clear();
 
     // Copy conf state to raft_state_
-    raft_state_.conf_state = capnp_util::make<msg::ConfState>();
-    auto conf_builder = capnp_util::builder<msg::ConfState>(raft_state_.conf_state);
-    auto conf_voters = conf_builder.initVoters(voters.size());
-    for (size_t i = 0; i < voters.size(); ++i) {
-        conf_voters.set(i, voters[i]);
-    }
-    auto conf_learners = conf_builder.initLearners(learners.size());
-    for (size_t i = 0; i < learners.size(); ++i) {
-        conf_learners.set(i, learners[i]);
-    }
-    auto conf_voters_outgoing = conf_builder.initVotersOutgoing(voters_outgoing.size());
-    for (size_t i = 0; i < voters_outgoing.size(); ++i) {
-        conf_voters_outgoing.set(i, voters_outgoing[i]);
-    }
-    auto conf_learners_next = conf_builder.initLearnersNext(learners_next.size());
-    for (size_t i = 0; i < learners_next.size(); ++i) {
-        conf_learners_next.set(i, learners_next[i]);
-    }
-    conf_builder.setAutoLeave(src_conf.getAutoLeave());
+    raft_state_.conf_state = CloneConfState(meta.getConfState());
     return {};
 }
 
@@ -217,35 +169,7 @@ Snapshot MemoryStorageCore::snapshot() const {
 
     meta_builder.setTerm(term);
 
-    // Copy conf_state
-    auto conf_state_reader = capnp_util::reader<msg::ConfState>(raft_state_.conf_state);
-    auto meta_conf_builder = meta_builder.initConfState();
-
-    auto voters = conf_state_reader.getVoters();
-    auto voters_builder = meta_conf_builder.initVoters(voters.size());
-    for (size_t i = 0; i < voters.size(); ++i) {
-        voters_builder.set(i, voters[i]);
-    }
-
-    auto learners = conf_state_reader.getLearners();
-    auto learners_builder = meta_conf_builder.initLearners(learners.size());
-    for (size_t i = 0; i < learners.size(); ++i) {
-        learners_builder.set(i, learners[i]);
-    }
-
-    auto voters_outgoing = conf_state_reader.getVotersOutgoing();
-    auto voters_outgoing_builder = meta_conf_builder.initVotersOutgoing(voters_outgoing.size());
-    for (size_t i = 0; i < voters_outgoing.size(); ++i) {
-        voters_outgoing_builder.set(i, voters_outgoing[i]);
-    }
-
-    auto learners_next = conf_state_reader.getLearnersNext();
-    auto learners_next_builder = meta_conf_builder.initLearnersNext(learners_next.size());
-    for (size_t i = 0; i < learners_next.size(); ++i) {
-        learners_next_builder.set(i, learners_next[i]);
-    }
-
-    meta_conf_builder.setAutoLeave(conf_state_reader.getAutoLeave());
+    meta_builder.setConfState(capnp_util::reader<msg::ConfState>(raft_state_.conf_state));
 
     return snapshot;
 }
@@ -315,39 +239,7 @@ void MemoryStorage::SetRaftState(const RaftState& raft_state) {
 
 void MemoryStorage::SetConfState(const ConfState& conf_state) {
     std::lock_guard lock(mutex_);
-    auto src_reader = capnp_util::reader<msg::ConfState>(conf_state);
-    core_.raft_state_.conf_state = capnp_util::make<msg::ConfState>();
-    auto conf_builder = capnp_util::builder<msg::ConfState>(core_.raft_state_.conf_state);
-
-    // Copy voters
-    auto voters = src_reader.getVoters();
-    auto voters_builder = conf_builder.initVoters(voters.size());
-    for (size_t i = 0; i < voters.size(); ++i) {
-        voters_builder.set(i, voters[i]);
-    }
-
-    // Copy learners
-    auto learners = src_reader.getLearners();
-    auto learners_builder = conf_builder.initLearners(learners.size());
-    for (size_t i = 0; i < learners.size(); ++i) {
-        learners_builder.set(i, learners[i]);
-    }
-
-    // Copy voters_outgoing
-    auto voters_outgoing = src_reader.getVotersOutgoing();
-    auto voters_outgoing_builder = conf_builder.initVotersOutgoing(voters_outgoing.size());
-    for (size_t i = 0; i < voters_outgoing.size(); ++i) {
-        voters_outgoing_builder.set(i, voters_outgoing[i]);
-    }
-
-    // Copy learners_next
-    auto learners_next = src_reader.getLearnersNext();
-    auto learners_next_builder = conf_builder.initLearnersNext(learners_next.size());
-    for (size_t i = 0; i < learners_next.size(); ++i) {
-        learners_next_builder.set(i, learners_next[i]);
-    }
-
-    conf_builder.setAutoLeave(src_reader.getAutoLeave());
+    core_.raft_state_.conf_state = CloneConfState(conf_state);
 }
 
 void MemoryStorage::TriggerSnapshotUnavailable() {
@@ -438,35 +330,7 @@ Result<Snapshot> MemoryStorage::GetSnapshot(const uint64_t request_index, uint64
         meta_builder.setIndex(request_index);
         meta_builder.setTerm(meta_reader.getTerm());
 
-        // Copy conf_state
-        auto orig_conf = meta_reader.getConfState();
-        auto conf_builder = meta_builder.initConfState();
-
-        auto voters = orig_conf.getVoters();
-        auto voters_builder = conf_builder.initVoters(voters.size());
-        for (size_t i = 0; i < voters.size(); ++i) {
-            voters_builder.set(i, voters[i]);
-        }
-
-        auto learners = orig_conf.getLearners();
-        auto learners_builder = conf_builder.initLearners(learners.size());
-        for (size_t i = 0; i < learners.size(); ++i) {
-            learners_builder.set(i, learners[i]);
-        }
-
-        auto voters_outgoing = orig_conf.getVotersOutgoing();
-        auto voters_outgoing_builder = conf_builder.initVotersOutgoing(voters_outgoing.size());
-        for (size_t i = 0; i < voters_outgoing.size(); ++i) {
-            voters_outgoing_builder.set(i, voters_outgoing[i]);
-        }
-
-        auto learners_next = orig_conf.getLearnersNext();
-        auto learners_next_builder = conf_builder.initLearnersNext(learners_next.size());
-        for (size_t i = 0; i < learners_next.size(); ++i) {
-            learners_next_builder.set(i, learners_next[i]);
-        }
-
-        conf_builder.setAutoLeave(orig_conf.getAutoLeave());
+        meta_builder.setConfState(meta_reader.getConfState());
 
         return new_snapshot;
     }
