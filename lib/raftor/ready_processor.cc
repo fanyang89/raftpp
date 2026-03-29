@@ -33,6 +33,38 @@ class SnapshotDataReader final : public SnapshotReader {
     size_t offset_ = 0;
 };
 
+template <typename ListReader, typename ListBuilder>
+void CopyUint64List(ListReader src, ListBuilder dst) {
+    for (size_t i = 0; i < src.size(); ++i) {
+        dst.set(i, src[i]);
+    }
+}
+
+SnapshotMetadata CloneSnapshotMetadata(msg::SnapshotMetadata::Reader snap_meta) {
+    auto metadata = capnp_util::make<msg::SnapshotMetadata>();
+    auto meta_builder = capnp_util::builder<msg::SnapshotMetadata>(metadata);
+    meta_builder.setIndex(snap_meta.getIndex());
+    meta_builder.setTerm(snap_meta.getTerm());
+
+    auto conf_src = snap_meta.getConfState();
+    auto conf_dst = meta_builder.initConfState();
+
+    auto voters_src = conf_src.getVoters();
+    CopyUint64List(voters_src, conf_dst.initVoters(voters_src.size()));
+
+    auto learners_src = conf_src.getLearners();
+    CopyUint64List(learners_src, conf_dst.initLearners(learners_src.size()));
+
+    auto voters_out_src = conf_src.getVotersOutgoing();
+    CopyUint64List(voters_out_src, conf_dst.initVotersOutgoing(voters_out_src.size()));
+
+    auto learners_next_src = conf_src.getLearnersNext();
+    CopyUint64List(learners_next_src, conf_dst.initLearnersNext(learners_next_src.size()));
+
+    conf_dst.setAutoLeave(conf_src.getAutoLeave());
+    return metadata;
+}
+
 }  // namespace
 
 ReadyProcessor::ReadyProcessor(
@@ -266,9 +298,7 @@ Result<void> ReadyProcessor::ApplyEntry(const Entry& entry) {
             auto cc_v1_reader = capnp_util::reader<msg::ConfChange>(cc_v1);
             auto cc_builder = capnp_util::builder<msg::ConfChangeV2>(cc);
             auto single = cc_builder.initChanges(1)[0];
-            single.setChangeType(
-                capnp_util::cast_enum<msg::ConfChangeType>(cc_v1_reader.getChangeType())
-            );
+            single.setChangeType(capnp_util::as<msg::ConfChangeType>(cc_v1_reader.getChangeType()));
             single.setNodeId(cc_v1_reader.getNodeId());
             cc_builder.setContext(cc_v1_reader.getContext());
         } else {
@@ -406,7 +436,8 @@ void ReadyProcessor::MaybeCompletePendingReads() {
     // This is on a hot path: avoid allocating a new vector on every invocation.
     const auto applied_index = applied_index_;
     auto new_end = std::remove_if(
-        pending_reads_.begin(), pending_reads_.end(), [&](const PendingRead& pending) {
+        pending_reads_.begin(), pending_reads_.end(),
+        [&](const PendingRead& pending) {
             if (!proposal_tracker_.IsReadPending(pending.ctx)) {
                 return true;
             }

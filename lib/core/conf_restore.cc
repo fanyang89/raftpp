@@ -16,7 +16,7 @@ std::pair<std::vector<ConfChangeSingle>, std::vector<ConfChangeSingle>> ToConfCh
         ConfChangeSingle s = capnp_util::make<msg::ConfChangeSingle>();
         auto builder = capnp_util::builder<msg::ConfChangeSingle>(s);
         builder.setNodeId(id);
-        builder.setChangeType(capnp_util::cast_enum<msg::ConfChangeType>(ConfChangeType::ADD_NODE));
+        builder.setChangeType(capnp_util::as<msg::ConfChangeType>(ConfChangeType::ADD_NODE));
         outgoing.emplace_back(std::move(s));
     }
 
@@ -24,8 +24,7 @@ std::pair<std::vector<ConfChangeSingle>, std::vector<ConfChangeSingle>> ToConfCh
         ConfChangeSingle s = capnp_util::make<msg::ConfChangeSingle>();
         auto builder = capnp_util::builder<msg::ConfChangeSingle>(s);
         builder.setNodeId(id);
-        builder.setChangeType(capnp_util::cast_enum<msg::ConfChangeType>(ConfChangeType::REMOVE_NODE
-        ));
+        builder.setChangeType(capnp_util::as<msg::ConfChangeType>(ConfChangeType::REMOVE_NODE));
         incoming.emplace_back(std::move(s));
     }
 
@@ -33,7 +32,7 @@ std::pair<std::vector<ConfChangeSingle>, std::vector<ConfChangeSingle>> ToConfCh
         ConfChangeSingle s = capnp_util::make<msg::ConfChangeSingle>();
         auto builder = capnp_util::builder<msg::ConfChangeSingle>(s);
         builder.setNodeId(id);
-        builder.setChangeType(capnp_util::cast_enum<msg::ConfChangeType>(ConfChangeType::ADD_NODE));
+        builder.setChangeType(capnp_util::as<msg::ConfChangeType>(ConfChangeType::ADD_NODE));
         incoming.emplace_back(std::move(s));
     }
 
@@ -41,8 +40,7 @@ std::pair<std::vector<ConfChangeSingle>, std::vector<ConfChangeSingle>> ToConfCh
         ConfChangeSingle s = capnp_util::make<msg::ConfChangeSingle>();
         auto builder = capnp_util::builder<msg::ConfChangeSingle>(s);
         builder.setNodeId(id);
-        builder.setChangeType(
-            capnp_util::cast_enum<msg::ConfChangeType>(ConfChangeType::ADD_LEARNER_NODE)
+        builder.setChangeType(capnp_util::as<msg::ConfChangeType>(ConfChangeType::ADD_LEARNER_NODE)
         );
         incoming.emplace_back(std::move(s));
     }
@@ -51,8 +49,7 @@ std::pair<std::vector<ConfChangeSingle>, std::vector<ConfChangeSingle>> ToConfCh
         ConfChangeSingle s = capnp_util::make<msg::ConfChangeSingle>();
         auto builder = capnp_util::builder<msg::ConfChangeSingle>(s);
         builder.setNodeId(id);
-        builder.setChangeType(
-            capnp_util::cast_enum<msg::ConfChangeType>(ConfChangeType::ADD_LEARNER_NODE)
+        builder.setChangeType(capnp_util::as<msg::ConfChangeType>(ConfChangeType::ADD_LEARNER_NODE)
         );
         incoming.emplace_back(std::move(s));
     }

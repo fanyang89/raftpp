@@ -344,18 +344,16 @@ void Raft::Campaign(std::string_view campaign_type) {
         auto m = capnp_util::make<msg::Message>();
         auto m_builder = capnp_util::builder<msg::Message>(m);
         m_builder.setTo(id);
-        m_builder.setMsgType(capnp_util::cast_enum<msg::MessageType>(vote_msg));
+        m_builder.setMsgType(capnp_util::as<msg::MessageType>(vote_msg));
         m_builder.setTerm(term);
         m_builder.setIndex(raft_log_.LastIndex());
         m_builder.setLogTerm(raft_log_.LastTerm());
         m_builder.setCommit(commit);
         m_builder.setCommitTerm(commit_term);
         if (campaign_type == kCampaignTransfer) {
-            m_builder.setContext(
-                kj::arrayPtr(
-                    reinterpret_cast<const kj::byte*>(campaign_type.data()), campaign_type.size()
-                )
-            );
+            m_builder.setContext(kj::arrayPtr(
+                reinterpret_cast<const kj::byte*>(campaign_type.data()), campaign_type.size()
+            ));
         }
 
         Send(m, messages_);
@@ -442,9 +440,7 @@ void Raft::CommitApplyInternal(uint64_t applied, bool skip_check) {
 
         auto ent = capnp_util::make<msg::Entry>();
         auto ent_builder = capnp_util::builder<msg::Entry>(ent);
-        ent_builder.setEntryType(
-            capnp_util::cast_enum<msg::EntryType>(EntryType::ENTRY_CONF_CHANGE_V2)
-        );
+        ent_builder.setEntryType(capnp_util::as<msg::EntryType>(EntryType::ENTRY_CONF_CHANGE_V2));
         ent_builder.setData(
             kj::arrayPtr(reinterpret_cast<const kj::byte*>(serialized.data()), serialized.size())
         );
@@ -499,9 +495,8 @@ void Raft::SendTimeoutNow(const uint64_t to) {
     auto m = capnp_util::make<msg::Message>();
     auto m_builder = capnp_util::builder<msg::Message>(m);
     m_builder.setTo(to);
-    m_builder.setMsgType(
-        static_cast<msg::MessageType>(static_cast<int>(MessageType::MSG_TIMEOUT_NOW))
-    );
+    m_builder.setMsgType(static_cast<msg::MessageType>(static_cast<int>(MessageType::MSG_TIMEOUT_NOW
+    )));
     Send(m, messages_);
 }
 
@@ -587,7 +582,7 @@ void Raft::HandleAppendResponse(const Message& m) {
 void Raft::SendRequestSnapshot() {
     auto m = capnp_util::make<msg::Message>();
     auto m_builder = capnp_util::builder<msg::Message>(m);
-    m_builder.setMsgType(capnp_util::cast_enum<msg::MessageType>(MessageType::MSG_APPEND_RESPONSE));
+    m_builder.setMsgType(capnp_util::as<msg::MessageType>(MessageType::MSG_APPEND_RESPONSE));
     m_builder.setIndex(raft_log_.committed());
     m_builder.setReject(true);
     m_builder.setRejectHint(raft_log_.LastIndex());
@@ -613,8 +608,7 @@ void Raft::HandleHeartbeat(const Message& m) {
     auto to_send = capnp_util::make<msg::Message>();
     auto to_send_builder = capnp_util::builder<msg::Message>(to_send);
     to_send_builder.setTo(m_reader.getFrom());
-    to_send_builder.setMsgType(
-        capnp_util::cast_enum<msg::MessageType>(MessageType::MSG_HEARTBEAT_RESPONSE)
+    to_send_builder.setMsgType(capnp_util::as<msg::MessageType>(MessageType::MSG_HEARTBEAT_RESPONSE)
     );
     to_send_builder.setContext(m_reader.getContext());
     to_send_builder.setCommit(raft_log_.committed());
@@ -670,12 +664,43 @@ void Raft::HandleSnapshot(const Message& m) {
     auto m_reader = capnp_util::reader<msg::Message>(m);
     auto to_send = capnp_util::make<msg::Message>();
     auto to_send_builder = capnp_util::builder<msg::Message>(to_send);
-    to_send_builder.setMsgType(
-        capnp_util::cast_enum<msg::MessageType>(MessageType::MSG_APPEND_RESPONSE)
-    );
+    to_send_builder.setMsgType(capnp_util::as<msg::MessageType>(MessageType::MSG_APPEND_RESPONSE));
     to_send_builder.setTo(m_reader.getFrom());
 
-    auto snapshot = capnp_util::clone<msg::Snapshot>(m_reader.getSnapshot());
+    // Copy snapshot from message reader
+    auto snap_reader = m_reader.getSnapshot();
+    auto snapshot = capnp_util::make<msg::Snapshot>();
+    auto snap_builder = capnp_util::builder<msg::Snapshot>(snapshot);
+    snap_builder.setData(snap_reader.getData());
+
+    auto snap_meta_src = snap_reader.getMetadata();
+    auto snap_meta_dst = snap_builder.initMetadata();
+    snap_meta_dst.setIndex(snap_meta_src.getIndex());
+    snap_meta_dst.setTerm(snap_meta_src.getTerm());
+
+    auto conf_src = snap_meta_src.getConfState();
+    auto conf_dst = snap_meta_dst.initConfState();
+    auto voters_src = conf_src.getVoters();
+    auto voters_dst = conf_dst.initVoters(voters_src.size());
+    for (size_t i = 0; i < voters_src.size(); ++i) {
+        voters_dst.set(i, voters_src[i]);
+    }
+    auto learners_src = conf_src.getLearners();
+    auto learners_dst = conf_dst.initLearners(learners_src.size());
+    for (size_t i = 0; i < learners_src.size(); ++i) {
+        learners_dst.set(i, learners_src[i]);
+    }
+    auto voters_out_src = conf_src.getVotersOutgoing();
+    auto voters_out_dst = conf_dst.initVotersOutgoing(voters_out_src.size());
+    for (size_t i = 0; i < voters_out_src.size(); ++i) {
+        voters_out_dst.set(i, voters_out_src[i]);
+    }
+    auto learners_next_src = conf_src.getLearnersNext();
+    auto learners_next_dst = conf_dst.initLearnersNext(learners_next_src.size());
+    for (size_t i = 0; i < learners_next_src.size(); ++i) {
+        learners_next_dst.set(i, learners_next_src[i]);
+    }
+    conf_dst.setAutoLeave(conf_src.getAutoLeave());
 
     if (Restore(snapshot)) {
         to_send_builder.setIndex(raft_log_.LastIndex());
@@ -703,14 +728,17 @@ std::optional<Message> Raft::HandleReadyReadIndex(const Message& req, uint64_t i
     auto m = capnp_util::make<msg::Message>();
     auto m_builder = capnp_util::builder<msg::Message>(m);
     m_builder.setTo(req_reader.getFrom());
-    m_builder.setMsgType(capnp_util::cast_enum<msg::MessageType>(MessageType::MSG_READ_INDEX_RESP));
+    m_builder.setMsgType(capnp_util::as<msg::MessageType>(MessageType::MSG_READ_INDEX_RESP));
     m_builder.setIndex(index);
 
     // Copy entries from req to m
     auto req_entries = req_reader.getEntries();
     auto m_entries = m_builder.initEntries(req_entries.size());
     for (size_t i = 0; i < req_entries.size(); ++i) {
-        m_entries.setWithCaveats(i, req_entries[i]);
+        auto src = req_entries[i];
+        auto dst = m_entries[i];
+        dst.setData(src.getData());
+        dst.setContext(src.getContext());
     }
 
     return m;
@@ -1015,7 +1043,7 @@ void Raft::SendHeartbeat(
     auto m = capnp_util::make<msg::Message>();
     auto m_builder = capnp_util::builder<msg::Message>(m);
     m_builder.setTo(to);
-    m_builder.setMsgType(capnp_util::cast_enum<msg::MessageType>(MessageType::MSG_HEARTBEAT));
+    m_builder.setMsgType(capnp_util::as<msg::MessageType>(MessageType::MSG_HEARTBEAT));
     m_builder.setCommit(std::min(pr.matched(), raft_log_.committed()));
     if (ctx) {
         m_builder.setContext(
@@ -1080,7 +1108,14 @@ Result<void> Raft::StepLeader(const Message& m) {
                 std::vector<Entry> entries_vec;
                 entries_vec.reserve(entries.size());
                 for (const auto& e : entries) {
-                    entries_vec.push_back(capnp_util::clone<msg::Entry>(e));
+                    auto entry = capnp_util::make<msg::Entry>();
+                    auto entry_builder = capnp_util::builder<msg::Entry>(entry);
+                    entry_builder.setEntryType(e.getEntryType());
+                    entry_builder.setTerm(e.getTerm());
+                    entry_builder.setIndex(e.getIndex());
+                    entry_builder.setData(e.getData());
+                    entry_builder.setContext(e.getContext());
+                    entries_vec.push_back(std::move(entry));
                 }
                 if (!AppendEntry(std::move(entries_vec))) {
                     return RaftError(RaftErrorCode::ProposalDropped);
@@ -1094,8 +1129,7 @@ Result<void> Raft::StepLeader(const Message& m) {
             if (!CommitToCurrentTerm()) {
                 // Reject read only request when this leader has not committed any log entry
                 // in its term.
-                RAFTPP_LOG_INFO(
-                    "leader has not yet committed in its term; dropping read index msg"
+                RAFTPP_LOG_INFO("leader has not yet committed in its term; dropping read index msg"
                 );
                 return {};
             }
@@ -1214,18 +1248,16 @@ Result<void> Raft::Step(Message& m) {
             auto to_send_builder = capnp_util::builder<msg::Message>(to_send);
             to_send_builder.setTo(m_reader.getFrom());
             to_send_builder.setMsgType(
-                capnp_util::cast_enum<msg::MessageType>(MessageType::MSG_APPEND_RESPONSE)
+                capnp_util::as<msg::MessageType>(MessageType::MSG_APPEND_RESPONSE)
             );
             Send(to_send, messages_);
         } else if (m_reader.getMsgType() == MessageType::MSG_REQUEST_PRE_VOTE) {
             auto to_send = capnp_util::make<msg::Message>();
             auto to_send_builder = capnp_util::builder<msg::Message>(to_send);
             to_send_builder.setTo(m_reader.getFrom());
-            to_send_builder.setMsgType(
-                static_cast<msg::MessageType>(
-                    static_cast<int>(MessageType::MSG_REQUEST_PRE_VOTE_RESPONSE)
-                )
-            );
+            to_send_builder.setMsgType(static_cast<msg::MessageType>(
+                static_cast<int>(MessageType::MSG_REQUEST_PRE_VOTE_RESPONSE)
+            ));
             to_send_builder.setReject(true);
             to_send_builder.setTerm(term_);
             Send(to_send, messages_);
@@ -1250,16 +1282,14 @@ Result<void> Raft::Step(Message& m) {
                  m_reader.getTerm() > term_);
 
             if (can_vote && raft_log_.IsUpToDate(m_reader.getIndex(), m_reader.getLogTerm()) &&
-                (m_reader.getIndex() > raft_log_.LastIndex() ||
-                 priority_ <= m_reader.getPriority())) {
+                (m_reader.getIndex() > raft_log_.LastIndex() || priority_ <= m_reader.getPriority()
+                )) {
                 auto to_send = capnp_util::make<msg::Message>();
                 auto to_send_builder = capnp_util::builder<msg::Message>(to_send);
                 to_send_builder.setTo(m_reader.getFrom());
-                to_send_builder.setMsgType(
-                    static_cast<msg::MessageType>(
-                        static_cast<int>(VoteRespMsgType(m_reader.getMsgType()))
-                    )
-                );
+                to_send_builder.setMsgType(static_cast<msg::MessageType>(
+                    static_cast<int>(VoteRespMsgType(m_reader.getMsgType()))
+                ));
                 to_send_builder.setReject(false);
                 to_send_builder.setTerm(m_reader.getTerm());
                 Send(to_send, messages_);
@@ -1273,11 +1303,9 @@ Result<void> Raft::Step(Message& m) {
                 auto to_send = capnp_util::make<msg::Message>();
                 auto to_send_builder = capnp_util::builder<msg::Message>(to_send);
                 to_send_builder.setTo(m_reader.getFrom());
-                to_send_builder.setMsgType(
-                    static_cast<msg::MessageType>(
-                        static_cast<int>(VoteRespMsgType(m_reader.getMsgType()))
-                    )
-                );
+                to_send_builder.setMsgType(static_cast<msg::MessageType>(
+                    static_cast<int>(VoteRespMsgType(m_reader.getMsgType()))
+                ));
                 to_send_builder.setReject(true);
                 to_send_builder.setTerm(term_);
 
@@ -1319,9 +1347,8 @@ void Raft::HandleAppendEntries(const Message& m) {
         auto to_send = capnp_util::make<msg::Message>();
         auto to_send_builder = capnp_util::builder<msg::Message>(to_send);
         to_send_builder.setTo(m_reader.getFrom());
-        to_send_builder.setMsgType(
-            capnp_util::cast_enum<msg::MessageType>(MessageType::MSG_APPEND_RESPONSE)
-        );
+        to_send_builder.setMsgType(capnp_util::as<msg::MessageType>(MessageType::MSG_APPEND_RESPONSE
+        ));
         to_send_builder.setIndex(raft_log_.committed());
         to_send_builder.setCommit(raft_log_.committed());
         Send(to_send, messages_);
@@ -1331,9 +1358,7 @@ void Raft::HandleAppendEntries(const Message& m) {
     auto to_send = capnp_util::make<msg::Message>();
     auto to_send_builder = capnp_util::builder<msg::Message>(to_send);
     to_send_builder.setTo(m_reader.getFrom());
-    to_send_builder.setMsgType(
-        capnp_util::cast_enum<msg::MessageType>(MessageType::MSG_APPEND_RESPONSE)
-    );
+    to_send_builder.setMsgType(capnp_util::as<msg::MessageType>(MessageType::MSG_APPEND_RESPONSE));
 
     RAFTPP_LOG_INFO(
         "HandleAppendEntries: index={}, log_term={}, commit={}, num_entries={}",
@@ -1346,7 +1371,14 @@ void Raft::HandleAppendEntries(const Message& m) {
     std::vector<Entry> entries_vec;
     entries_vec.reserve(entries_list.size());
     for (const auto& e : entries_list) {
-        entries_vec.push_back(capnp_util::clone<msg::Entry>(e));
+        auto entry = capnp_util::make<msg::Entry>();
+        auto entry_builder = capnp_util::builder<msg::Entry>(entry);
+        entry_builder.setEntryType(e.getEntryType());
+        entry_builder.setTerm(e.getTerm());
+        entry_builder.setIndex(e.getIndex());
+        entry_builder.setData(e.getData());
+        entry_builder.setContext(e.getContext());
+        entries_vec.push_back(std::move(entry));
     }
 
     const auto r = raft_log_.MaybeAppend(
@@ -1386,7 +1418,7 @@ bool Raft::TickElection() {
         auto m = capnp_util::make<msg::Message>();
         auto m_builder = capnp_util::builder<msg::Message>(m);
         m_builder.setTo(kInvalidId);
-        m_builder.setMsgType(capnp_util::cast_enum<msg::MessageType>(MessageType::MSG_HUP));
+        m_builder.setMsgType(capnp_util::as<msg::MessageType>(MessageType::MSG_HUP));
         m_builder.setFrom(id_);
         has_ready = true;
         std::ignore = Step(m);
@@ -1402,7 +1434,7 @@ bool Raft::TickElection() {
         auto m = capnp_util::make<msg::Message>();
         auto m_builder = capnp_util::builder<msg::Message>(m);
         m_builder.setTo(kInvalidId);
-        m_builder.setMsgType(capnp_util::cast_enum<msg::MessageType>(MessageType::MSG_BEAT));
+        m_builder.setMsgType(capnp_util::as<msg::MessageType>(MessageType::MSG_BEAT));
         m_builder.setFrom(id_);
         std::ignore = Step(m);
     }
@@ -1421,9 +1453,7 @@ bool Raft::TickHeartbeat() {
             auto m = capnp_util::make<msg::Message>();
             auto m_builder = capnp_util::builder<msg::Message>(m);
             m_builder.setTo(kInvalidId);
-            m_builder.setMsgType(
-                capnp_util::cast_enum<msg::MessageType>(MessageType::MSG_CHECK_QUORUM)
-            );
+            m_builder.setMsgType(capnp_util::as<msg::MessageType>(MessageType::MSG_CHECK_QUORUM));
             m_builder.setFrom(id_);
             has_ready = true;
             std::ignore = Step(m);
@@ -1443,7 +1473,7 @@ bool Raft::TickHeartbeat() {
         auto m = capnp_util::make<msg::Message>();
         auto m_builder = capnp_util::builder<msg::Message>(m);
         m_builder.setTo(kInvalidId);
-        m_builder.setMsgType(capnp_util::cast_enum<msg::MessageType>(MessageType::MSG_BEAT));
+        m_builder.setMsgType(capnp_util::as<msg::MessageType>(MessageType::MSG_BEAT));
         m_builder.setFrom(id_);
         std::ignore = Step(m);
     }
@@ -1627,9 +1657,7 @@ Result<ConfState> Raft::ApplyConfChange(const ConfChangeV2& cc) {
         for (const auto& c : changes_list) {
             auto single = capnp_util::make<msg::ConfChangeSingle>();
             auto single_builder = capnp_util::builder<msg::ConfChangeSingle>(single);
-            single_builder.setChangeType(
-                capnp_util::cast_enum<msg::ConfChangeType>(c.getChangeType())
-            );
+            single_builder.setChangeType(capnp_util::as<msg::ConfChangeType>(c.getChangeType()));
             single_builder.setNodeId(c.getNodeId());
             ccs.push_back(std::move(single));
         }

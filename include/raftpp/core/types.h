@@ -59,7 +59,7 @@ inline Entry MakeEntry(uint64_t index, uint64_t term, EntryType type = EntryType
     return capnp_util::make<msg::Entry>([&](auto builder) {
         builder.setIndex(index);
         builder.setTerm(term);
-        builder.setEntryType(capnp_util::cast_enum<msg::EntryType>(type));
+        builder.setEntryType(capnp_util::as<msg::EntryType>(type));
     });
 }
 
@@ -90,16 +90,6 @@ inline Entry CloneEntry(const Entry& e) {
     return capnp_util::clone<msg::Entry>(e);
 }
 
-// Clone a SnapshotMetadata
-inline SnapshotMetadata CloneSnapshotMetadata(const SnapshotMetadata& sm) {
-    return capnp_util::clone<msg::SnapshotMetadata>(sm);
-}
-
-// Clone a SnapshotMetadata from a Reader
-inline SnapshotMetadata CloneSnapshotMetadata(msg::SnapshotMetadata::Reader sm) {
-    return capnp_util::clone<msg::SnapshotMetadata>(sm);
-}
-
 // Clone a HardState
 inline HardState CloneHardState(const HardState& hs) {
     return capnp_util::clone<msg::HardState>(hs);
@@ -107,11 +97,6 @@ inline HardState CloneHardState(const HardState& hs) {
 
 // Clone a ConfState
 inline ConfState CloneConfState(const ConfState& cs) {
-    return capnp_util::clone<msg::ConfState>(cs);
-}
-
-// Clone a ConfState from a Reader
-inline ConfState CloneConfState(msg::ConfState::Reader cs) {
     return capnp_util::clone<msg::ConfState>(cs);
 }
 
