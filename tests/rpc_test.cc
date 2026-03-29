@@ -157,6 +157,18 @@ TEST_SUITE("rpc") {
         CHECK(result->second == 0);  // Incomplete, returns 0 bytes consumed
     }
 
+    TEST_CASE("Handshake rejects oversized frame") {
+        std::vector<uint8_t> frame(HandshakeCodec::kPrefixSize, 0);
+        uint32_t magic = HandshakeCodec::kMagic;
+        uint32_t length = 16;
+        std::memcpy(frame.data(), &magic, sizeof(magic));
+        std::memcpy(frame.data() + sizeof(magic), &length, sizeof(length));
+
+        auto result = HandshakeCodec::Decode(frame, HandshakeCodec::kPrefixSize + 4);
+        CHECK_FALSE(result.has_value());
+        CHECK(result.error().Is(RpcErrorCode::MessageTooLarge));
+    }
+
     TEST_CASE("PeerManager basic operations") {
         PeerManager pm;
 

@@ -2,6 +2,7 @@
 
 #include <charconv>
 #include <cstring>
+#include <limits>
 
 #include <capnp/message.h>
 #include <capnp/serialize.h>
@@ -23,7 +24,15 @@ std::vector<uint8_t> Codec::Encode(
     // Serialize message to get payload size
     auto msg_bytes = capnp_util::toBytes(msg);
     header_builder.setPayloadSize(static_cast<uint32_t>(msg_bytes.size()));
+<<<<<<< HEAD
     header_builder.setMsgType(capnp_util::reader<msg::Message>(msg).getMsgType());
+=======
+    header_builder.setMsgType(
+        static_cast<capnp::MessageType>(
+            static_cast<int>(capnp_util::reader<msg::Message>(msg).getMsgType())
+        )
+    );
+>>>>>>> 67f495d (fix(rpc): bound handshake frame decoding)
 
     // Serialize header
     auto header_bytes = capnp_util::toBytes(header);
@@ -203,7 +212,9 @@ std::vector<uint8_t> HandshakeCodec::Encode(const RpcHandshake& hs) {
     return buffer;
 }
 
-Result<std::pair<RpcHandshake, size_t>> HandshakeCodec::Decode(std::span<const uint8_t> buffer) {
+Result<std::pair<RpcHandshake, size_t>> HandshakeCodec::Decode(
+    std::span<const uint8_t> buffer, size_t max_size
+) {
     if (buffer.size() < kPrefixSize) {
         return std::pair<RpcHandshake, size_t>{{}, 0};  // Incomplete
     }
@@ -219,7 +230,15 @@ Result<std::pair<RpcHandshake, size_t>> HandshakeCodec::Decode(std::span<const u
     uint32_t length;
     std::memcpy(&length, buffer.data() + 4, sizeof(length));
 
+    if (length > std::numeric_limits<size_t>::max() - kPrefixSize) {
+        return RaftError(RpcErrorCode::MessageTooLarge);
+    }
+
     size_t total_size = kPrefixSize + length;
+    if (total_size > max_size) {
+        return RaftError(RpcErrorCode::MessageTooLarge);
+    }
+
     if (buffer.size() < total_size) {
         return std::pair<RpcHandshake, size_t>{{}, 0};  // Incomplete
     }
