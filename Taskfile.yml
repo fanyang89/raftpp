@@ -40,7 +40,7 @@ tasks:
   cmake:
     desc: Configure CMake with debug preset
     cmds:
-      - cmake --preset=debug
+      - cmake --preset=Debug
 
   build:
     desc: Build all test targets
@@ -67,21 +67,21 @@ tasks:
   unit-test-asan:
     desc: Build and run unit tests with ASan
     cmds:
-      - cmake --preset=debug -B build-asan -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN:-cmake/clang-toolchain.cmake} -DRAFTPP_SANITIZE=address
+      - cmake --preset=Debug -B build-asan -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN:-cmake/clang-toolchain.cmake} -DRAFTPP_SANITIZE=address
       - cmake --build build-asan --target raftpp-tests
       - ./build-asan/tests/raftpp-tests
 
   unit-test-tsan:
     desc: Build and run unit tests with TSan
     cmds:
-      - cmake --preset=debug -B build-tsan -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN:-cmake/clang-toolchain.cmake} -DRAFTPP_SANITIZE=thread
+      - cmake --preset=Debug -B build-tsan -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN:-cmake/clang-toolchain.cmake} -DRAFTPP_SANITIZE=thread
       - cmake --build build-tsan --target raftpp-tests
       - ./build-tsan/tests/raftpp-tests
 
   unit-test-release:
     desc: Build and run unit tests with release preset
     cmds:
-      - cmake --preset=release -B build-release -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN:-cmake/clang-toolchain.cmake}
+      - cmake --preset=Release -B build-release -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN:-cmake/clang-toolchain.cmake}
       - cmake --build build-release --target raftpp-tests
       - ./build-release/tests/raftpp-tests
 
@@ -136,7 +136,7 @@ tasks:
       PROF_DATA: build/coverage.profdata
     cmds:
       # build
-      - cmake --preset=relwithdebinfo -DRAFTPP_COVERAGE=ON -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN:-cmake/clang-toolchain.cmake}
+      - cmake --preset=RelWithDebInfo -DRAFTPP_COVERAGE=ON -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN:-cmake/clang-toolchain.cmake}
       - ninja -C build
       # clear and re-built coverage data
       - rm -f build/*.profraw {{.PROF_DATA}}
@@ -167,7 +167,7 @@ tasks:
     desc: Run clang static analyzer using scan-build
     cmds:
       - rm -rf build
-      - cmake --preset=debug -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN:-cmake/clang-toolchain.cmake}
+      - cmake --preset=Debug -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN:-cmake/clang-toolchain.cmake}
       - >
         scan-build
         -enable-checker core
