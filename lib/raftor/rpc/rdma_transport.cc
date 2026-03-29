@@ -24,11 +24,11 @@
 
 #include <rdma/rdma_cma.h>
 #include <spdlog/fmt/fmt.h>
-#include <spdlog/spdlog.h>
 
 #include "raftpp/core/capnp_util.h"
 #include "raftpp/core/primitives.h"
 #include "raftpp/core/types.h"
+#include "raftpp/logging.h"
 #include "raftpp/raftor/rpc/codec.h"
 #include "raftpp/raftor/rpc/peer_manager.h"
 
@@ -254,7 +254,7 @@ Result<void> RdmaTransport::Impl::Start() {
         return result;
     }
 
-    SPDLOG_INFO("RdmaTransport started on {}", config_.listen_addr);
+    RAFTPP_LOG_INFO("RdmaTransport started on {}", config_.listen_addr);
     return result;
 }
 
@@ -271,7 +271,7 @@ void RdmaTransport::Impl::Stop() {
         rdma_thread_.join();
     }
 
-    SPDLOG_INFO("RdmaTransport stopped");
+    RAFTPP_LOG_INFO("RdmaTransport stopped");
 }
 
 void RdmaTransport::Impl::AddPeer(uint64_t id, const std::string& addr) {
@@ -449,19 +449,19 @@ Result<void> RdmaTransport::Impl::SetupListener() {
 
     event_channel_ = rdma_create_event_channel();
     if (!event_channel_) {
-        SPDLOG_ERROR("rdma_create_event_channel failed: {}", strerror(errno));
+        RAFTPP_LOG_ERROR("rdma_create_event_channel failed: {}", strerror(errno));
         return std::unexpected(RaftError(RpcErrorCode::BindFailed));
     }
 
     int flags = fcntl(event_channel_->fd, F_GETFL, 0);
     if (flags >= 0) {
         if (fcntl(event_channel_->fd, F_SETFL, flags | O_NONBLOCK) != 0) {
-            SPDLOG_WARN("Failed to set RDMA event channel non-blocking: {}", strerror(errno));
+            RAFTPP_LOG_WARN("Failed to set RDMA event channel non-blocking: {}", strerror(errno));
         }
     }
 
     if (rdma_create_id(event_channel_, &listener_, nullptr, RDMA_PS_TCP) != 0) {
-        SPDLOG_ERROR("rdma_create_id failed: {}", strerror(errno));
+        RAFTPP_LOG_ERROR("rdma_create_id failed: {}", strerror(errno));
         TeardownListener();
         return std::unexpected(RaftError(RpcErrorCode::BindFailed));
     }
@@ -473,13 +473,13 @@ Result<void> RdmaTransport::Impl::SetupListener() {
     }
 
     if (rdma_bind_addr(listener_, reinterpret_cast<sockaddr*>(&addr_result.value())) != 0) {
-        SPDLOG_ERROR("rdma_bind_addr failed: {}", strerror(errno));
+        RAFTPP_LOG_ERROR("rdma_bind_addr failed: {}", strerror(errno));
         TeardownListener();
         return std::unexpected(RaftError(RpcErrorCode::BindFailed));
     }
 
     if (rdma_listen(listener_, kListenBacklog) != 0) {
-        SPDLOG_ERROR("rdma_listen failed: {}", strerror(errno));
+        RAFTPP_LOG_ERROR("rdma_listen failed: {}", strerror(errno));
         TeardownListener();
         return std::unexpected(RaftError(RpcErrorCode::ListenFailed));
     }
@@ -513,7 +513,7 @@ void RdmaTransport::Impl::PollCmEvents(std::chrono::milliseconds timeout) {
         rdma_cm_event* event = nullptr;
         if (rdma_get_cm_event(event_channel_, &event) != 0) {
             if (errno != EAGAIN) {
-                SPDLOG_WARN("rdma_get_cm_event failed: {}", strerror(errno));
+                RAFTPP_LOG_WARN("rdma_get_cm_event failed: {}", strerror(errno));
             }
             break;
         }
@@ -556,7 +556,7 @@ void RdmaTransport::Impl::HandleCmEvent(const rdma_cm_event& event) {
             HandleConnectError(event.id, "unreachable");
             break;
         default:
-            SPDLOG_DEBUG("Unhandled RDMA CM event {}", event.event);
+            RAFTPP_LOG_DEBUG("Unhandled RDMA CM event {}", static_cast<int>(event.event));
             break;
     }
 }
@@ -566,17 +566,17 @@ void RdmaTransport::Impl::HandleConnectRequest(rdma_cm_id* id, const rdma_conn_p
         return;
     }
     if (!HasIncomingCapacity()) {
-        SPDLOG_WARN("rdma reject incoming request: capacity exceeded");
+        RAFTPP_LOG_WARN("rdma reject incoming request: capacity exceeded");
         if (rdma_reject(id, nullptr, 0) != 0) {
-            SPDLOG_WARN("rdma_reject failed for incoming request: {}", strerror(errno));
+            RAFTPP_LOG_WARN("rdma_reject failed for incoming request: {}", strerror(errno));
         }
         rdma_destroy_id(id);
         return;
     }
     if (!IsAllowedIncoming(id)) {
-        SPDLOG_WARN("rdma reject incoming request: unknown peer");
+        RAFTPP_LOG_WARN("rdma reject incoming request: unknown peer");
         if (rdma_reject(id, nullptr, 0) != 0) {
-            SPDLOG_WARN("rdma_reject failed for incoming request: {}", strerror(errno));
+            RAFTPP_LOG_WARN("rdma_reject failed for incoming request: {}", strerror(errno));
         }
         rdma_destroy_id(id);
         return;
@@ -602,7 +602,7 @@ void RdmaTransport::Impl::HandleConnectRequest(rdma_cm_id* id, const rdma_conn_p
     reply.rnr_retry_count = param.rnr_retry_count;
 
     if (rdma_accept(id, &reply) != 0) {
-        SPDLOG_ERROR("rdma_accept failed: {}", strerror(errno));
+        RAFTPP_LOG_ERROR("rdma_accept failed: {}", strerror(errno));
         CleanupConnection(*conn);
         return;
     }
@@ -658,7 +658,7 @@ bool RdmaTransport::Impl::IsAllowedIncoming(rdma_cm_id* id) {
 
 void RdmaTransport::Impl::HandleAddrResolved(rdma_cm_id* id) {
     if (rdma_resolve_route(id, static_cast<int>(config_.connect_timeout.count())) != 0) {
-        SPDLOG_WARN("rdma_resolve_route failed: {}", strerror(errno));
+        RAFTPP_LOG_WARN("rdma_resolve_route failed: {}", strerror(errno));
         HandleConnectError(id, "resolve_route");
     }
 }
@@ -682,7 +682,7 @@ void RdmaTransport::Impl::HandleRouteResolved(rdma_cm_id* id) {
     param.rnr_retry_count = 3;
 
     if (rdma_connect(id, &param) != 0) {
-        SPDLOG_WARN("rdma_connect failed: {}", strerror(errno));
+        RAFTPP_LOG_WARN("rdma_connect failed: {}", strerror(errno));
         HandleConnectError(id, "connect");
     }
 }
@@ -716,15 +716,15 @@ void RdmaTransport::Impl::HandleDisconnected(rdma_cm_id* id) {
 
 void RdmaTransport::Impl::HandleConnectError(rdma_cm_id* id, const char* reason) {
     if (!id) {
-        SPDLOG_INFO("RDMA connect error (peer=0, reason={})", reason);
+        RAFTPP_LOG_INFO("RDMA connect error (peer=0, reason={})", reason);
         return;
     }
     auto* conn = static_cast<Connection*>(id->context);
     uint64_t peer_id = conn ? conn->peer_id : 0;
     if (peer_id == 0) {
-        SPDLOG_INFO("RDMA connect error (peer={}, reason={})", peer_id, reason);
+        RAFTPP_LOG_INFO("RDMA connect error (peer={}, reason={})", peer_id, reason);
     } else {
-        SPDLOG_WARN("RDMA connect error (peer={}, reason={})", peer_id, reason);
+        RAFTPP_LOG_WARN("RDMA connect error (peer={}, reason={})", peer_id, reason);
     }
 
     if (conn) {
@@ -745,20 +745,22 @@ bool RdmaTransport::Impl::SetupConnectionResources(Connection& conn) {
 
     conn.pd = ibv_alloc_pd(conn.id->verbs);
     if (!conn.pd) {
-        SPDLOG_ERROR("ibv_alloc_pd failed: {}", strerror(errno));
+        RAFTPP_LOG_ERROR("ibv_alloc_pd failed: {}", strerror(errno));
         return false;
     }
 
     conn.comp_channel = ibv_create_comp_channel(conn.id->verbs);
     if (!conn.comp_channel) {
-        SPDLOG_ERROR("ibv_create_comp_channel failed: {}", strerror(errno));
+        RAFTPP_LOG_ERROR("ibv_create_comp_channel failed: {}", strerror(errno));
         ReleaseConnectionResources(conn);
         return false;
     }
     int flags = fcntl(conn.comp_channel->fd, F_GETFL, 0);
     if (flags >= 0) {
         if (fcntl(conn.comp_channel->fd, F_SETFL, flags | O_NONBLOCK) != 0) {
-            SPDLOG_WARN("Failed to set RDMA completion channel non-blocking: {}", strerror(errno));
+            RAFTPP_LOG_WARN(
+                "Failed to set RDMA completion channel non-blocking: {}", strerror(errno)
+            );
         }
     }
 
@@ -766,12 +768,12 @@ bool RdmaTransport::Impl::SetupConnectionResources(Connection& conn) {
         conn.id->verbs, static_cast<int>(rdma_config_.cq_depth), &conn, conn.comp_channel, 0
     );
     if (!conn.cq) {
-        SPDLOG_ERROR("ibv_create_cq failed: {}", strerror(errno));
+        RAFTPP_LOG_ERROR("ibv_create_cq failed: {}", strerror(errno));
         ReleaseConnectionResources(conn);
         return false;
     }
     if (ibv_req_notify_cq(conn.cq, 0) != 0) {
-        SPDLOG_ERROR("ibv_req_notify_cq failed: {}", strerror(errno));
+        RAFTPP_LOG_ERROR("ibv_req_notify_cq failed: {}", strerror(errno));
         ReleaseConnectionResources(conn);
         return false;
     }
@@ -787,7 +789,7 @@ bool RdmaTransport::Impl::SetupConnectionResources(Connection& conn) {
     qp_attr.qp_type = IBV_QPT_RC;
 
     if (rdma_create_qp(conn.id, conn.pd, &qp_attr) != 0) {
-        SPDLOG_ERROR("rdma_create_qp failed: {}", strerror(errno));
+        RAFTPP_LOG_ERROR("rdma_create_qp failed: {}", strerror(errno));
         ReleaseConnectionResources(conn);
         return false;
     }
@@ -802,7 +804,7 @@ bool RdmaTransport::Impl::SetupConnectionResources(Connection& conn) {
         buffer->mr =
             ibv_reg_mr(conn.pd, buffer->storage.get(), buffer->size, IBV_ACCESS_LOCAL_WRITE);
         if (!buffer->mr) {
-            SPDLOG_ERROR("ibv_reg_mr failed: {}", strerror(errno));
+            RAFTPP_LOG_ERROR("ibv_reg_mr failed: {}", strerror(errno));
             ReleaseConnectionResources(conn);
             return false;
         }
@@ -823,7 +825,7 @@ bool RdmaTransport::Impl::SetupConnectionResources(Connection& conn) {
         buffer->mr =
             ibv_reg_mr(conn.pd, buffer->storage.get(), buffer->size, IBV_ACCESS_LOCAL_WRITE);
         if (!buffer->mr) {
-            SPDLOG_ERROR("ibv_reg_mr failed: {}", strerror(errno));
+            RAFTPP_LOG_ERROR("ibv_reg_mr failed: {}", strerror(errno));
             ReleaseConnectionResources(conn);
             return false;
         }
@@ -1027,7 +1029,7 @@ void RdmaTransport::Impl::PollCompletions() {
         while (ibv_get_cq_event(channels[i], &cq, &context) == 0) {
             ibv_ack_cq_events(cq, 1);
             if (ibv_req_notify_cq(cq, 0) != 0) {
-                SPDLOG_WARN("ibv_req_notify_cq failed: {}", strerror(errno));
+                RAFTPP_LOG_WARN("ibv_req_notify_cq failed: {}", strerror(errno));
             }
             auto* conn = static_cast<Connection*>(context);
             if (!conn || conn->cq != cq) {
@@ -1037,7 +1039,7 @@ void RdmaTransport::Impl::PollCompletions() {
         }
         int err = errno;
         if (err != EAGAIN && err != 0) {
-            SPDLOG_WARN("ibv_get_cq_event failed: {}", strerror(err));
+            RAFTPP_LOG_WARN("ibv_get_cq_event failed: {}", strerror(err));
         }
     }
 }
@@ -1056,7 +1058,7 @@ void RdmaTransport::Impl::PollCq(Connection& conn) {
         for (int i = 0; i < count; ++i) {
             const auto& completion = wc[static_cast<size_t>(i)];
             if (completion.status != IBV_WC_SUCCESS) {
-                SPDLOG_WARN(
+                RAFTPP_LOG_WARN(
                     "RDMA completion error (peer={}, status={})", conn.peer_id,
                     static_cast<int>(completion.status)
                 );
@@ -1111,7 +1113,7 @@ bool RdmaTransport::Impl::PostRecv(Connection& conn, RecvBuffer& buffer) {
 
     ibv_recv_wr* bad = nullptr;
     if (ibv_post_recv(conn.qp, &wr, &bad) != 0) {
-        SPDLOG_WARN("ibv_post_recv failed: {}", strerror(errno));
+        RAFTPP_LOG_WARN("ibv_post_recv failed: {}", strerror(errno));
         return false;
     }
 
@@ -1120,11 +1122,11 @@ bool RdmaTransport::Impl::PostRecv(Connection& conn, RecvBuffer& buffer) {
 
 bool RdmaTransport::Impl::PostSend(Connection& conn, std::span<const uint8_t> payload) {
     if (payload.size() > rdma_config_.buffer_size) {
-        SPDLOG_WARN("rdma send payload too large: {}", payload.size());
+        RAFTPP_LOG_WARN("rdma send payload too large: {}", payload.size());
         return false;
     }
     if (conn.free_send_buffers.empty()) {
-        SPDLOG_WARN("rdma send buffer pool exhausted");
+        RAFTPP_LOG_WARN("rdma send buffer pool exhausted");
         return false;
     }
     auto* buffer = conn.free_send_buffers.back();
@@ -1148,7 +1150,7 @@ bool RdmaTransport::Impl::PostSend(Connection& conn, std::span<const uint8_t> pa
 
     ibv_send_wr* bad = nullptr;
     if (ibv_post_send(conn.qp, &wr, &bad) != 0) {
-        SPDLOG_WARN("ibv_post_send failed: {}", strerror(errno));
+        RAFTPP_LOG_WARN("ibv_post_send failed: {}", strerror(errno));
         conn.free_send_buffers.push_back(buffer);
         return false;
     }
@@ -1319,7 +1321,7 @@ bool RdmaTransport::Impl::ConnectPeer(uint64_t peer_id, const std::string& addr)
 
     rdma_cm_id* id = nullptr;
     if (rdma_create_id(event_channel_, &id, conn.get(), RDMA_PS_TCP) != 0) {
-        SPDLOG_WARN("rdma_create_id failed: {}", strerror(errno));
+        RAFTPP_LOG_WARN("rdma_create_id failed: {}", strerror(errno));
         return false;
     }
     conn->id = id;
@@ -1335,7 +1337,7 @@ bool RdmaTransport::Impl::ConnectPeer(uint64_t peer_id, const std::string& addr)
             id, nullptr, reinterpret_cast<sockaddr*>(&addr_result.value()),
             static_cast<int>(config_.connect_timeout.count())
         ) != 0) {
-        SPDLOG_WARN("rdma_resolve_addr failed: {}", strerror(errno));
+        RAFTPP_LOG_WARN("rdma_resolve_addr failed: {}", strerror(errno));
         rdma_destroy_id(id);
         return false;
     }
@@ -1375,7 +1377,7 @@ void RdmaTransport::Impl::EnqueueMessage(Message msg) {
 void RdmaTransport::Impl::EnqueueError(uint64_t peer_id, std::string error) {
     std::lock_guard lock(error_mutex_);
     if (error_queue_.size() >= kMaxPendingErrorEvents) {
-        SPDLOG_WARN(
+        RAFTPP_LOG_WARN(
             "error_queue_ overflow (capacity={}) for peer {}, dropping error: {}",
             kMaxPendingErrorEvents, peer_id, error
         );
