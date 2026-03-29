@@ -36,7 +36,7 @@ jobs:
 
   lint:
     name: Lint (cppcheck)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
 
@@ -49,9 +49,9 @@ jobs:
       - name: Run cppcheck
         run: task lint
 
-  build-and-test:
-    name: "${{ matrix.compiler }} / ${{ matrix.build_type }}${{ matrix.sanitizer && format(' / {0}', matrix.sanitizer) || '' }}"
-    runs-on: ubuntu-latest
+  build-and-test-x64:
+    name: "x64 / ${{ matrix.compiler }} / ${{ matrix.build_type }}${{ matrix.sanitizer && format(' / {0}', matrix.sanitizer) || '' }}"
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -71,9 +71,60 @@ jobs:
         uses: actions/cache@v5
         with:
           path: .cache/cpm
-          key: cpm-${{ hashFiles('third_party/CMakeLists.txt', 'cmake/CPM.cmake') }}
+          key: cpm-${{ runner.arch }}-${{ hashFiles('third_party/CMakeLists.txt', 'cmake/CPM.cmake') }}
           restore-keys: |
-            cpm-
+            cpm-${{ runner.arch }}-
+
+      - name: Configure CMake
+        run: |
+          TOOLCHAIN=cmake/${{ matrix.compiler }}-toolchain.cmake
+          cmake --preset=${{ matrix.build_type == 'Debug' && 'debug' || 'release' }} \
+            -DCMAKE_TOOLCHAIN_FILE=$TOOLCHAIN \
+            -DRAFTPP_WITH_RDMA=OFF \
+            ${{ matrix.sanitizer && format('-DRAFTPP_SANITIZE={0}', matrix.sanitizer) || '' }}
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Run Unit Tests
+        run: ./build/tests/raftpp-tests
+
+      - name: Run Data-Driven Tests
+        run: ./build/tests/datadriven/data-driven-tests
+
+  build-and-test-arm64:
+    name: "arm64 / ${{ matrix.compiler }} / ${{ matrix.build_type }}${{ matrix.sanitizer && format(' / {0}', matrix.sanitizer) || '' }}"
+    runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [clang, gcc]
+        build_type: [Debug, Release]
+        sanitizer: [address, thread, ""]
+        exclude:
+          - build_type: Release
+            sanitizer: thread
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y ninja-build clang g++ cmake git
+
+      - name: Show runner details
+        run: |
+          uname -a
+          clang --version
+          gcc --version
+          cmake --version
+          ninja --version
+
+      - name: Cache CPM dependencies
+        uses: actions/cache@v5
+        with:
+          path: .cache/cpm
+          key: cpm-${{ runner.arch }}-${{ hashFiles('third_party/CMakeLists.txt', 'cmake/CPM.cmake') }}
+          restore-keys: |
+            cpm-${{ runner.arch }}-
 
       - name: Configure CMake
         run: |
