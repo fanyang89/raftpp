@@ -22,7 +22,7 @@ All code contributions must adhere to this style.
 ## Build Commands
 
 ```bash
-task cmake    # Configure CMake with dev preset
+task cmake    # Configure CMake with debug preset
 task build    # Build test targets
 task test     # Build and run all tests
 task fmt      # Format code with clang-format
