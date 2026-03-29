@@ -24,7 +24,11 @@ std::vector<uint8_t> Codec::Encode(
     // Serialize message to get payload size
     auto msg_bytes = capnp_util::toBytes(msg);
     header_builder.setPayloadSize(static_cast<uint32_t>(msg_bytes.size()));
-    header_builder.setMsgType(capnp_util::reader<msg::Message>(msg).getMsgType());
+    header_builder.setMsgType(
+        capnp_util::cast_enum<capnp::MessageType>(
+            capnp_util::reader<msg::Message>(msg).getMsgType()
+        )
+    );
 
     // Serialize header
     auto header_bytes = capnp_util::toBytes(header);
@@ -61,7 +65,9 @@ size_t Codec::FrameOverhead() {
         header_builder.setRequestId(0);
         header_builder.setCompression(capnp::CompressionType::COMPRESSION_NONE);
         header_builder.setPayloadSize(0);
-        header_builder.setMsgType(capnp::MessageType::MSG_HUP);
+        header_builder.setMsgType(
+            capnp_util::cast_enum<capnp::MessageType>(capnp::MessageType::MSG_HUP)
+        );
         auto header_bytes = capnp_util::toBytes(header);
         return kPrefixSize + header_bytes.size();
     }();
@@ -72,7 +78,7 @@ size_t Codec::MessageOverhead() {
     static const size_t overhead = []() {
         auto msg = capnp_util::make<msg::Message>();
         auto builder = capnp_util::builder<msg::Message>(msg);
-        builder.setMsgType(MessageType::MSG_HUP);
+        builder.setMsgType(capnp_util::cast_enum<msg::MessageType>(MessageType::MSG_HUP));
         builder.initEntries(0);
         auto msg_bytes = capnp_util::toBytes(msg);
         return msg_bytes.size();
