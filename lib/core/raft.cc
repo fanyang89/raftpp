@@ -640,7 +640,7 @@ bool Raft::Restore(const Snapshot& snapshot) {
     for (const auto voter : cs.getVotersOutgoing()) {
         cs_ids.insert(voter);
     }
-    if (!cs_ids.count(id_) != 0) {
+    if (cs_ids.count(id_) == 0) {
         RAFTPP_LOG_WARN("attempted to restore snapshot but it is not in the ConfState");
         return false;
     }
@@ -1051,7 +1051,7 @@ Result<void> Raft::StepLeader(const Message& m) {
                 PANIC("stepped empty MsgProp");
             }
 
-            if (!progress_tracker_.progress_map().count(id_) != 0) {
+            if (progress_tracker_.progress_map().count(id_) == 0) {
                 return RaftError(RaftErrorCode::ProposalDropped);
             }
 
