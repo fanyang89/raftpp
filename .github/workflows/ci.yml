@@ -25,7 +25,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y clang-format
 
       - name: Install Task
-        uses: go-task/setup-task@v5
+        uses: go-task/setup-task@v2
 
       - name: Check formatting
         run: task check-fmt
@@ -40,7 +40,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y cppcheck
 
       - name: Install Task
-        uses: go-task/setup-task@v5
+        uses: go-task/setup-task@v2
 
       - name: Run cppcheck
         run: task lint
