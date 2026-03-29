@@ -1007,7 +1007,7 @@ Result<std::unique_ptr<Raftor>> Raftor::Create(
 #if RAFTPP_WITH_RDMA
             transport = std::make_unique<rpc::RdmaTransport>(transport_config, config.rdma);
 #else
-            spdlog::warn("RDMA transport requested but not enabled at build time");
+            RAFTPP_LOG_WARN("RDMA transport requested but not enabled at build time");
             return std::unexpected(RaftError(ConfigErrorCode::RdmaNotEnabled));
 #endif
             break;
