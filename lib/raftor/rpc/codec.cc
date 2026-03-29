@@ -24,15 +24,7 @@ std::vector<uint8_t> Codec::Encode(
     // Serialize message to get payload size
     auto msg_bytes = capnp_util::toBytes(msg);
     header_builder.setPayloadSize(static_cast<uint32_t>(msg_bytes.size()));
-<<<<<<< HEAD
     header_builder.setMsgType(capnp_util::reader<msg::Message>(msg).getMsgType());
-=======
-    header_builder.setMsgType(
-        static_cast<capnp::MessageType>(
-            static_cast<int>(capnp_util::reader<msg::Message>(msg).getMsgType())
-        )
-    );
->>>>>>> 67f495d (fix(rpc): bound handshake frame decoding)
 
     // Serialize header
     auto header_bytes = capnp_util::toBytes(header);
