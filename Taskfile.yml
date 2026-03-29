@@ -6,30 +6,36 @@ dotenv:
   - .env
 
 tasks:
+  docker-build:
+    desc: Build the format image
+    cmds:
+      - docker build -t ghcr.io/raftpp/clang-format:18 .
 
   fmt:
-    desc: Format all C++ source files with clang-format
+    desc: Format all C++ source files with clang-format (via Docker)
     platforms: [linux, darwin]
-    vars:
-      CF:
-        sh: command -v clang-format-18 2>/dev/null || command -v clang-format
+    preconditions:
+      - sh: command -v docker >/dev/null 2>&1
+        msg: "docker is required. Run 'task docker-build' first."
     cmds:
       - >
-        find include lib tests -type f \( -name '*.cc' -o -name '*.h' -o -name '*.hpp' \)
-        ! -path '*/generated/*' ! -name '*.pb.*'
-        -exec {{.CF}} --style=file -i {} +
+        docker run --rm -v "{{.USER_WORKING_DIR}}:/raftpp" -w /raftpp
+        ghcr.io/raftpp/clang-format:18 --style=file -i
+        $(find include lib tests -type f \( -name '*.cc' -o -name '*.h' -o -name '*.hpp' \)
+        ! -path '*/generated/*' ! -name '*.pb.*')
 
   check-fmt:
-    desc: Check formatting without modifying files
+    desc: Check formatting without modifying files (via Docker)
     platforms: [linux, darwin]
-    vars:
-      CF:
-        sh: command -v clang-format-18 2>/dev/null || command -v clang-format
+    preconditions:
+      - sh: command -v docker >/dev/null 2>&1
+        msg: "docker is required. Run 'task docker-build' first."
     cmds:
       - >
-        find include lib tests -type f \( -name '*.cc' -o -name '*.h' -o -name '*.hpp' \)
-        ! -path '*/generated/*' ! -name '*.pb.*'
-        -exec {{.CF}} --style=file --dry-run --Werror {} +
+        docker run --rm -v "{{.USER_WORKING_DIR}}:/raftpp" -w /raftpp
+        ghcr.io/raftpp/clang-format:18 --style=file --dry-run --Werror
+        $(find include lib tests -type f \( -name '*.cc' -o -name '*.h' -o -name '*.hpp' \)
+        ! -path '*/generated/*' ! -name '*.pb.*')
 
   cmake:
     desc: Configure CMake with debug preset

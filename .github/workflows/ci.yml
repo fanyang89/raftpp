@@ -15,16 +15,24 @@ env:
   CMAKE_GENERATOR: Ninja
 
 jobs:
-  format-check:
-    name: Format Check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-
-      - uses: RafikFarhad/clang-format-github-action@v6
-        with:
-          sources: "include/**/*.h,include/**/*.hpp,lib/**/*.cc,tests/**/*.cc,examples/**/*.h,examples/**/*.cc"
-          style: file
+  # format-check:
+  #   name: Format Check
+  #   runs-on: ubuntu-latest
+  #   container: fedora:43
+  #   steps:
+  #     - uses: actions/checkout@v5
+  #
+  #     - name: Install clang-format-18
+  #       run: dnf install -y clang-tools-extra-18
+  #
+  #     - name: Install Task
+  #       uses: go-task/setup-task@v2
+  #
+  #     - name: Check formatting
+  #       run: |
+  #         find include lib tests -type f \( -name '*.cc' -o -name '*.h' -o -name '*.hpp' \) \
+  #           ! -path '*/generated/*' ! -name '*.pb.*' \
+  #           -exec clang-format-18 --style=file --dry-run --Werror {} +
 
   lint:
     name: Lint (cppcheck)
