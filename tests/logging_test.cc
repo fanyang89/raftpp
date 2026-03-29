@@ -1,6 +1,8 @@
 #include "raftpp/logging.h"
 
 #include <cstdint>
+#include <memory>
+#include <sstream>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -15,6 +17,9 @@
 #include <opentelemetry/nostd/shared_ptr.h>
 #include <opentelemetry/nostd/string_view.h>
 #include <opentelemetry/nostd/unique_ptr.h>
+#include <spdlog/logger.h>
+#include <spdlog/sinks/ostream_sink.h>
+#include <spdlog/spdlog.h>
 
 namespace {
 
@@ -170,6 +175,34 @@ class ScopedLoggerProvider {
     opentelemetry::nostd::shared_ptr<opentelemetry::logs::LoggerProvider> previous_;
 };
 
+class ScopedDefaultLogger {
+  public:
+    ScopedDefaultLogger()
+        : previous_(spdlog::default_logger()),
+          sink_(std::make_shared<spdlog::sinks::ostream_sink_mt>(stream_)),
+          logger_(std::make_shared<spdlog::logger>("test", sink_)) {
+        logger_->set_pattern("%v");
+        logger_->set_level(spdlog::level::trace);
+        spdlog::set_default_logger(logger_);
+    }
+
+    ~ScopedDefaultLogger() { spdlog::set_default_logger(previous_); }
+
+    std::string output() {
+        logger_->flush();
+        return stream_.str();
+    }
+
+    ScopedDefaultLogger(const ScopedDefaultLogger&) = delete;
+    ScopedDefaultLogger& operator=(const ScopedDefaultLogger&) = delete;
+
+  private:
+    std::ostringstream stream_;
+    std::shared_ptr<spdlog::sinks::ostream_sink_mt> sink_;
+    std::shared_ptr<spdlog::logger> logger_;
+    std::shared_ptr<spdlog::logger> previous_;
+};
+
 }  // namespace
 
 TEST_SUITE_BEGIN("logging");
@@ -202,6 +235,29 @@ TEST_CASE("logging: plain message logs keep external filepath unchanged") {
     CHECK_EQ("external log", captured.body);
     CHECK_EQ(kExternalPath, captured.filepath);
     CHECK_EQ(7, captured.line);
+}
+
+TEST_CASE("logging: spdlog output renders repository file as clickable basename") {
+    ScopedDefaultLogger logger;
+
+    const std::string absolute_path = std::string(RAFTPP_SOURCE_ROOT) + "lib/raftor/raftor.cc";
+    raftpp::logging::LogWithLocation(
+        opentelemetry::logs::Severity::kInfo, absolute_path.c_str(), 123,
+        std::string_view("clickable log")
+    );
+
+    CHECK(logger.output().find("raftor.cc:123 clickable log") != std::string::npos);
+}
+
+TEST_CASE("logging: spdlog output keeps external absolute filepath") {
+    ScopedDefaultLogger logger;
+
+    constexpr const char* kExternalPath = "/tmp/external/file.cc";
+    raftpp::logging::LogWithLocation(
+        opentelemetry::logs::Severity::kWarn, kExternalPath, 7, std::string_view("external log")
+    );
+
+    CHECK(logger.output().find("/tmp/external/file.cc:7 external log") != std::string::npos);
 }
 
 TEST_SUITE_END();

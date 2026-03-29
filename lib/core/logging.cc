@@ -23,6 +23,24 @@ namespace {
 
 using opentelemetry::logs::Severity;
 
+std::string_view Basename(std::string_view path) {
+    const size_t last_separator = path.find_last_of('/');
+    if (last_separator == std::string_view::npos) {
+        return path;
+    }
+    return path.substr(last_separator + 1);
+}
+
+std::string FormatCodeLocation(std::string_view filepath, std::string_view line) {
+    if (filepath.empty() || line.empty()) {
+        return {};
+    }
+
+    const std::string_view rendered_path =
+        !filepath.empty() && filepath.front() == '/' ? filepath : Basename(filepath);
+    return fmt::format("{}:{}", rendered_path, line);
+}
+
 spdlog::level::level_enum ToSpdlogLevel(Severity severity) {
     switch (severity) {
         case Severity::kTrace:
@@ -146,9 +164,11 @@ std::string TraceIdToHex(const opentelemetry::trace::TraceId& trace_id) {
 
 std::string SpanIdToHex(const opentelemetry::trace::SpanId& span_id) {
     std::array<char, opentelemetry::trace::SpanId::kSize * 2> buffer{};
-    span_id.ToLowerBase16(opentelemetry::nostd::span<char, opentelemetry::trace::SpanId::kSize * 2>(
-        buffer.data(), buffer.size()
-    ));
+    span_id.ToLowerBase16(
+        opentelemetry::nostd::span<char, opentelemetry::trace::SpanId::kSize * 2>(
+            buffer.data(), buffer.size()
+        )
+    );
     return std::string(buffer.data(), buffer.size());
 }
 
@@ -242,15 +262,17 @@ class SpdlogLogger final : public opentelemetry::logs::Logger {
 
     const opentelemetry::nostd::string_view GetName() noexcept override { return name_; }
 
-    opentelemetry::nostd::unique_ptr<opentelemetry::logs::LogRecord> CreateLogRecord(
-    ) noexcept override {
-        return opentelemetry::nostd::unique_ptr<opentelemetry::logs::LogRecord>(new SpdlogLogRecord(
-        ));
+    opentelemetry::nostd::unique_ptr<opentelemetry::logs::LogRecord>
+    CreateLogRecord() noexcept override {
+        return opentelemetry::nostd::unique_ptr<opentelemetry::logs::LogRecord>(
+            new SpdlogLogRecord()
+        );
     }
 
     using Logger::EmitLogRecord;
 
-    void EmitLogRecord(opentelemetry::nostd::unique_ptr<opentelemetry::logs::LogRecord>&& record
+    void EmitLogRecord(
+        opentelemetry::nostd::unique_ptr<opentelemetry::logs::LogRecord>&& record
     ) noexcept override {
         auto* spdlog_record = dynamic_cast<SpdlogLogRecord*>(record.get());
         if (!spdlog_record) {
@@ -272,9 +294,33 @@ class SpdlogLogger final : public opentelemetry::logs::Logger {
             return;
         }
 
-        std::string message = spdlog_record->body();
+        std::string_view filepath;
+        std::string_view line;
         for (const auto& [key, value] : spdlog_record->attributes()) {
-            message.append(" ");
+            if (key == "code.filepath") {
+                filepath = value;
+                continue;
+            }
+            if (key == "code.lineno") {
+                line = value;
+            }
+        }
+
+        std::string message;
+        if (const std::string location = FormatCodeLocation(filepath, line); !location.empty()) {
+            message.append(location);
+            if (!spdlog_record->body().empty()) {
+                message.append(" ");
+            }
+        }
+        message.append(spdlog_record->body());
+        for (const auto& [key, value] : spdlog_record->attributes()) {
+            if (key == "code.filepath" || key == "code.lineno") {
+                continue;
+            }
+            if (!message.empty()) {
+                message.append(" ");
+            }
             message.append(key);
             message.append("=");
             message.append(value);
