@@ -31,13 +31,11 @@ RaftCore::RaftCore(const Config& config, const std::shared_ptr<Storage>& store)
       min_election_timeout_(config.MinElectionTick()),
       max_election_timeout_(config.MaxElectionTick()),
       priority_(0),
-      uncommitted_state_(
-          UncommittedState{
-              .max_uncommitted_size = config.max_uncommitted_size,
-              .uncommitted_size = 0,
-              .last_log_tail_index = 0
-          }
-      ),
+      uncommitted_state_(UncommittedState{
+          .max_uncommitted_size = config.max_uncommitted_size,
+          .uncommitted_size = 0,
+          .last_log_tail_index = 0
+      }),
       max_committed_size_per_ready_(config.max_committed_size_per_ready) {}
 
 bool RaftCore::TryBatching(
@@ -83,9 +81,8 @@ bool RaftCore::TryBatching(
                 for (size_t i = 0; i < all_entries.size(); ++i) {
                     auto src_reader = capnp_util::reader<msg::Entry>(all_entries[i]);
                     auto dst = entries_builder[i];
-                    dst.setEntryType(
-                        capnp_util::cast_enum<msg::EntryType>(src_reader.getEntryType())
-                    );
+                    dst.setEntryType(capnp_util::cast_enum<msg::EntryType>(src_reader.getEntryType()
+                    ));
                     dst.setTerm(src_reader.getTerm());
                     dst.setIndex(src_reader.getIndex());
                     dst.setData(src_reader.getData());

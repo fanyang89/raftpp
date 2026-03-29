@@ -2,8 +2,9 @@
 
 #include <chrono>
 #include <functional>
-#include <nonstd/span.hpp>
 #include <string>
+
+#include <nonstd/span.hpp>
 
 #include "codec.h"
 

@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+
 #include <nonstd/span.hpp>
 
 namespace raftpp::raftor::wal {

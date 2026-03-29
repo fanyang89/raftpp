@@ -1,7 +1,8 @@
 #pragma once
 
-#include <nonstd/span.hpp>
 #include <vector>
+
+#include <nonstd/span.hpp>
 
 #include "raftpp/core/error.h"
 #include "raftpp/core/types.h"

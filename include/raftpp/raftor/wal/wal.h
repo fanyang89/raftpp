@@ -3,10 +3,11 @@
 #include <memory>
 #include <optional>
 #include <shared_mutex>
-#include <nonstd/span.hpp>
 #include <string>
 #include <string_view>
 #include <vector>
+
+#include <nonstd/span.hpp>
 
 #include "raftpp/core/types.h"
 #include "raftpp/raftor/wal/metadata_store.h"
