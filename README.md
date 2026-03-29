@@ -63,7 +63,7 @@ cmake --preset=dev -DRAFTPP_SANITIZE=address
 # Enable RDMA transport (requires rdma-core)
 cmake --preset=dev -DRAFTPP_WITH_RDMA=ON
 
-# Enable io_uring (Linux)
+# Enable io_uring (Linux, requires system liburing via pkg-config)
 cmake --preset=dev -DRAFTPP_WITH_LIBURING=ON
 ```
 
