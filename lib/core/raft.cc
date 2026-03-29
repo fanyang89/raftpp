@@ -667,40 +667,7 @@ void Raft::HandleSnapshot(const Message& m) {
     to_send_builder.setMsgType(MessageType::MSG_APPEND_RESPONSE);
     to_send_builder.setTo(m_reader.getFrom());
 
-    // Copy snapshot from message reader
-    auto snap_reader = m_reader.getSnapshot();
-    auto snapshot = capnp_util::make<msg::Snapshot>();
-    auto snap_builder = capnp_util::builder<msg::Snapshot>(snapshot);
-    snap_builder.setData(snap_reader.getData());
-
-    auto snap_meta_src = snap_reader.getMetadata();
-    auto snap_meta_dst = snap_builder.initMetadata();
-    snap_meta_dst.setIndex(snap_meta_src.getIndex());
-    snap_meta_dst.setTerm(snap_meta_src.getTerm());
-
-    auto conf_src = snap_meta_src.getConfState();
-    auto conf_dst = snap_meta_dst.initConfState();
-    auto voters_src = conf_src.getVoters();
-    auto voters_dst = conf_dst.initVoters(voters_src.size());
-    for (size_t i = 0; i < voters_src.size(); ++i) {
-        voters_dst.set(i, voters_src[i]);
-    }
-    auto learners_src = conf_src.getLearners();
-    auto learners_dst = conf_dst.initLearners(learners_src.size());
-    for (size_t i = 0; i < learners_src.size(); ++i) {
-        learners_dst.set(i, learners_src[i]);
-    }
-    auto voters_out_src = conf_src.getVotersOutgoing();
-    auto voters_out_dst = conf_dst.initVotersOutgoing(voters_out_src.size());
-    for (size_t i = 0; i < voters_out_src.size(); ++i) {
-        voters_out_dst.set(i, voters_out_src[i]);
-    }
-    auto learners_next_src = conf_src.getLearnersNext();
-    auto learners_next_dst = conf_dst.initLearnersNext(learners_next_src.size());
-    for (size_t i = 0; i < learners_next_src.size(); ++i) {
-        learners_next_dst.set(i, learners_next_src[i]);
-    }
-    conf_dst.setAutoLeave(conf_src.getAutoLeave());
+    auto snapshot = capnp_util::clone<msg::Snapshot>(m_reader.getSnapshot());
 
     if (Restore(snapshot)) {
         to_send_builder.setIndex(raft_log_.LastIndex());
