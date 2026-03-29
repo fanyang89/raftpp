@@ -43,7 +43,7 @@ void CommitNoopEntry(Interface& r, MemoryStorage& s) {
         CHECK_EQ(reader.getEntries().size(), 1);
         CHECK(reader.getEntries()[0].getData().size() == 0);
         auto reply = AcceptAndReply(m);
-        r.Step(reply);
+        REQUIRE(r.Step(reply));
     }
 
     // Ignore further messages to refresh followers' commit index
@@ -81,7 +81,7 @@ void TestUpdateTermFromMessage(StateRole state) {
     auto builder = capnp_util::builder<msg::Message>(m);
     builder.setMsgType(MessageType::MSG_APPEND);
     builder.setTerm(2);
-    r.Step(m);
+    REQUIRE(r.Step(m));
 
     CHECK_EQ(r->term(), 2);
     CHECK_EQ(r->state(), StateRole::Follower);
@@ -319,7 +319,7 @@ TEST_CASE("raft paper: leader election in one round rpc") {
         auto r = NewTestRaft(1, peers, 10, 1, storage);
 
         Message hup = NewMessage(1, 1, MessageType::MSG_HUP);
-        r.Step(hup);
+        REQUIRE(r.Step(hup));
 
         for (const auto& [id, vote] : votes) {
             Message m = capnp_util::make<msg::Message>();
@@ -329,7 +329,7 @@ TEST_CASE("raft paper: leader election in one round rpc") {
             builder.setTo(1);
             builder.setTerm(r->term());
             builder.setReject(!vote);
-            r.Step(m);
+            REQUIRE(r.Step(m));
         }
 
         CHECK_EQ(r->state(), expected_state);
@@ -362,7 +362,7 @@ TEST_CASE("raft paper: follower vote") {
         builder.setFrom(nvote);
         builder.setTo(1);
         builder.setTerm(1);
-        r.Step(m);
+        REQUIRE(r.Step(m));
 
         auto msgs = r.ReadMessages();
         CHECK_EQ(msgs.size(), 1);
@@ -377,7 +377,7 @@ TEST_CASE("raft paper: candidate fallback") {
     auto r1 = NewTestRaft(1, {1, 2, 3}, 10, 1, storage1);
 
     Message hup = NewMessage(1, 1, MessageType::MSG_HUP);
-    r1.Step(hup);
+    REQUIRE(r1.Step(hup));
     CHECK_EQ(r1->state(), StateRole::Candidate);
 
     Message m1 = capnp_util::make<msg::Message>();
@@ -386,13 +386,13 @@ TEST_CASE("raft paper: candidate fallback") {
     m1_builder.setFrom(2);
     m1_builder.setTo(1);
     m1_builder.setTerm(2);
-    r1.Step(m1);
+    REQUIRE(r1.Step(m1));
     CHECK_EQ(r1->state(), StateRole::Follower);
     CHECK_EQ(r1->term(), 2);
 
     auto storage2 = std::make_shared<MemoryStorage>();
     auto r2 = NewTestRaft(1, {1, 2, 3}, 10, 1, storage2);
-    r2.Step(hup);
+    REQUIRE(r2.Step(hup));
     CHECK_EQ(r2->state(), StateRole::Candidate);
 
     Message m2 = capnp_util::make<msg::Message>();
@@ -401,7 +401,7 @@ TEST_CASE("raft paper: candidate fallback") {
     m2_builder.setFrom(2);
     m2_builder.setTo(1);
     m2_builder.setTerm(3);
-    r2.Step(m2);
+    REQUIRE(r2.Step(m2));
     CHECK_EQ(r2->state(), StateRole::Follower);
     CHECK_EQ(r2->term(), 3);
 }
@@ -438,7 +438,7 @@ TEST_CASE("raft paper: leader start replication") {
     prop_entries.push_back(std::move(entry));
     Message propose =
         NewMessageWithEntries(1, 1, MessageType::MSG_PROPOSE, std::move(prop_entries));
-    r.Step(propose);
+    REQUIRE(r.Step(propose));
 
     CHECK_EQ(r->raft_log().LastIndex(), li + 1);
     CHECK_EQ(r->raft_log().committed(), li);
@@ -475,12 +475,12 @@ TEST_CASE("raft paper: leader commit entry") {
     prop_entries.push_back(std::move(entry));
     Message propose =
         NewMessageWithEntries(1, 1, MessageType::MSG_PROPOSE, std::move(prop_entries));
-    r.Step(propose);
+    REQUIRE(r.Step(propose));
     r.Persist();
 
     for (const auto& m : r.ReadMessages()) {
         auto reply = AcceptAndReply(m);
-        r.Step(reply);
+        REQUIRE(r.Step(reply));
     }
 
     CHECK_EQ(r->raft_log().committed(), li + 1);
@@ -526,14 +526,14 @@ TEST_CASE("raft paper: leader acknowledge commit") {
         prop_entries.push_back(std::move(entry));
         Message propose =
             NewMessageWithEntries(1, 1, MessageType::MSG_PROPOSE, std::move(prop_entries));
-        r.Step(propose);
+        REQUIRE(r.Step(propose));
         r.Persist();
 
         for (const auto& m : r.ReadMessages()) {
             auto reader = capnp_util::reader<msg::Message>(m);
             if (acceptors.count(reader.getTo()) && acceptors.at(reader.getTo())) {
                 auto reply = AcceptAndReply(m);
-                r.Step(reply);
+                REQUIRE(r.Step(reply));
             }
         }
 
@@ -576,7 +576,7 @@ TEST_CASE("raft paper: vote request") {
         for (size_t i = 0; i < ents.size(); ++i) {
             entries_builder.setWithCaveats(i, capnp_util::reader<msg::Entry>(ents[i]));
         }
-        r.Step(m);
+        REQUIRE(r.Step(m));
         r.ReadMessages();
 
         size_t election_timeout = 10;  // from config
@@ -656,7 +656,7 @@ TEST_CASE("raft paper: voter") {
         builder.setTerm(3);
         builder.setLogTerm(test.log_term);
         builder.setIndex(test.index);
-        r.Step(m);
+        REQUIRE(r.Step(m));
 
         auto msgs = r.ReadMessages();
         CHECK_EQ(msgs.size(), 1);
@@ -713,7 +713,7 @@ TEST_CASE("raft paper: leader only commits log from current term") {
         prop_entries.push_back(std::move(entry));
         Message propose =
             NewMessageWithEntries(1, 1, MessageType::MSG_PROPOSE, std::move(prop_entries));
-        r.Step(propose);
+        REQUIRE(r.Step(propose));
         r.Persist();
 
         Message resp = capnp_util::make<msg::Message>();
@@ -723,7 +723,7 @@ TEST_CASE("raft paper: leader only commits log from current term") {
         resp_builder.setTo(1);
         resp_builder.setTerm(r->term());
         resp_builder.setIndex(index);
-        r.Step(resp);
+        REQUIRE(r.Step(resp));
 
         CHECK_EQ(r->raft_log().committed(), wcommit);
     }
