@@ -38,6 +38,7 @@ CPMAddPackage(
   OPTIONS
     "BUILD_TESTING OFF"
     "WITH_OPENSSL OFF"
+    "WITH_FIBERS OFF"
 )
 
 # OpenTelemetry API (header-only, no-op by default)
