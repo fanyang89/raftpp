@@ -1180,7 +1180,7 @@ void RdmaTransport::Impl::HandleRecv(RecvBuffer& buffer, size_t len) {
     std::span<const uint8_t> payload(buffer.storage.get(), len);
 
     if (magic == HandshakeCodec::kMagic) {
-        auto result = HandshakeCodec::Decode(payload);
+        auto result = HandshakeCodec::Decode(payload, config_.max_message_size);
         if (!result) {
             EnqueueError(buffer.conn ? buffer.conn->peer_id : 0, "handshake decode failed");
             if (buffer.conn) {

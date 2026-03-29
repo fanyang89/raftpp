@@ -2,6 +2,7 @@
 
 #include <charconv>
 #include <cstring>
+#include <limits>
 
 #include <capnp/message.h>
 #include <capnp/serialize.h>
@@ -23,9 +24,11 @@ std::vector<uint8_t> Codec::Encode(
     // Serialize message to get payload size
     auto msg_bytes = capnp_util::toBytes(msg);
     header_builder.setPayloadSize(static_cast<uint32_t>(msg_bytes.size()));
-    header_builder.setMsgType(static_cast<capnp::MessageType>(
-        static_cast<int>(capnp_util::reader<msg::Message>(msg).getMsgType())
-    ));
+    header_builder.setMsgType(
+        static_cast<capnp::MessageType>(
+            static_cast<int>(capnp_util::reader<msg::Message>(msg).getMsgType())
+        )
+    );
 
     // Serialize header
     auto header_bytes = capnp_util::toBytes(header);
@@ -110,7 +113,8 @@ Result<size_t> Codec::FrameSize(std::span<const uint8_t> buffer, size_t max_size
             reinterpret_cast<const ::capnp::word*>(buffer.data() + kPrefixSize);
         size_t word_count = header_len / sizeof(::capnp::word);
 
-        ::capnp::FlatArrayMessageReader reader(kj::ArrayPtr<const ::capnp::word>(words, word_count)
+        ::capnp::FlatArrayMessageReader reader(
+            kj::ArrayPtr<const ::capnp::word>(words, word_count)
         );
         auto header_reader = reader.getRoot<capnp::RpcHeader>();
 
@@ -175,9 +179,9 @@ Result<Codec::DecodeResult> Codec::Decode(std::span<const uint8_t> buffer, size_
         const ::capnp::word* words =
             reinterpret_cast<const ::capnp::word*>(buffer.data() + header_end);
         size_t word_count = header_reader.getPayloadSize() / sizeof(::capnp::word);
-        msg =
-            capnp_util::fromWords<msg::Message>(kj::ArrayPtr<const ::capnp::word>(words, word_count)
-            );
+        msg = capnp_util::fromWords<msg::Message>(
+            kj::ArrayPtr<const ::capnp::word>(words, word_count)
+        );
     } catch (...) {
         return RaftError(RpcErrorCode::PayloadParseFailed);
     }
@@ -204,7 +208,9 @@ std::vector<uint8_t> HandshakeCodec::Encode(const RpcHandshake& hs) {
     return buffer;
 }
 
-Result<std::pair<RpcHandshake, size_t>> HandshakeCodec::Decode(std::span<const uint8_t> buffer) {
+Result<std::pair<RpcHandshake, size_t>> HandshakeCodec::Decode(
+    std::span<const uint8_t> buffer, size_t max_size
+) {
     if (buffer.size() < kPrefixSize) {
         return std::make_pair(RpcHandshake{}, size_t{0});  // Incomplete
     }
@@ -220,7 +226,15 @@ Result<std::pair<RpcHandshake, size_t>> HandshakeCodec::Decode(std::span<const u
     uint32_t length;
     std::memcpy(&length, buffer.data() + 4, sizeof(length));
 
+    if (length > std::numeric_limits<size_t>::max() - kPrefixSize) {
+        return RaftError(RpcErrorCode::MessageTooLarge);
+    }
+
     size_t total_size = kPrefixSize + length;
+    if (total_size > max_size) {
+        return RaftError(RpcErrorCode::MessageTooLarge);
+    }
+
     if (buffer.size() < total_size) {
         return std::make_pair(RpcHandshake{}, size_t{0});  // Incomplete
     }
