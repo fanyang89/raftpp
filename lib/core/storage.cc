@@ -1,6 +1,5 @@
 #include "raftpp/core/storage.h"
 
-#include <libassert/assert.hpp>
 #include <spdlog/fmt/fmt.h>
 
 #include "raftpp/core/util.h"

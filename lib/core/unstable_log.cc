@@ -2,8 +2,7 @@
 
 #include <cstddef>
 
-#include <libassert/assert.hpp>
-
+#include "raftpp/core/assert.h"
 #include "raftpp/core/util.h"
 #include "raftpp/logging.h"
 

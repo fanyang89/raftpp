@@ -1,7 +1,6 @@
 #include "raftpp/core/progress.h"
 
-#include <libassert/assert.hpp>
-
+#include "raftpp/core/assert.h"
 #include "raftpp/core/primitives.h"
 #include "raftpp/logging.h"
 

@@ -27,4 +27,3 @@ target_compile_definitions(raftpp PUBLIC RAFTPP_SOURCE_ROOT="${PROJECT_SOURCE_DI
 target_link_libraries(raftpp PUBLIC raftpp-proto)
 target_link_libraries(raftpp PUBLIC spdlog)
 target_link_libraries(raftpp PUBLIC opentelemetry-cpp::api)
-target_link_libraries(raftpp PUBLIC libassert::assert)

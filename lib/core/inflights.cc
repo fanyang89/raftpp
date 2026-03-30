@@ -1,6 +1,6 @@
 #include "raftpp/core/inflights.h"
 
-#include <libassert/assert.hpp>
+#include "raftpp/core/assert.h"
 
 namespace raftpp {
 
