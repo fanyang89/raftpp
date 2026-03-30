@@ -362,12 +362,11 @@ Result<void> WAL::Append(nonstd::span<const Entry> entries) {
         write_buffer_used_ += record.size();
 
         // Cache pending index information
-        pending_entries_.push_back(
-            {.index = entry_reader.getIndex(),
-             .term = entry_reader.getTerm(),
-             .offset_in_buffer = static_cast<uint32_t>(write_buffer_used_ - record.size()),
-             .record_length = static_cast<uint32_t>(record.size())}
-        );
+        pending_entries_.push_back(PendingEntry{
+            entry_reader.getIndex(), entry_reader.getTerm(),
+            static_cast<uint32_t>(write_buffer_used_ - record.size()),
+            static_cast<uint32_t>(record.size())
+        });
 
         auto flush_if_needed_result = FlushWriteBufferIfNeeded();
         if (!flush_if_needed_result) {

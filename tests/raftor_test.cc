@@ -61,7 +61,7 @@ class MockStateMachine : public StateMachine {
         auto data = reader.getData();
         applied_entries_.emplace_back(data.begin(), data.end());
         apply_count_++;
-        return ApplyResult{.response = "OK:" + std::to_string(apply_count_)};
+        return ApplyResult{"OK:" + std::to_string(apply_count_)};
     }
 
     Result<SnapshotMetadata> TakeSnapshot(
@@ -268,9 +268,9 @@ TEST_CASE("three_node_cluster_bootstrap") {
     RAFTPP_LOG_INFO("Creating 3-node cluster...");
 
     std::vector<PeerConfig> peers = {
-        {.id = 1, .addr = "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())},
-        {.id = 2, .addr = "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())},
-        {.id = 3, .addr = "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())},
+        PeerConfig{1, "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())},
+        PeerConfig{2, "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())},
+        PeerConfig{3, "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())},
     };
 
     RAFTPP_LOG_INFO("Peers configured:");
@@ -336,9 +336,9 @@ TEST_CASE("three_node_cluster_bootstrap") {
 TEST_CASE("conf_state_initialized_from_initial_peers") {
     std::string listen_addr = "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort());
     std::vector<PeerConfig> peers = {
-        {.id = 1, .addr = listen_addr},
-        {.id = 2, .addr = ""},
-        {.id = 3, .addr = ""},
+        PeerConfig{1, listen_addr},
+        PeerConfig{2, ""},
+        PeerConfig{3, ""},
     };
 
     auto result = CreateTestNode(1, listen_addr, peers);
@@ -353,9 +353,9 @@ TEST_CASE("conf_state_initialized_from_initial_peers") {
 
 TEST_CASE("three_node_proposal_after_bootstrap") {
     std::vector<PeerConfig> peers = {
-        {.id = 1, .addr = "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())},
-        {.id = 2, .addr = "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())},
-        {.id = 3, .addr = "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())},
+        PeerConfig{1, "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())},
+        PeerConfig{2, "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())},
+        PeerConfig{3, "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())},
     };
 
     std::vector<TestNode> test_nodes;
@@ -411,9 +411,9 @@ TEST_CASE("three_node_proposal_after_bootstrap") {
 
 TEST_CASE("three_node_read_index_from_follower_completes") {
     std::vector<PeerConfig> peers = {
-        {.id = 1, .addr = "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())},
-        {.id = 2, .addr = "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())},
-        {.id = 3, .addr = "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())},
+        PeerConfig{1, "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())},
+        PeerConfig{2, "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())},
+        PeerConfig{3, "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())},
     };
 
     std::vector<TestNode> test_nodes;
@@ -488,9 +488,9 @@ TEST_CASE("three_node_read_index_from_follower_completes") {
 
 TEST_CASE("three_node_leader_failure") {
     std::vector<PeerConfig> peers = {
-        {.id = 1, .addr = "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())},
-        {.id = 2, .addr = "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())},
-        {.id = 3, .addr = "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())},
+        PeerConfig{1, "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())},
+        PeerConfig{2, "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())},
+        PeerConfig{3, "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())},
     };
 
     std::vector<TestNode> test_nodes;
@@ -537,9 +537,7 @@ TEST_CASE("five_node_cluster_propose") {
 
     std::vector<PeerConfig> peers;
     for (uint64_t i = 1; i <= 5; ++i) {
-        peers.push_back(
-            {.id = i, .addr = "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())}
-        );
+        peers.push_back(PeerConfig{i, "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())});
     }
 
     RAFTPP_LOG_INFO("Peers configured:");

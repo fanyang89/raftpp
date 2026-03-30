@@ -193,10 +193,7 @@ std::string DataToString(::capnp::Data::Reader data) {
 TEST_SUITE("rpc::capnp") {
     TEST_CASE("capnp_start_stop" * doctest::timeout(5)) {
         auto port = PortAllocator::GetNextPort();
-        TransportConfig config{
-            .listen_addr = fmt::format("127.0.0.1:{}", port),
-            .node_id = 1,
-        };
+        TransportConfig config{fmt::format("127.0.0.1:{}", port), 1};
 
         CapnpTransport transport(config);
 
@@ -211,10 +208,7 @@ TEST_SUITE("rpc::capnp") {
     }
 
     TEST_CASE("capnp_start_invalid_address" * doctest::timeout(5)) {
-        TransportConfig config{
-            .listen_addr = "invalid:not-a-port",
-            .node_id = 1,
-        };
+        TransportConfig config{"invalid:not-a-port", 1};
 
         CapnpTransport transport(config);
 
@@ -224,10 +218,7 @@ TEST_SUITE("rpc::capnp") {
 
     TEST_CASE("capnp_add_remove_peer" * doctest::timeout(5)) {
         auto port = PortAllocator::GetNextPort();
-        TransportConfig config{
-            .listen_addr = fmt::format("127.0.0.1:{}", port),
-            .node_id = 1,
-        };
+        TransportConfig config{fmt::format("127.0.0.1:{}", port), 1};
 
         CapnpTransport transport(config);
         REQUIRE(transport.Start().has_value());
@@ -251,8 +242,8 @@ TEST_SUITE("rpc::capnp") {
         auto port1 = PortAllocator::GetNextPort();
         auto port2 = PortAllocator::GetNextPort();
 
-        TransportConfig cfg1{.listen_addr = fmt::format("127.0.0.1:{}", port1), .node_id = 1};
-        TransportConfig cfg2{.listen_addr = fmt::format("127.0.0.1:{}", port2), .node_id = 2};
+        TransportConfig cfg1{fmt::format("127.0.0.1:{}", port1), 1};
+        TransportConfig cfg2{fmt::format("127.0.0.1:{}", port2), 2};
 
         CapnpTransport t1(cfg1);
         CapnpTransport t2(cfg2);
@@ -294,8 +285,8 @@ TEST_SUITE("rpc::capnp") {
         auto port1 = PortAllocator::GetNextPort();
         auto port2 = PortAllocator::GetNextPort();
 
-        TransportConfig cfg1{.listen_addr = fmt::format("127.0.0.1:{}", port1), .node_id = 1};
-        TransportConfig cfg2{.listen_addr = fmt::format("127.0.0.1:{}", port2), .node_id = 2};
+        TransportConfig cfg1{fmt::format("127.0.0.1:{}", port1), 1};
+        TransportConfig cfg2{fmt::format("127.0.0.1:{}", port2), 2};
 
         CapnpTransport t1(cfg1);
         CapnpTransport t2(cfg2);
@@ -337,8 +328,8 @@ TEST_SUITE("rpc::capnp") {
         auto port1 = PortAllocator::GetNextPort();
         auto port2 = PortAllocator::GetNextPort();
 
-        TransportConfig cfg1{.listen_addr = fmt::format("127.0.0.1:{}", port1), .node_id = 1};
-        TransportConfig cfg2{.listen_addr = fmt::format("127.0.0.1:{}", port2), .node_id = 2};
+        TransportConfig cfg1{fmt::format("127.0.0.1:{}", port1), 1};
+        TransportConfig cfg2{fmt::format("127.0.0.1:{}", port2), 2};
 
         CapnpTransport t1(cfg1);
         CapnpTransport t2(cfg2);
@@ -372,8 +363,8 @@ TEST_SUITE("rpc::capnp") {
         auto port1 = PortAllocator::GetNextPort();
         auto port2 = PortAllocator::GetNextPort();
 
-        TransportConfig cfg1{.listen_addr = fmt::format("127.0.0.1:{}", port1), .node_id = 1};
-        TransportConfig cfg2{.listen_addr = fmt::format("127.0.0.1:{}", port2), .node_id = 2};
+        TransportConfig cfg1{fmt::format("127.0.0.1:{}", port1), 1};
+        TransportConfig cfg2{fmt::format("127.0.0.1:{}", port2), 2};
 
         CapnpTransport t1(cfg1);
         CapnpTransport t2(cfg2);
@@ -422,8 +413,8 @@ TEST_SUITE("rpc::capnp") {
         auto port1 = PortAllocator::GetNextPort();
         auto port2 = PortAllocator::GetNextPort();
 
-        TransportConfig cfg1{.listen_addr = fmt::format("127.0.0.1:{}", port1), .node_id = 1};
-        TransportConfig cfg2{.listen_addr = fmt::format("127.0.0.1:{}", port2), .node_id = 2};
+        TransportConfig cfg1{fmt::format("127.0.0.1:{}", port1), 1};
+        TransportConfig cfg2{fmt::format("127.0.0.1:{}", port2), 2};
 
         CapnpTransport t1(cfg1);
         CapnpTransport t2(cfg2);
@@ -459,10 +450,7 @@ TEST_SUITE("rpc::capnp") {
         auto port = PortAllocator::GetNextPort();
         auto unreachable_port = PortAllocator::GetNextPort();
 
-        TransportConfig config{
-            .listen_addr = fmt::format("127.0.0.1:{}", port),
-            .node_id = 1,
-        };
+        TransportConfig config{fmt::format("127.0.0.1:{}", port), 1};
 
         CapnpTransport transport(config);
         REQUIRE(transport.Start().has_value());
@@ -481,10 +469,7 @@ TEST_SUITE("rpc::capnp") {
 
     TEST_CASE("capnp_outgoing_queue_overflow_reports_error" * doctest::timeout(5)) {
         auto port = PortAllocator::GetNextPort();
-        TransportConfig config{
-            .listen_addr = fmt::format("127.0.0.1:{}", port),
-            .node_id = 1,
-        };
+        TransportConfig config{fmt::format("127.0.0.1:{}", port), 1};
 
         CapnpTransport transport(config);
 
@@ -529,9 +514,9 @@ TEST_SUITE("rpc::capnp") {
         auto port2 = PortAllocator::GetNextPort();
         auto port3 = PortAllocator::GetNextPort();
 
-        TransportConfig cfg1{.listen_addr = fmt::format("127.0.0.1:{}", port1), .node_id = 1};
-        TransportConfig cfg2{.listen_addr = fmt::format("127.0.0.1:{}", port2), .node_id = 2};
-        TransportConfig cfg3{.listen_addr = fmt::format("127.0.0.1:{}", port3), .node_id = 3};
+        TransportConfig cfg1{fmt::format("127.0.0.1:{}", port1), 1};
+        TransportConfig cfg2{fmt::format("127.0.0.1:{}", port2), 2};
+        TransportConfig cfg3{fmt::format("127.0.0.1:{}", port3), 3};
 
         CapnpTransport t1(cfg1);
         CapnpTransport t2(cfg2);
@@ -578,8 +563,8 @@ TEST_SUITE("rpc::capnp") {
         auto port2 = PortAllocator::GetNextPort();
         auto port3 = PortAllocator::GetNextPort();
 
-        TransportConfig cfg1{.listen_addr = fmt::format("127.0.0.1:{}", port1), .node_id = 1};
-        TransportConfig cfg2{.listen_addr = fmt::format("127.0.0.1:{}", port2), .node_id = 2};
+        TransportConfig cfg1{fmt::format("127.0.0.1:{}", port1), 1};
+        TransportConfig cfg2{fmt::format("127.0.0.1:{}", port2), 2};
 
         CapnpTransport t1(cfg1);
         CapnpTransport t2(cfg2);
@@ -603,7 +588,7 @@ TEST_SUITE("rpc::capnp") {
 
         t2.Stop();
 
-        TransportConfig cfg3{.listen_addr = fmt::format("127.0.0.1:{}", port3), .node_id = 2};
+        TransportConfig cfg3{fmt::format("127.0.0.1:{}", port3), 2};
         CapnpTransport t3(cfg3);
         MessageCollector collector_new;
         t3.SetMessageCallback([&](Message m) { collector_new.OnMessage(std::move(m)); });
@@ -629,10 +614,7 @@ TEST_SUITE("rpc::capnp") {
 
     TEST_CASE("capnp_send_to_unknown_peer" * doctest::timeout(5)) {
         auto port = PortAllocator::GetNextPort();
-        TransportConfig config{
-            .listen_addr = fmt::format("127.0.0.1:{}", port),
-            .node_id = 1,
-        };
+        TransportConfig config{fmt::format("127.0.0.1:{}", port), 1};
 
         CapnpTransport transport(config);
         REQUIRE(transport.Start().has_value());
@@ -651,8 +633,8 @@ TEST_SUITE("rpc::capnp") {
         auto port1 = PortAllocator::GetNextPort();
         auto port2 = PortAllocator::GetNextPort();
 
-        TransportConfig cfg1{.listen_addr = fmt::format("127.0.0.1:{}", port1), .node_id = 1};
-        TransportConfig cfg2{.listen_addr = fmt::format("127.0.0.1:{}", port2), .node_id = 2};
+        TransportConfig cfg1{fmt::format("127.0.0.1:{}", port1), 1};
+        TransportConfig cfg2{fmt::format("127.0.0.1:{}", port2), 2};
 
         CapnpTransport t1(cfg1);
         CapnpTransport t2(cfg2);
@@ -705,8 +687,8 @@ TEST_SUITE("rpc::capnp") {
         auto port1 = PortAllocator::GetNextPort();
         auto port2 = PortAllocator::GetNextPort();
 
-        TransportConfig cfg1{.listen_addr = fmt::format("127.0.0.1:{}", port1), .node_id = 1};
-        TransportConfig cfg2{.listen_addr = fmt::format("127.0.0.1:{}", port2), .node_id = 2};
+        TransportConfig cfg1{fmt::format("127.0.0.1:{}", port1), 1};
+        TransportConfig cfg2{fmt::format("127.0.0.1:{}", port2), 2};
 
         CapnpTransport t1(cfg1);
         CapnpTransport t2(cfg2);
@@ -761,12 +743,11 @@ TEST_SUITE("rpc::capnp") {
         auto port1 = PortAllocator::GetNextPort();
         auto port2 = PortAllocator::GetNextPort();
 
-        TransportConfig cfg1{
-            .listen_addr = fmt::format("127.0.0.1:{}", port1),
-            .node_id = 1,
-            .reconnect_interval = 100ms  // Fast reconnect for test
-        };
-        TransportConfig cfg2{.listen_addr = fmt::format("127.0.0.1:{}", port2), .node_id = 2};
+        TransportConfig cfg1;
+        cfg1.listen_addr = fmt::format("127.0.0.1:{}", port1);
+        cfg1.node_id = 1;
+        cfg1.reconnect_interval = 100ms;  // Fast reconnect for test
+        TransportConfig cfg2{fmt::format("127.0.0.1:{}", port2), 2};
 
         CapnpTransport t1(cfg1);
         MessageCollector collector;
