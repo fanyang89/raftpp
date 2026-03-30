@@ -76,13 +76,15 @@ cmake --preset=Debug -B build -DRAFTPP_WITH_LIBURING=ON
 ### 1. Implement Your State Machine
 
 ```cpp
+#include <array>
+
+#include <raftpp/core/capnp_util.h>
 #include <raftpp/raftor/state_machine.h>
 
-class MyStateMachine : public raftpp::raftor::StateMachine {
-public:
+class MyStateMachine final : public raftpp::raftor::StateMachine {
+ public:
     raftpp::Result<raftpp::raftor::ApplyResult> Apply(const raftpp::Entry& entry) override {
-        // Apply the committed entry to your application state
-        // Return the result to be passed back to the proposer
+        (void)entry;
         return raftpp::raftor::ApplyResult{.response = "ok"};
     }
 
@@ -90,9 +92,10 @@ public:
         uint64_t applied_index, uint64_t applied_term, const raftpp::ConfState& conf_state,
         raftpp::raftor::SnapshotWriter& writer
     ) override {
-        // Stream snapshot payload bytes into writer.
-        std::array<uint8_t, 4> bytes = {'s', 'n', 'a', 'p'};
-        writer.Write(bytes);
+        const std::array<uint8_t, 1> payload = {'x'};
+        if (auto result = writer.Write(payload); !result) {
+            return nonstd::make_unexpected(result.error());
+        }
 
         auto metadata = raftpp::capnp_util::make<raftpp::msg::SnapshotMetadata>();
         auto meta = raftpp::capnp_util::builder<raftpp::msg::SnapshotMetadata>(metadata);
@@ -105,8 +108,17 @@ public:
     raftpp::Result<void> RestoreSnapshot(
         const raftpp::SnapshotMetadata& metadata, raftpp::raftor::SnapshotReader& reader
     ) override {
-        // Read snapshot payload bytes from reader and restore application state.
-        return {};
+        (void)metadata;
+        std::array<uint8_t, 256> buffer{};
+        while (true) {
+            auto result = reader.Read(buffer);
+            if (!result) {
+                return nonstd::make_unexpected(result.error());
+            }
+            if (*result == 0) {
+                return {};
+            }
+        }
     }
 };
 ```
@@ -114,43 +126,44 @@ public:
 ### 2. Configure and Start Raftor
 
 ```cpp
+#include <chrono>
+
 #include <raftpp/raftor/raftor.h>
+
+using namespace std::chrono_literals;
 
 int main() {
     raftpp::raftor::RaftorConfig config;
     config.node_id = 1;
     config.listen_addr = "127.0.0.1:9001";
-    config.initial_peers = {
-        {1, "127.0.0.1:9001"},
-        {2, "127.0.0.1:9002"},
-        {3, "127.0.0.1:9003"},
-    };
-    config.data_dir = "/var/lib/myapp/raft";
-    config.pre_vote = true;
-    config.check_quorum = true;
+    config.data_dir = "./minimal-node-data";
+    config.tick_interval = 100ms;
 
-    auto state_machine = std::make_unique<MyStateMachine>();
-    auto result = raftpp::raftor::Raftor::Create(config, std::move(state_machine));
+    auto result = raftpp::raftor::Raftor::Create(config, std::make_unique<MyStateMachine>());
     if (!result) {
-        // Handle creation error
         return 1;
     }
+
     auto raftor = std::move(*result);
 
-    if (auto err = raftor->Start(); !err) {
+    if (auto result = raftor->Start(); !result) {
         return 1;
     }
 
-    // Event loop
-    const auto tick_interval = std::chrono::milliseconds{100};
-    auto next = std::chrono::steady_clock::now();
-    for (;;) {
-        next += tick_interval;
-        raftor->Poll(std::chrono::milliseconds{0});
-        std::this_thread::sleep_until(next);
+    for (int i = 0; i < 20; ++i) {
+        raftor->Poll(config.tick_interval);
+        if (raftor->GetStatus().role == raftpp::StateRole::Leader) {
+            raftor->Stop();
+            return 0;
+        }
     }
+
+    raftor->Stop();
+    return 1;
 }
 ```
+
+For a single-node bootstrap, leave `initial_peers` empty. Raftor will bootstrap the local node as the only voter.
 
 ### 3. Submit Proposals
 
@@ -229,6 +242,7 @@ while (raw_node.HasReady()) {
 
 See the `examples/` directory for complete examples:
 
+- **minimal_node**: The smallest runnable Raftor example with a single `StateMachine` and manual `Poll()` loop
 - **kvstore**: A distributed key-value store with HTTP REST API
 
 ## License
