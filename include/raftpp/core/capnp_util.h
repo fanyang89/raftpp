@@ -2,7 +2,6 @@
 
 #include <cstring>
 #include <memory>
-#include <nonstd/span.hpp>
 #include <stdexcept>
 #include <vector>
 
@@ -10,6 +9,7 @@
 #include <capnp/message.h>
 #include <capnp/serialize.h>
 #include <kj/array.h>
+#include <nonstd/span.hpp>
 
 namespace raftpp::capnp_util {
 

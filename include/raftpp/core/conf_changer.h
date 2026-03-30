@@ -26,9 +26,8 @@ class ConfChanger {
   public:
     explicit ConfChanger(ProgressTracker& tracker);
 
-    [[nodiscard]] Result<std::pair<TrackerConfiguration, MapChange>> EnterJoint(
-        bool auto_leave, nonstd::span<const ConfChangeSingle>
-    );
+    [[nodiscard]] Result<std::pair<TrackerConfiguration, MapChange>>
+    EnterJoint(bool auto_leave, nonstd::span<const ConfChangeSingle>);
 
     [[nodiscard]] Result<
         std::pair<TrackerConfiguration, std::vector<std::pair<uint64_t, MapChangeType>>>, RaftError>

@@ -34,7 +34,7 @@ Result<void> CheckInvariants(const TrackerConfiguration& cfg, const IncrChangeMa
             return RaftError(ConfChangeError(fmt::format("no progress for learner(next) {}", id)));
         }
 
-        if (!cfg.voters.outgoing().count(id) != 0) {
+        if (cfg.voters.outgoing().count(id) == 0) {
             return RaftError(
                 ConfChangeError(fmt::format("{} is in learners_next and outgoing voters", id))
             );
@@ -138,7 +138,7 @@ ConfChanger::LeaveJoint() {
         cfg.learners_next.clear();
 
         for (const auto id : cfg.voters.outgoing()) {
-            if (!cfg.voters.incoming().count(id) != 0 && !cfg.learners.count(id) != 0) {
+            if (cfg.voters.incoming().count(id) == 0 && cfg.learners.count(id) == 0) {
                 prs.changes().emplace_back(id, MapChangeType::Remove);
             }
         }
@@ -181,8 +181,7 @@ Result<void> ConfChanger::Apply(
     return {};
 }
 
-Result<std::pair<TrackerConfiguration, MapChange>> ConfChanger::Simple(
-    const ConfChangeSingle& ccs
+Result<std::pair<TrackerConfiguration, MapChange>> ConfChanger::Simple(const ConfChangeSingle& ccs
 ) const {
     std::vector<ConfChangeSingle> v;
     v.emplace_back(capnp_util::clone<msg::ConfChangeSingle>(ccs));
@@ -294,7 +293,7 @@ void ConfChanger::Remove(TrackerConfiguration& cfg, IncrChangeMap& prs, uint64_t
     cfg.learners_next.erase(id);
 
     // If the peer is still a voter in the outgoing config, keep the Progress.
-    if (!cfg.voters.outgoing().count(id) != 0) {
+    if (cfg.voters.outgoing().count(id) == 0) {
         prs.changes().emplace_back(id, MapChangeType::Remove);
     }
 }

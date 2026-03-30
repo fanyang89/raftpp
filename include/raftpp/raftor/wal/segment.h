@@ -3,9 +3,10 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
-#include <nonstd/span.hpp>
 #include <string>
 #include <vector>
+
+#include <nonstd/span.hpp>
 
 #include "raftpp/core/error.h"
 #include "raftpp/raftor/wal/wal_config.h"

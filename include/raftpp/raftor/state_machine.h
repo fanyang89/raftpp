@@ -3,8 +3,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
-#include <nonstd/span.hpp>
 #include <string>
+
+#include <nonstd/span.hpp>
 
 #include "raftpp/core/error.h"
 #include "raftpp/core/types.h"

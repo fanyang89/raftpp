@@ -2,9 +2,10 @@
 
 #include <cstdint>
 #include <cstring>
-#include <nonstd/span.hpp>
 #include <string>
 #include <vector>
+
+#include <nonstd/span.hpp>
 
 namespace raftpp::raftor::wal {
 

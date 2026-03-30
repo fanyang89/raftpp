@@ -13,19 +13,22 @@ concurrency:
 
 env:
   CMAKE_GENERATOR: Ninja
+  FORMAT_IMAGE: ghcr.io/${{ github.repository_owner }}/clang-format:18
 
 jobs:
   format-check:
     name: Format Check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
 
-      - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y clang-format
-
       - name: Install Task
         uses: go-task/setup-task@v2
+
+      - name: Build format image
+        uses: ./.github/actions/build-format-image
+        with:
+          image: ${{ env.FORMAT_IMAGE }}
 
       - name: Check formatting
         run: task check-fmt

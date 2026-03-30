@@ -56,7 +56,7 @@ std::vector<ReadIndexStatus> ReadOnly::Advance(const std::string& ctx) {
     size_t p = -1;
     for (size_t i = 0; i < read_index_queue_.size(); ++i) {
         const auto& x = read_index_queue_[i];
-        if (!pending_read_index_.count(x) != 0) {
+        if (pending_read_index_.count(x) == 0) {
             PANIC("cannot find correspond read state from pending map");
         }
         if (x == ctx) {
