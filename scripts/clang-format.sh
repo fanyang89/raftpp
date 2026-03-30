@@ -27,6 +27,8 @@ esac
 
 format_image="${FORMAT_IMAGE:-ghcr.io/raftpp/clang-format:18}"
 repo_root="$(git rev-parse --show-toplevel)"
+host_uid="$(id -u)"
+host_gid="$(id -g)"
 
 cd "$repo_root"
 
@@ -42,4 +44,5 @@ if [[ ${#files[@]} -eq 0 ]]; then
     exit 0
 fi
 
-exec docker run --rm -v "$repo_root:/raftpp" -w /raftpp "$format_image" "${clang_format_args[@]}" "${files[@]}"
+exec docker run --rm --user "$host_uid:$host_gid" -v "$repo_root:/raftpp" -w /raftpp \
+    "$format_image" "${clang_format_args[@]}" "${files[@]}"
