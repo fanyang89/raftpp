@@ -1,5 +1,7 @@
 #include "raftpp/core/progress.h"
 
+#include <list>
+
 #include <doctest/doctest.h>
 
 #include "raftpp/core/primitives.h"

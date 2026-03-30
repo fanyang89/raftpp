@@ -18,8 +18,6 @@ target_link_libraries(raftor-wal PRIVATE
   crc32c
   libassert::assert
   spdlog::spdlog
-  absl::flat_hash_map
-  absl::flat_hash_set
   opentelemetry-cpp::api)
 
 if(RAFTPP_WITH_LIBURING AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND TARGET uring::uring)

@@ -29,9 +29,13 @@ class TestAckIndexer final : public AckedIndexer {
     bool Contains(uint64_t id) const { return data_.count(id) != 0; }
 
     void Retain(const std::function<bool(uint64_t, Index)>& predicate) {
-        absl::erase_if(data_, [&predicate](const auto& kv) {
-            return !predicate(kv.first, kv.second);
-        });
+        for (auto it = data_.begin(); it != data_.end();) {
+            if (!predicate(it->first, it->second)) {
+                it = data_.erase(it);
+                continue;
+            }
+            ++it;
+        }
     }
 
   private:

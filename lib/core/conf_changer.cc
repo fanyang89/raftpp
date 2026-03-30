@@ -206,8 +206,8 @@ Result<std::pair<TrackerConfiguration, MapChange>> ConfChanger::Simple(
             return r.error();
         }
 
-        // set_symmetric_difference requires sorted ranges, but MajorityConfig (absl::flat_hash_set)
-        // is unordered. Convert to sorted vectors first.
+        // set_symmetric_difference requires sorted ranges, so convert the unordered
+        // voter sets into sorted vectors first.
         std::vector<uint64_t> new_voters(
             cfg.voters.incoming().begin(), cfg.voters.incoming().end()
         );

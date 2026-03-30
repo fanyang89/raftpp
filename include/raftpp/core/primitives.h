@@ -1,7 +1,8 @@
 #pragma once
 
-#include <absl/container/flat_hash_map.h>
-#include <absl/container/flat_hash_set.h>
+#include <cstdint>
+#include <unordered_map>
+#include <unordered_set>
 
 namespace raftpp {
 
@@ -9,9 +10,23 @@ constexpr uint64_t kInvalidIndex = 0;
 constexpr uint64_t kInvalidId = 0;
 
 template <typename K, typename V, typename... Args>
-using Map = absl::flat_hash_map<K, V, Args...>;
+class Map : public std::unordered_map<K, V, Args...> {
+  public:
+    using std::unordered_map<K, V, Args...>::unordered_map;
+
+    [[nodiscard]] bool contains(const K& key) const { return this->find(key) != this->end(); }
+
+    [[nodiscard]] bool Contains(const K& key) const { return this->find(key) != this->end(); }
+};
 
 template <typename K, typename... Args>
-using Set = absl::flat_hash_set<K, Args...>;
+class Set : public std::unordered_set<K, Args...> {
+  public:
+    using std::unordered_set<K, Args...>::unordered_set;
+
+    [[nodiscard]] bool contains(const K& key) const { return this->find(key) != this->end(); }
+
+    [[nodiscard]] bool Contains(const K& key) const { return this->find(key) != this->end(); }
+};
 
 }  // namespace raftpp

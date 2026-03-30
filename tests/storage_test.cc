@@ -1,8 +1,8 @@
 #include "raftpp/core/storage.h"
 
-#include <absl/strings/str_join.h>
 #include <doctest/doctest.h>
 #include <spdlog/fmt/fmt.h>
+#include <spdlog/fmt/ranges.h>
 
 #include "harness/test_util.h"
 #include "raftpp/core/memory_storage.h"
@@ -36,7 +36,7 @@ struct fmt::formatter<std::vector<Entry>> : formatter<std::string_view> {
                 )
             );
         }
-        return fmt::format_to(ctx.out(), "[\n{}\n]", absl::StrJoin(s, ",\n"));
+        return fmt::format_to(ctx.out(), "[\n{}\n]", fmt::join(s, ",\n"));
     }
 };
 

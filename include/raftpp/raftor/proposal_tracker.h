@@ -9,9 +9,8 @@
 #include <string>
 #include <utility>
 
-#include <absl/container/flat_hash_map.h>
-
 #include "raftpp/core/error.h"
+#include "raftpp/core/primitives.h"
 
 namespace raftpp::raftor {
 
@@ -98,8 +97,8 @@ class ProposalTracker {
     };
 
     mutable std::mutex mutex_;
-    absl::flat_hash_map<std::string, PendingProposal> proposals_;
-    absl::flat_hash_map<std::string, PendingRead> reads_;
+    Map<std::string, PendingProposal> proposals_;
+    Map<std::string, PendingRead> reads_;
 };
 
 /// Thread-safe queue for cross-thread proposal submission

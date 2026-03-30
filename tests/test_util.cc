@@ -1,7 +1,7 @@
 #include "test_util.h"
 
-#include <absl/strings/str_join.h>
 #include <spdlog/fmt/fmt.h>
+#include <spdlog/fmt/ranges.h>
 
 #include "raftpp/core/capnp_util.h"
 #include "raftpp/core/raft_core.h"
@@ -31,7 +31,7 @@ doctest::String toString(const std::vector<Entry>& entries) {
             )
         );
     }
-    const auto s = absl::StrJoin(entries_strings, ",\n");
+    const auto s = fmt::format("{}", fmt::join(entries_strings, ",\n"));
     if (s.empty()) {
         return "[]";
     }
