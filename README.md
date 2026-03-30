@@ -83,7 +83,7 @@ public:
     raftpp::Result<raftpp::raftor::ApplyResult> Apply(const raftpp::Entry& entry) override {
         // Apply the committed entry to your application state
         // Return the result to be passed back to the proposer
-        return raftpp::raftor::ApplyResult{.response = "ok"};
+        return raftpp::raftor::ApplyResult{"ok"};
     }
 
     raftpp::Result<raftpp::SnapshotMetadata> TakeSnapshot(

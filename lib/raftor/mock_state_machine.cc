@@ -20,7 +20,7 @@ Result<ApplyResult> MockStateMachine::Apply(const Entry& entry) {
     response.append(payload);
     applied_entries_.push_back(std::move(payload));
     ++apply_success_count_;
-    return ApplyResult{.response = std::move(response)};
+    return ApplyResult{std::move(response)};
 }
 
 Result<SnapshotMetadata> MockStateMachine::TakeSnapshot(
