@@ -148,7 +148,7 @@ Entry constructors use `(index, term)` parameter order - be consistent with this
 
 ### Using fmt Library
 
-Always use the vendored fmt wrapper instead of including fmt headers directly:
+Always use the project fmt wrapper instead of including fmt headers directly:
 
 ```cpp
 // Correct

@@ -11,3 +11,5 @@ This directory vendors a minimal header-only subset of `{fmt}` from upstream `fm
   - `LICENSE`
 
 Project code should include `raftpp/fmt.h` instead of including `{fmt}` headers directly.
+
+Set `RAFTPP_USE_EXTERNAL_FMT=ON` to use an externally provided `fmt` package via `find_package(fmt CONFIG REQUIRED)`.
