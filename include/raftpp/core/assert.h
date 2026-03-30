@@ -45,13 +45,15 @@ std::string DiagnosticToString(const T& value) {
     }
 }
 
-inline void AppendDiagnostics(std::string&) {}
-
-template <typename First, typename... Rest>
-void AppendDiagnostics(std::string& message, const First& first, const Rest&... rest) {
+template <typename T>
+void AppendDiagnostic(std::string& message, const T& value) {
     message.append(" | ");
-    message.append(DiagnosticToString(first));
-    AppendDiagnostics(message, rest...);
+    message.append(DiagnosticToString(value));
+}
+
+template <typename... Diagnostics>
+void AppendDiagnostics(std::string& message, const Diagnostics&... diagnostics) {
+    (AppendDiagnostic(message, diagnostics), ...);
 }
 
 template <typename... Diagnostics>
