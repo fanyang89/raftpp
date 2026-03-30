@@ -174,22 +174,6 @@ Result<TestNode> CreateTestNode(
     return node;
 }
 
-TEST_CASE("RaftorConfig RDMA validation") {
-    RaftorConfig config;
-    config.node_id = 1;
-    config.listen_addr = "127.0.0.1:0";
-    config.data_dir = std::filesystem::temp_directory_path() / "raftpp_test_rdmavalidation";
-    config.election_tick = 10;
-    config.heartbeat_tick = 1;
-    config.transport_kind = TransportKind::Rdma;
-    config.max_size_per_message = 1024;
-    config.rdma.buffer_size = 512;
-
-    auto result = config.Validate();
-    REQUIRE_MESSAGE(!result, "expected Validate to fail for RDMA config");
-    CHECK_MESSAGE(result.error().Is(ConfigErrorCode::RdmaConfigInvalid), result.error().ToString());
-}
-
 void PollAll(std::vector<std::unique_ptr<Raftor>>& raftors, std::chrono::milliseconds duration) {
     auto deadline = std::chrono::steady_clock::now() + duration;
     while (std::chrono::steady_clock::now() < deadline) {

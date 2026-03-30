@@ -9,7 +9,7 @@ A feature-complete implementation of the [RAFT consensus algorithm][RAFT] writte
 - **Joint Consensus**: Safe cluster membership changes (add/remove multiple nodes)
 - **Linearizable Reads**: Two modes - quorum-based (Safe) and lease-based (LeaseBased)
 - **Pluggable Storage**: Abstract `Storage` interface with built-in WAL and in-memory implementations
-- **Pluggable Transport**: Cap'n Proto RPC (default) and optional RDMA for ultra-low-latency
+- **Pluggable Transport**: Cap'n Proto RPC
 - **Write-Ahead Log**: Segmented files, CRC32C checksums, io_uring support on Linux
 - **OpenTelemetry Integration**: Built-in distributed tracing support
 
@@ -31,7 +31,7 @@ A feature-complete implementation of the [RAFT consensus algorithm][RAFT] writte
          ▼                    ▼                    ▼
 ┌─────────────┐      ┌─────────────┐      ┌─────────────┐
 │  Transport  │      │   RawNode   │      │     WAL     │
-│ (Cap'n/RDMA)│      │ (Raft Core) │      │  (Storage)  │
+│   (Cap'n)   │      │ (Raft Core) │      │  (Storage)  │
 └─────────────┘      └─────────────┘      └─────────────┘
 ```
 
@@ -66,9 +66,6 @@ cmake --preset=Debug -B build -DRAFTPP_SANITIZE=address
 
 # Enable thread sanitizer
 cmake --preset=Debug -B build -DRAFTPP_SANITIZE=thread
-
-# Enable RDMA transport (requires rdma-core)
-cmake --preset=Debug -B build -DRAFTPP_WITH_RDMA=ON
 
 # Enable io_uring (Linux, requires system liburing via pkg-config)
 cmake --preset=Debug -B build -DRAFTPP_WITH_LIBURING=ON
@@ -226,33 +223,6 @@ while (raw_node.HasReady()) {
     auto light_ready = raw_node.Advance(ready);
     // Process light_ready...
 }
-```
-
-## RDMA Transport
-
-For ultra-low-latency clusters, enable RDMA transport:
-
-```bash
-cmake --preset=Debug -B build -DRAFTPP_WITH_RDMA=ON
-```
-
-Requires rdma-core user-space libraries (`libibverbs`, `librdmacm`).
-
-```cpp
-raftpp::raftor::RaftorConfig config;
-config.transport_kind = raftpp::raftor::TransportKind::Rdma;
-config.rdma.buffer_size = 1024 * 1024
-    + raftpp::raftor::rpc::Codec::MessageOverhead()
-    + raftpp::raftor::rpc::Codec::FrameOverhead();
-```
-
-Run RDMA tests:
-
-```bash
-RAFTPP_RDMA_TEST=1 \
-RAFTPP_RDMA_ADDR1=10.0.0.1:19100 \
-RAFTPP_RDMA_ADDR2=10.0.0.2:19101 \
-task test
 ```
 
 ## Examples
