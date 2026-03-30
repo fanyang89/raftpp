@@ -18,90 +18,125 @@ jobs:
   format-check:
     name: Format Check
     runs-on: ubuntu-latest
-    container:
-      image: fedora:43
     steps:
       - uses: actions/checkout@v5
 
-      - name: Install clang-format
-        run: dnf install -y clang-tools-extra
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y clang-format
+
+      - name: Install Task
+        uses: go-task/setup-task@v2
 
       - name: Check formatting
-        run: |
-          find include lib tests -type f \( -name '*.cc' -o -name '*.h' -o -name '*.hpp' \) \
-            ! -path '*/generated/*' ! -name '*.pb.*' \
-            -exec clang-format --style=file --dry-run --Werror {} +
+        run: task check-fmt
 
   lint:
     name: Lint (cppcheck)
-    runs-on: ubuntu-latest
-    container:
-      image: fedora:43
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
 
-      - name: Install cppcheck
-        run: dnf install -y cppcheck
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y cppcheck
+
+      - name: Install Task
+        uses: go-task/setup-task@v2
 
       - name: Run cppcheck
-        run: cppcheck --error-exitcode=1 --enable=warning,performance include lib
+        run: task lint
 
-  build-and-test:
-    name: Build (${{ matrix.name }})
-    runs-on: ubuntu-latest
-    container:
-      image: fedora:43
+  build-and-test-x64:
+    name: "x64 / ${{ matrix.compiler }} / ${{ matrix.build_type }}${{ matrix.sanitizer && format(' / {0}', matrix.sanitizer) || '' }}"
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - preset: dev
-            name: "Debug + Sanitizers"
-            build_dir: build
-          - preset: clang
-            name: "Release"
-            build_dir: build-clang
-
+        compiler: [clang, gcc]
+        build_type: [Debug, Release]
+        sanitizer: [address, thread, ""]
+        exclude:
+          - build_type: Release
+            sanitizer: thread
     steps:
       - uses: actions/checkout@v5
 
       - name: Install system dependencies
-        run: dnf install -y ninja-build ccache clang cmake git patch rdma-core rdma-core-devel
+        run: sudo apt-get update && sudo apt-get install -y ninja-build clang g++ cmake git
 
       - name: Cache CPM dependencies
         uses: actions/cache@v5
         with:
           path: .cache/cpm
-          key: cpm-fedora-${{ hashFiles('third_party/CMakeLists.txt', 'cmake/CPM.cmake') }}
+          key: cpm-${{ runner.arch }}-${{ hashFiles('third_party/CMakeLists.txt', 'cmake/CPM.cmake') }}
           restore-keys: |
-            cpm-fedora-
-
-      - name: Cache ccache
-        uses: actions/cache@v5
-        with:
-          path: ~/.ccache
-          key: ccache-fedora-${{ matrix.preset }}-${{ github.sha }}
-          restore-keys: |
-            ccache-fedora-${{ matrix.preset }}-
-            ccache-fedora-
-
-      - name: Configure ccache
-        run: |
-          ccache --set-config=max_size=500M
-          ccache --set-config=compression=true
-          ccache -z
+            cpm-${{ runner.arch }}-
 
       - name: Configure CMake
-        run: cmake --preset=${{ matrix.preset }}
+        run: |
+          TOOLCHAIN=cmake/${{ matrix.compiler }}-toolchain.cmake
+          cmake --preset=${{ matrix.build_type }} \
+            -B build \
+            -DCMAKE_TOOLCHAIN_FILE=$TOOLCHAIN \
+            -DRAFTPP_WITH_RDMA=OFF \
+            ${{ matrix.sanitizer && format('-DRAFTPP_SANITIZE={0}', matrix.sanitizer) || '' }}
 
       - name: Build
-        run: cmake --build ${{ matrix.build_dir }} --target raftpp-tests data-driven-tests
-
-      - name: Show ccache stats
-        run: ccache -s
+        run: cmake --build build
 
       - name: Run Unit Tests
-        run: ./${{ matrix.build_dir }}/tests/raftpp-tests
+        run: ./build/tests/raftpp-tests
 
       - name: Run Data-Driven Tests
-        run: ./${{ matrix.build_dir }}/tests/datadriven/data-driven-tests
+        run: ./build/tests/datadriven/data-driven-tests
+
+  build-and-test-arm64:
+    name: "arm64 / ${{ matrix.compiler }} / ${{ matrix.build_type }}${{ matrix.sanitizer && format(' / {0}', matrix.sanitizer) || '' }}"
+    runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [clang, gcc]
+        build_type: [Debug, Release]
+        sanitizer: [address, thread, ""]
+        exclude:
+          - build_type: Release
+            sanitizer: thread
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y ninja-build clang g++ cmake git
+
+      - name: Show runner details
+        run: |
+          uname -a
+          clang --version
+          gcc --version
+          cmake --version
+          ninja --version
+
+      - name: Cache CPM dependencies
+        uses: actions/cache@v5
+        with:
+          path: .cache/cpm
+          key: cpm-${{ runner.arch }}-${{ hashFiles('third_party/CMakeLists.txt', 'cmake/CPM.cmake') }}
+          restore-keys: |
+            cpm-${{ runner.arch }}-
+
+      - name: Configure CMake
+        run: |
+          TOOLCHAIN=cmake/${{ matrix.compiler }}-toolchain.cmake
+          cmake --preset=${{ matrix.build_type == 'Debug' && 'Debug' || 'Release' }} \
+            -B build \
+            -DCMAKE_TOOLCHAIN_FILE=$TOOLCHAIN \
+            -DRAFTPP_WITH_RDMA=OFF \
+            ${{ matrix.sanitizer && format('-DRAFTPP_SANITIZE={0}', matrix.sanitizer) || '' }}
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Run Unit Tests
+        run: ./build/tests/raftpp-tests
+
+      - name: Run Data-Driven Tests
+        run: ./build/tests/datadriven/data-driven-tests

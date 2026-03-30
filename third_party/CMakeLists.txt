@@ -38,6 +38,9 @@ CPMAddPackage(
   OPTIONS
     "BUILD_TESTING OFF"
     "WITH_OPENSSL OFF"
+    "WITH_FIBERS OFF"
+  PATCHES
+    ${CMAKE_CURRENT_SOURCE_DIR}/patches/capnproto-no-fibers-asan.patch
 )
 
 if(RAFTPP_WITH_LIBURING)

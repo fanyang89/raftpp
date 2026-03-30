@@ -2,38 +2,27 @@
   "version": 3,
   "configurePresets": [
     {
-      "name": "dev",
-      "binaryDir": "${sourceDir}/build",
+      "name": "Debug",
       "generator": "Ninja",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_C_COMPILER": "clang",
-        "CMAKE_CXX_COMPILER": "clang++",
-        "CMAKE_CXX_SCAN_FOR_MODULES": "OFF",
-        "RAFTPP_SANITIZE": "address"
-      }
-    },
-    {
-      "name": "clang",
-      "binaryDir": "${sourceDir}/build-clang",
-      "generator": "Ninja",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
-        "CMAKE_C_COMPILER": "clang",
-        "CMAKE_CXX_COMPILER": "clang++",
         "CMAKE_CXX_SCAN_FOR_MODULES": "OFF"
       }
     },
     {
-      "name": "coverage",
-      "binaryDir": "${sourceDir}/build-coverage",
+      "name": "Release",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_SCAN_FOR_MODULES": "OFF"
+      }
+    },
+    {
+      "name": "RelWithDebInfo",
       "generator": "Ninja",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
-        "CMAKE_C_COMPILER": "clang",
-        "CMAKE_CXX_COMPILER": "clang++",
-        "CMAKE_CXX_SCAN_FOR_MODULES": "OFF",
-        "RAFTPP_COVERAGE": "ON"
+        "CMAKE_CXX_SCAN_FOR_MODULES": "OFF"
       }
     }
   ]

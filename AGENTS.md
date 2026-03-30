@@ -1,10 +1,10 @@
 # AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance for coding agents working with code in this repository.
 
 ## Project Overview
 
-raftpp is a C++ implementation of the RAFT consensus algorithm. It requires C++23 and uses CMake with Ninja as the build system.
+raftpp is a C++ implementation of the RAFT consensus algorithm. It currently builds with C++17 and uses CMake with Ninja as the build system.
 
 ## Language
 
@@ -22,7 +22,7 @@ All code contributions must adhere to this style.
 ## Build Commands
 
 ```bash
-task cmake    # Configure CMake with dev preset
+task cmake    # Configure CMake with debug preset
 task build    # Build test targets
 task test     # Build and run all tests
 task fmt      # Format code with clang-format
@@ -46,7 +46,8 @@ task fmt      # Format code with clang-format
 Enable sanitizers via CMake:
 
 ```bash
-cmake --preset=dev -DRAFTPP_SANITIZE=address
+cmake --preset=Debug -B build -DRAFTPP_SANITIZE=address
+cmake --preset=Debug -B build -DRAFTPP_SANITIZE=thread
 ```
 
 ## Architecture
@@ -67,23 +68,23 @@ cmake --preset=dev -DRAFTPP_SANITIZE=address
 
 6. **ReadOnly** (`core/read_only.h`) - Read-only operation handling for linearizable reads.
 
-7. **Core Utilities** - `capnp_message.h` (Cap'n Proto serialization), `inflights.h` (in-flight tracking), `error.h`/`status.h` (error handling).
+7. **Core Utilities** - `capnp_util.h` (Cap'n Proto helpers), `inflights.h` (in-flight tracking), `error.h`/`status.h` (error handling).
 
 ### High-Level Integration Components
 
-7. **Raftor** (`raftor/`) - Complete orchestration layer managing the Raft lifecycle:
+1. **Raftor** (`raftor/`) - Complete orchestration layer managing the Raft lifecycle:
    - Single-threaded event loop model with ticking
    - Ready processing in correct order (`ready_processor.h`)
    - Thread-safe proposal/read APIs with callbacks, futures, and sync variants
    - Users implement `StateMachine` interface for application logic
 
-8. **WAL** (`raftor/wal/`) - Write-Ahead Log for durable storage:
+2. **WAL** (`raftor/wal/`) - Write-Ahead Log for durable storage:
    - Segmented log files with CRC32C checksums
    - Metadata persistence for HardState/ConfState
    - Index for fast entry lookup
    - Log compaction via snapshots
 
-9. **RPC Transport** (`raftor/rpc/`) - Network layer with pluggable transports:
+3. **RPC Transport** (`raftor/rpc/`) - Network layer with pluggable transports:
    - `Transport` - Abstract interface for message passing
    - `CapnpTransport` - Cap'n Proto RPC implementation
    - `Codec` - Message encoding/decoding
@@ -91,7 +92,7 @@ cmake --preset=dev -DRAFTPP_SANITIZE=address
 
 ### Key Patterns
 
-**Error Handling**: Uses `std::expected<T, RaftError>` aliased as `Result<T>`:
+**Error Handling**: Uses `nonstd::expected<T, E>` aliased as `Result<T, E>`:
 
 ```cpp
 if (const auto result = operation(); !result) {
@@ -107,14 +108,14 @@ if (const auto result = operation(); !result) {
 
 ```
 include/raftpp/
-├── core/              # Core Raft implementation (25 headers)
+├── core/              # Core Raft implementation
 │   ├── raft.h, raft_core.h, raft_config.h
 │   ├── raw_node.h, raft_log.h, storage.h
 │   ├── progress_tracker.h, progress.h, inflights.h
 │   ├── conf_changer.h, joint_conf.h, majority_conf.h, tracker_conf.h
 │   ├── read_only.h, error.h, status.h, types.h
 │   └── ...
-├── raftor/            # High-level orchestration (3 headers + subdirs)
+├── raftor/            # High-level orchestration
 │   ├── raftor.h, raftor_config.h, state_machine.h
 │   ├── proposal_tracker.h
 │   ├── rpc/           # RPC transport layer
@@ -122,11 +123,11 @@ include/raftpp/
 └── ...
 
 lib/                   # Implementation files (.cc), mirrors include structure
-├── core/              # 19 implementation files
+├── core/
 ├── raftor/
 │   ├── raftor.cc, proposal_tracker.cc, ready_processor.h/.cc
-│   ├── rpc/           # 4 transport implementations
-│   └── wal/           # 9 WAL implementation files
+│   ├── rpc/
+│   └── wal/
 └── ...
 
 proto/
@@ -160,8 +161,8 @@ Always use spdlog's bundled fmt instead of the system fmt library:
 ### Logging and Output
 
 - Do not write directly to the console from production code or tests: no `std::cout`, `std::cerr`, `std::clog`, `printf`/`fprintf`, `puts`, `fmt::print`, or `std::print`.
-- Use `spdlog` for all logging. Prefer `SPDLOG_INFO/WARN/ERROR/DEBUG` (or `spdlog::info()`, etc.).
-- Avoid configuring `spdlog` to write to stderr (no `stderr_*` sinks) unless explicitly required; keep logs on stdout by default.
+- Use `raftpp/logging.h` for logging. Prefer `RAFTPP_LOG_DEBUG/INFO/WARN/ERROR/CRITICAL`.
+- `spdlog` is used as a backend dependency; avoid adding new direct `SPDLOG_*` or `spdlog::*` calls in normal project code unless you are changing the logging infrastructure itself.
 - Quick check before shipping changes:
   - `rg -n --glob '!build/**' --glob '!.cache/**' "\\bstd::cout\\b|\\bstd::cerr\\b|\\bstd::clog\\b|\\bprintf\\s*\\(|\\bfprintf\\s*\\(\\s*stderr\\b|\\bfmt::print\\b|\\bstd::print\\b" .`
 
