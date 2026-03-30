@@ -68,8 +68,8 @@ class CapturingLogRecord final : public opentelemetry::logs::LogRecord {
 
     void SetTimestamp(opentelemetry::common::SystemTimestamp /*timestamp*/) noexcept override {}
 
-    void
-    SetObservedTimestamp(opentelemetry::common::SystemTimestamp /*timestamp*/) noexcept override {}
+    void SetObservedTimestamp(opentelemetry::common::SystemTimestamp /*timestamp*/) noexcept
+        override {}
 
     void SetSeverity(opentelemetry::logs::Severity severity) noexcept override {
         captured_->severity = severity;
@@ -100,8 +100,7 @@ class CapturingLogRecord final : public opentelemetry::logs::LogRecord {
 
     void SetSpanId(const opentelemetry::trace::SpanId& /*span_id*/) noexcept override {}
 
-    void SetTraceFlags(
-        const opentelemetry::trace::TraceFlags& /*trace_flags*/
+    void SetTraceFlags(const opentelemetry::trace::TraceFlags& /*trace_flags*/
     ) noexcept override {}
 
   private:
@@ -114,8 +113,8 @@ class CapturingLogger final : public opentelemetry::logs::Logger {
 
     const opentelemetry::nostd::string_view GetName() noexcept override { return "test"; }
 
-    opentelemetry::nostd::unique_ptr<opentelemetry::logs::LogRecord>
-    CreateLogRecord() noexcept override {
+    opentelemetry::nostd::unique_ptr<opentelemetry::logs::LogRecord> CreateLogRecord(
+    ) noexcept override {
         return opentelemetry::nostd::unique_ptr<opentelemetry::logs::LogRecord>(
             new CapturingLogRecord(captured_)
         );
@@ -134,11 +133,9 @@ class CapturingLogger final : public opentelemetry::logs::Logger {
 class CapturingLoggerProvider final : public opentelemetry::logs::LoggerProvider {
   public:
     explicit CapturingLoggerProvider(CapturedLogRecord* captured)
-        : logger_(
-              opentelemetry::nostd::shared_ptr<opentelemetry::logs::Logger>(
-                  new CapturingLogger(captured)
-              )
-          ) {}
+        : logger_(opentelemetry::nostd::shared_ptr<opentelemetry::logs::Logger>(
+              new CapturingLogger(captured)
+          )) {}
 
     opentelemetry::nostd::shared_ptr<opentelemetry::logs::Logger> GetLogger(
         opentelemetry::nostd::string_view /*logger_name*/,
