@@ -9,6 +9,15 @@ project(raftpp
   DESCRIPTION "C++ RAFT"
   LANGUAGES C CXX)
 
+function(raftpp_enforce_cxx17 target_name)
+  if (TARGET ${target_name})
+    set_target_properties(${target_name} PROPERTIES
+      CXX_STANDARD 17
+      CXX_STANDARD_REQUIRED ON
+      CXX_EXTENSIONS OFF)
+  endif ()
+endfunction()
+
 option(RAFTPP_BUILD_TESTING "Build unit tests" ON)
 option(RAFTPP_BUILD_EXAMPLES "Build examples" ON)
 option(RAFTPP_WITH_CCACHE "Build with ccache" ON)
@@ -86,6 +95,19 @@ endif ()
 if (RAFTPP_BUILD_TESTING)
   add_subdirectory(tests)
 endif ()
+
+raftpp_enforce_cxx17(raftpp-proto)
+raftpp_enforce_cxx17(raftpp)
+raftpp_enforce_cxx17(raftor-rpc)
+raftpp_enforce_cxx17(raftor-wal)
+raftpp_enforce_cxx17(raftor)
+raftpp_enforce_cxx17(raftpp-test-harness)
+raftpp_enforce_cxx17(data-driven)
+raftpp_enforce_cxx17(data-driven-tests)
+raftpp_enforce_cxx17(raftpp-tests)
+raftpp_enforce_cxx17(kvstore-example)
+raftpp_enforce_cxx17(kvstore-cli)
+raftpp_enforce_cxx17(kvstore-test)
 
 if (RAFTPP_COVERAGE)
   if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")

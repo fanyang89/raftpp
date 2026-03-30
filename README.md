@@ -84,8 +84,9 @@ cmake --preset=Debug -B build -DRAFTPP_WITH_LIBURING=ON
 class MyStateMachine final : public raftpp::raftor::StateMachine {
  public:
     raftpp::Result<raftpp::raftor::ApplyResult> Apply(const raftpp::Entry& entry) override {
-        (void)entry;
-        return raftpp::raftor::ApplyResult{.response = "ok"};
+        // Apply the committed entry to your application state
+        // Return the result to be passed back to the proposer
+        return raftpp::raftor::ApplyResult{"ok"};
     }
 
     raftpp::Result<raftpp::SnapshotMetadata> TakeSnapshot(

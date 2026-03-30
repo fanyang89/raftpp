@@ -15,10 +15,10 @@ bool GetEntriesContext::CanAsync() const {
 }
 
 GetEntriesContext GetEntriesContext::Empty(const bool can_async) {
-    return GetEntriesContext{
-        .what = GetEntriesFor::Empty,
-        .payload = GetEntriesForPayload{.empty = {.can_async = can_async}}
-    };
+    GetEntriesContext context{};
+    context.what = GetEntriesFor::Empty;
+    context.payload.empty.can_async = can_async;
+    return context;
 }
 
 Storage::~Storage() = default;
