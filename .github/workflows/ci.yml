@@ -13,26 +13,25 @@ concurrency:
 
 env:
   CMAKE_GENERATOR: Ninja
+  FORMAT_IMAGE: ghcr.io/${{ github.repository_owner }}/clang-format:18
 
 jobs:
-  # format-check:
-  #   name: Format Check
-  #   runs-on: ubuntu-latest
-  #   container: fedora:43
-  #   steps:
-  #     - uses: actions/checkout@v5
-  #
-  #     - name: Install clang-format-18
-  #       run: dnf install -y clang-tools-extra-18
-  #
-  #     - name: Install Task
-  #       uses: go-task/setup-task@v2
-  #
-  #     - name: Check formatting
-  #       run: |
-  #         find include lib tests -type f \( -name '*.cc' -o -name '*.h' -o -name '*.hpp' \) \
-  #           ! -path '*/generated/*' ! -name '*.pb.*' \
-  #           -exec clang-format-18 --style=file --dry-run --Werror {} +
+  format-check:
+    name: Format Check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Task
+        uses: go-task/setup-task@v2
+
+      - name: Build format image
+        uses: ./.github/actions/build-format-image
+        with:
+          image: ${{ env.FORMAT_IMAGE }}
+
+      - name: Check formatting
+        run: task check-fmt
 
   lint:
     name: Lint (cppcheck)

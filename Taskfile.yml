@@ -9,7 +9,7 @@ tasks:
   docker-build:
     desc: Build the format image
     cmds:
-      - docker build -t ghcr.io/raftpp/clang-format:18 .
+      - docker build -t "${FORMAT_IMAGE:-ghcr.io/raftpp/clang-format:18}" .
 
   fmt:
     desc: Format all C++ source files with clang-format (via Docker)
@@ -18,11 +18,7 @@ tasks:
       - sh: command -v docker >/dev/null 2>&1
         msg: "docker is required. Run 'task docker-build' first."
     cmds:
-      - >
-        docker run --rm -v "{{.USER_WORKING_DIR}}:/raftpp" -w /raftpp
-        ghcr.io/raftpp/clang-format:18 --style=file -i
-        $(find include lib tests -type f \( -name '*.cc' -o -name '*.h' -o -name '*.hpp' \)
-        ! -path '*/generated/*' ! -name '*.pb.*')
+      - ./scripts/clang-format.sh fmt
 
   check-fmt:
     desc: Check formatting without modifying files (via Docker)
@@ -31,11 +27,7 @@ tasks:
       - sh: command -v docker >/dev/null 2>&1
         msg: "docker is required. Run 'task docker-build' first."
     cmds:
-      - >
-        docker run --rm -v "{{.USER_WORKING_DIR}}:/raftpp" -w /raftpp
-        ghcr.io/raftpp/clang-format:18 --style=file --dry-run --Werror
-        $(find include lib tests -type f \( -name '*.cc' -o -name '*.h' -o -name '*.hpp' \)
-        ! -path '*/generated/*' ! -name '*.pb.*')
+      - ./scripts/clang-format.sh check
 
   cmake:
     desc: Configure CMake with debug preset

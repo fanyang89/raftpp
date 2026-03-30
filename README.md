@@ -52,7 +52,11 @@ task cmake    # Configure CMake with dev preset
 task build    # Build all targets
 task test     # Run all tests
 task fmt      # Format code with clang-format
+task check-fmt  # Verify formatting without modifying files
 ```
+
+Formatting uses the repository Docker image end-to-end. Local `task fmt` and CI `Format Check`
+both run `scripts/clang-format.sh` against the same containerized `clang-format` version.
 
 ### Build Options
 
