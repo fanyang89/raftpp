@@ -23,6 +23,24 @@ namespace {
 
 using opentelemetry::logs::Severity;
 
+std::string_view Basename(std::string_view path) {
+    const size_t last_separator = path.find_last_of('/');
+    if (last_separator == std::string_view::npos) {
+        return path;
+    }
+    return path.substr(last_separator + 1);
+}
+
+std::string FormatCodeLocation(std::string_view filepath, std::string_view line) {
+    if (filepath.empty() || line.empty()) {
+        return {};
+    }
+
+    const std::string_view rendered_path =
+        !filepath.empty() && filepath.front() == '/' ? filepath : Basename(filepath);
+    return fmt::format("[{}:{}]", rendered_path, line);
+}
+
 spdlog::level::level_enum ToSpdlogLevel(Severity severity) {
     switch (severity) {
         case Severity::kTrace:
@@ -276,9 +294,33 @@ class SpdlogLogger final : public opentelemetry::logs::Logger {
             return;
         }
 
-        std::string message = spdlog_record->body();
+        std::string_view filepath;
+        std::string_view line;
         for (const auto& [key, value] : spdlog_record->attributes()) {
-            message.append(" ");
+            if (key == "code.filepath") {
+                filepath = value;
+                continue;
+            }
+            if (key == "code.lineno") {
+                line = value;
+            }
+        }
+
+        std::string message;
+        if (const std::string location = FormatCodeLocation(filepath, line); !location.empty()) {
+            message.append(location);
+            if (!spdlog_record->body().empty()) {
+                message.append(" ");
+            }
+        }
+        message.append(spdlog_record->body());
+        for (const auto& [key, value] : spdlog_record->attributes()) {
+            if (key == "code.filepath" || key == "code.lineno") {
+                continue;
+            }
+            if (!message.empty()) {
+                message.append(" ");
+            }
             message.append(key);
             message.append("=");
             message.append(value);
