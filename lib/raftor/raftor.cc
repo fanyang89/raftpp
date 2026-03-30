@@ -14,19 +14,11 @@
 
 #include "raftpp/logging.h"
 #include "raftpp/raftor/rpc/capnp_transport.h"
-#include "raftpp/raftor/rpc/codec.h"
 #include "raftpp/raftor/telemetry.h"
-#if defined(RAFTPP_WITH_RDMA) && RAFTPP_WITH_RDMA
-#include "raftpp/raftor/rpc/rdma_transport.h"
-#endif
 #include "raftpp/raftor/wal/wal_storage.h"
 #include "ready_processor.h"
 
 namespace raftpp::raftor {
-
-#ifndef RAFTPP_WITH_RDMA
-#define RAFTPP_WITH_RDMA 0
-#endif
 
 namespace {
 constexpr auto kLogSizeCheckMinInterval = std::chrono::seconds{1};
@@ -90,20 +82,6 @@ Result<void> LoadSnapshotDataFromFile(
 
     return {};
 }
-
-bool TryGetRdmaMaxFrameSize(uint64_t payload_max, size_t* max_frame_size) {
-    const size_t frame_overhead = rpc::Codec::FrameOverhead();
-    const size_t message_overhead = rpc::Codec::MessageOverhead();
-    if (message_overhead > std::numeric_limits<size_t>::max() - frame_overhead) {
-        return false;
-    }
-    const size_t total_overhead = frame_overhead + message_overhead;
-    if (payload_max > std::numeric_limits<size_t>::max() - total_overhead) {
-        return false;
-    }
-    *max_frame_size = static_cast<size_t>(payload_max) + total_overhead;
-    return true;
-}
 }  // namespace
 
 // === RaftorConfig implementation ===
@@ -120,36 +98,6 @@ Result<void> RaftorConfig::Validate() const {
     }
     if (election_tick <= heartbeat_tick) {
         return nonstd::make_unexpected(RaftError(ConfigErrorCode::ElectionTickTooSmall));
-    }
-    if (transport_kind == TransportKind::Rdma) {
-        if (rdma.recv_buffer_count == 0 || rdma.send_buffer_count == 0 || rdma.buffer_size == 0 ||
-            rdma.cq_depth == 0 || rdma.qp_depth == 0) {
-            return nonstd::make_unexpected(RaftError(ConfigErrorCode::RdmaConfigInvalid));
-        }
-        if (rdma.recv_buffer_count > rdma.qp_depth || rdma.send_buffer_count > rdma.qp_depth) {
-            return nonstd::make_unexpected(RaftError(ConfigErrorCode::RdmaConfigInvalid));
-        }
-        if (rdma.max_inline_data > rdma.buffer_size) {
-            return nonstd::make_unexpected(RaftError(ConfigErrorCode::RdmaConfigInvalid));
-        }
-        constexpr auto kMaxU32 = std::numeric_limits<uint32_t>::max();
-        if (rdma.buffer_size > kMaxU32 || rdma.recv_buffer_count > kMaxU32 ||
-            rdma.send_buffer_count > kMaxU32 || rdma.cq_depth > kMaxU32 ||
-            rdma.qp_depth > kMaxU32 || rdma.max_inline_data > kMaxU32) {
-            return nonstd::make_unexpected(RaftError(ConfigErrorCode::RdmaConfigInvalid));
-        }
-        size_t max_frame_size = 0;
-        if (!TryGetRdmaMaxFrameSize(max_size_per_message, &max_frame_size)) {
-            return nonstd::make_unexpected(RaftError(ConfigErrorCode::RdmaConfigInvalid));
-        }
-        if (rdma.buffer_size < max_frame_size) {
-            return nonstd::make_unexpected(RaftError(ConfigErrorCode::RdmaConfigInvalid));
-        }
-        const auto cq_needed =
-            static_cast<uint64_t>(rdma.recv_buffer_count) + rdma.send_buffer_count;
-        if (cq_needed > rdma.cq_depth) {
-            return nonstd::make_unexpected(RaftError(ConfigErrorCode::RdmaConfigInvalid));
-        }
     }
     return {};
 }
@@ -978,27 +926,7 @@ Result<std::unique_ptr<Raftor>> Raftor::Create(
     transport_config.node_id = config.node_id;
     transport_config.connect_timeout = config.connect_timeout;
     transport_config.max_message_size = config.max_size_per_message;
-    if (config.transport_kind == TransportKind::Rdma) {
-        size_t max_frame_size = 0;
-        if (TryGetRdmaMaxFrameSize(config.max_size_per_message, &max_frame_size)) {
-            transport_config.max_message_size = max_frame_size;
-        }
-    }
-
-    std::unique_ptr<rpc::Transport> transport;
-    switch (config.transport_kind) {
-        case TransportKind::Capnp:
-            transport = std::make_unique<rpc::CapnpTransport>(transport_config);
-            break;
-        case TransportKind::Rdma:
-#if RAFTPP_WITH_RDMA
-            transport = std::make_unique<rpc::RdmaTransport>(transport_config, config.rdma);
-#else
-            RAFTPP_LOG_WARN("RDMA transport requested but not enabled at build time");
-            return nonstd::make_unexpected(RaftError(ConfigErrorCode::RdmaNotEnabled));
-#endif
-            break;
-    }
+    auto transport = std::make_unique<rpc::CapnpTransport>(transport_config);
 
     return Create(config, std::move(state_machine), std::move(storage), std::move(transport));
 }

@@ -8,7 +8,6 @@
 
 #include "raftpp/core/error.h"
 #include "raftpp/core/raft_config.h"
-#include "raftpp/raftor/rpc/rdma_config.h"
 
 namespace raftpp::raftor {
 
@@ -16,8 +15,6 @@ namespace raftpp::raftor {
 enum class TransportKind {
     /// Cap'n Proto RPC transport (default).
     Capnp,
-    /// RDMA transport using rdma-core (RC).
-    Rdma,
 };
 
 /// Peer node configuration
@@ -39,9 +36,6 @@ struct RaftorConfig {
 
     /// RPC transport kind (default: Capnp)
     TransportKind transport_kind = TransportKind::Capnp;
-
-    /// RDMA transport parameters (used when transport_kind == Rdma)
-    rpc::RdmaConfig rdma;
 
     /// Initial cluster configuration (for bootstrap)
     /// Should include this node and all other initial peers

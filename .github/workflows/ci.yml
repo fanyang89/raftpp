@@ -50,6 +50,7 @@ jobs:
 
   build-and-test-x64:
     name: "x64 / ${{ matrix.compiler }} / ${{ matrix.build_type }}${{ matrix.sanitizer && format(' / {0}', matrix.sanitizer) || '' }}"
+    needs: [format-check, lint]
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -80,7 +81,6 @@ jobs:
           cmake --preset=${{ matrix.build_type }} \
             -B build \
             -DCMAKE_TOOLCHAIN_FILE=$TOOLCHAIN \
-            -DRAFTPP_WITH_RDMA=OFF \
             ${{ matrix.sanitizer && format('-DRAFTPP_SANITIZE={0}', matrix.sanitizer) || '' }}
 
       - name: Build
@@ -94,6 +94,7 @@ jobs:
 
   build-and-test-arm64:
     name: "arm64 / ${{ matrix.compiler }} / ${{ matrix.build_type }}${{ matrix.sanitizer && format(' / {0}', matrix.sanitizer) || '' }}"
+    needs: [format-check, lint]
     runs-on: ubuntu-24.04-arm
     strategy:
       fail-fast: false
@@ -132,7 +133,6 @@ jobs:
           cmake --preset=${{ matrix.build_type == 'Debug' && 'Debug' || 'Release' }} \
             -B build \
             -DCMAKE_TOOLCHAIN_FILE=$TOOLCHAIN \
-            -DRAFTPP_WITH_RDMA=OFF \
             ${{ matrix.sanitizer && format('-DRAFTPP_SANITIZE={0}', matrix.sanitizer) || '' }}
 
       - name: Build
