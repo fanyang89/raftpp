@@ -3,7 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
-#include <span>
+#include <nonstd/span.hpp>
 #include <string>
 
 #include "raftpp/core/error.h"
@@ -21,7 +21,7 @@ struct ApplyResult {
 class SnapshotWriter {
   public:
     virtual ~SnapshotWriter() = default;
-    [[nodiscard]] virtual Result<void> Write(std::span<const uint8_t> chunk) = 0;
+    [[nodiscard]] virtual Result<void> Write(nonstd::span<const uint8_t> chunk) = 0;
 };
 
 /// Streaming source for snapshot bytes.
@@ -29,7 +29,7 @@ class SnapshotReader {
   public:
     virtual ~SnapshotReader() = default;
     /// Read up to out.size() bytes. Returns 0 on EOF.
-    [[nodiscard]] virtual Result<size_t> Read(std::span<uint8_t> out) = 0;
+    [[nodiscard]] virtual Result<size_t> Read(nonstd::span<uint8_t> out) = 0;
 };
 
 /// The StateMachine interface that users must implement

@@ -31,7 +31,7 @@ class BufferSnapshotWriter final : public raftpp::raftor::SnapshotWriter {
   public:
     explicit BufferSnapshotWriter(std::vector<uint8_t>* buffer) : buffer_(buffer) {}
 
-    raftpp::Result<void> Write(std::span<const uint8_t> chunk) override {
+    raftpp::Result<void> Write(nonstd::span<const uint8_t> chunk) override {
         buffer_->insert(buffer_->end(), chunk.begin(), chunk.end());
         return {};
     }
@@ -44,7 +44,7 @@ class BufferSnapshotReader final : public raftpp::raftor::SnapshotReader {
   public:
     explicit BufferSnapshotReader(const std::vector<uint8_t>* buffer) : buffer_(buffer) {}
 
-    raftpp::Result<size_t> Read(std::span<uint8_t> out) override {
+    raftpp::Result<size_t> Read(nonstd::span<uint8_t> out) override {
         if (offset_ >= buffer_->size()) {
             return 0;
         }

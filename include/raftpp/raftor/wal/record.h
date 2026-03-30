@@ -2,7 +2,7 @@
 
 #include <cstdint>
 #include <cstring>
-#include <span>
+#include <nonstd/span.hpp>
 #include <string>
 #include <vector>
 
@@ -32,11 +32,11 @@ struct SegmentHeader {
         return magic == kSegmentMagic && version == kFormatVersion;
     }
 
-    void Serialize(std::span<uint8_t, 32> out) const {
+    void Serialize(nonstd::span<uint8_t, 32> out) const {
         std::memcpy(out.data(), this, sizeof(*this));
     }
 
-    static SegmentHeader Deserialize(std::span<const uint8_t, 32> in) {
+    static SegmentHeader Deserialize(nonstd::span<const uint8_t, 32> in) {
         SegmentHeader h;
         std::memcpy(&h, in.data(), sizeof(h));
         return h;
@@ -54,11 +54,11 @@ struct RecordHeader {
     uint32_t length = 0;    // Payload length
     uint32_t padding = 0;   // Padding bytes for 8-byte alignment
 
-    void Serialize(std::span<uint8_t, 16> out) const {
+    void Serialize(nonstd::span<uint8_t, 16> out) const {
         std::memcpy(out.data(), this, sizeof(*this));
     }
 
-    static RecordHeader Deserialize(std::span<const uint8_t, 16> in) {
+    static RecordHeader Deserialize(nonstd::span<const uint8_t, 16> in) {
         RecordHeader h;
         std::memcpy(&h, in.data(), sizeof(h));
         return h;
@@ -109,7 +109,7 @@ class RecordBuilder {
 
     void SetType(RecordType type) { type_ = type; }
 
-    void SetPayload(std::span<const uint8_t> payload);
+    void SetPayload(nonstd::span<const uint8_t> payload);
     void SetPayload(const std::string& payload);
 
     // Build the complete record with CRC
@@ -123,19 +123,19 @@ class RecordBuilder {
 // Helper to parse records
 class RecordParser {
   public:
-    explicit RecordParser(std::span<const uint8_t> data);
+    explicit RecordParser(nonstd::span<const uint8_t> data);
 
     [[nodiscard]] bool IsValid() const { return valid_; }
 
     [[nodiscard]] RecordHeader Header() const { return header_; }
 
-    [[nodiscard]] std::span<const uint8_t> Payload() const { return payload_; }
+    [[nodiscard]] nonstd::span<const uint8_t> Payload() const { return payload_; }
 
     [[nodiscard]] RecordType Type() const { return static_cast<RecordType>(header_.type); }
 
   private:
     RecordHeader header_;
-    std::span<const uint8_t> payload_;
+    nonstd::span<const uint8_t> payload_;
     bool valid_ = false;
 };
 

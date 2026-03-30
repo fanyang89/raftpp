@@ -86,14 +86,14 @@ raftpp::Result<std::map<std::string, std::string>> deserializeData(
     try {
         auto j = nlohmann::json::parse(stream);
         if (stream_buf.error().has_value()) {
-            return std::unexpected(*stream_buf.error());
+            return nonstd::make_unexpected(*stream_buf.error());
         }
         return j.get<std::map<std::string, std::string>>();
     } catch (const nlohmann::json::exception& e) {
         if (stream_buf.error().has_value()) {
-            return std::unexpected(*stream_buf.error());
+            return nonstd::make_unexpected(*stream_buf.error());
         }
-        return std::unexpected(
+        return nonstd::make_unexpected(
             raftpp::RaftError(
                 raftpp::StorageErrorOther{
                     std::string("kvstore snapshot parse failed: ") + e.what(),
@@ -112,7 +112,7 @@ raftpp::Result<raftpp::raftor::ApplyResult> KvStoreStateMachine::Apply(const raf
 
     auto cmd_opt = parseFromJson(data_str);
     if (!cmd_opt.has_value()) {
-        return std::unexpected(raftpp::RaftError(raftpp::RaftErrorCode::ProposalDropped));
+        return nonstd::make_unexpected(raftpp::RaftError(raftpp::RaftErrorCode::ProposalDropped));
     }
 
     auto& cmd = *cmd_opt;
@@ -166,11 +166,13 @@ raftpp::Result<raftpp::SnapshotMetadata> KvStoreStateMachine::TakeSnapshot(
 ) {
     std::lock_guard lock(mutex_);
     std::string data_str = serializeData(data_);
-    auto write_result = writer.Write(std::span<const uint8_t>(
-        reinterpret_cast<const uint8_t*>(data_str.data()), data_str.size()
-    ));
+    auto write_result = writer.Write(
+        nonstd::span<const uint8_t>(
+            reinterpret_cast<const uint8_t*>(data_str.data()), data_str.size()
+        )
+    );
     if (!write_result) {
-        return std::unexpected(write_result.error());
+        return nonstd::make_unexpected(write_result.error());
     }
 
     auto metadata = raftpp::capnp_util::make<raftpp::msg::SnapshotMetadata>();
@@ -186,7 +188,7 @@ raftpp::Result<void> KvStoreStateMachine::RestoreSnapshot(
 ) {
     auto meta = raftpp::capnp_util::reader<raftpp::msg::SnapshotMetadata>(metadata);
     if (meta.getIndex() == 0) {
-        return std::unexpected(
+        return nonstd::make_unexpected(
             raftpp::RaftError(
                 raftpp::StorageErrorOther{
                     "kvstore snapshot metadata index must be non-zero",
@@ -197,7 +199,7 @@ raftpp::Result<void> KvStoreStateMachine::RestoreSnapshot(
 
     auto data_result = deserializeData(reader);
     if (!data_result) {
-        return std::unexpected(data_result.error());
+        return nonstd::make_unexpected(data_result.error());
     }
 
     std::lock_guard lock(mutex_);

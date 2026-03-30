@@ -140,7 +140,7 @@ TEST_SUITE("rpc::rdma") {
         auto msg = MakeMessage(1, 2);
         auto deadline = std::chrono::steady_clock::now() + 2s;
         while (std::chrono::steady_clock::now() < deadline && collector2.Count() == 0) {
-            t1.Send(std::span(&msg, 1));
+            t1.Send(nonstd::span(&msg, 1));
             PollBoth(t1, t2, 20ms);
             std::this_thread::sleep_for(5ms);
         }

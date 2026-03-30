@@ -1,7 +1,8 @@
 #pragma once
 
 #include <optional>
-#include <span>
+
+#include <nonstd/span.hpp>
 
 #include "progress.h"
 #include "raft_config.h"
@@ -39,7 +40,12 @@ constexpr std::string_view format_as(StateRole role) {
 struct SoftState {
     uint64_t leader_id;
     StateRole raft_state;
-    bool operator==(const SoftState& other) const = default;
+
+    bool operator==(const SoftState& other) const {
+        return leader_id == other.leader_id && raft_state == other.raft_state;
+    }
+
+    bool operator!=(const SoftState& other) const { return !(*this == other); }
 };
 
 struct UncommittedState {
@@ -48,8 +54,8 @@ struct UncommittedState {
     uint64_t last_log_tail_index;
 
     [[nodiscard]] bool IsNoLimit() const;
-    [[nodiscard]] bool MaybeIncreaseUncommittedSize(std::span<const Entry> entries);
-    [[nodiscard]] bool MaybeReduceUncommittedSize(std::span<const Entry> entries);
+    [[nodiscard]] bool MaybeIncreaseUncommittedSize(nonstd::span<const Entry> entries);
+    [[nodiscard]] bool MaybeReduceUncommittedSize(nonstd::span<const Entry> entries);
 };
 
 class RaftCore {

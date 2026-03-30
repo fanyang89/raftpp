@@ -81,6 +81,16 @@ CPMAddPackage(
   GIT_TAG "main"
   OPTIONS
     "OPENTELEMETRY_INSTALL OFF"
-    "WITH_STL CXX23"
+    "WITH_STL CXX17"
     "WITH_NO_DEPRECATED_CODE ON"
+)
+
+# C++17 polyfills
+CPMAddPackage(
+  URI "https://github.com/nonstd-lite/expected-lite.git"
+  GIT_TAG "v0.10.0"
+)
+CPMAddPackage(
+  URI "https://github.com/nonstd-lite/span-lite.git"
+  GIT_TAG "v0.11.0"
 )

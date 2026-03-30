@@ -40,7 +40,7 @@ void JointConfiguration::Clear() {
 }
 
 bool JointConfiguration::Contains(const uint64_t id) const {
-    return incoming_.contains(id) || outgoing_.contains(id);
+    return incoming_.count(id) != 0 || outgoing_.count(id) != 0;
 }
 
 bool JointConfiguration::IsSingleton() const {

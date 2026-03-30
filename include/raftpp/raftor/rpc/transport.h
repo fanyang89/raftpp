@@ -2,7 +2,7 @@
 
 #include <chrono>
 #include <functional>
-#include <span>
+#include <nonstd/span.hpp>
 #include <string>
 
 #include "codec.h"
@@ -64,7 +64,7 @@ class Transport {
     ///
     /// Messages are routed based on the `to` field in each message.
     /// Messages to unknown peers are silently dropped.
-    virtual void Send(std::span<const Message> messages) = 0;
+    virtual void Send(nonstd::span<const Message> messages) = 0;
 
     /// Set callback for received messages
     ///

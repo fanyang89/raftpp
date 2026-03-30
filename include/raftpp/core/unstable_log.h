@@ -18,7 +18,7 @@ class Unstable {
     [[nodiscard]] std::optional<uint64_t> MaybeFirstIndex() const;
     [[nodiscard]] std::optional<uint64_t> MaybeLastIndex() const;
     [[nodiscard]] std::optional<uint64_t> MaybeTerm(uint64_t idx) const;
-    [[nodiscard]] std::span<const Entry> Slice(uint64_t lo, uint64_t hi);
+    [[nodiscard]] nonstd::span<const Entry> Slice(uint64_t lo, uint64_t hi);
     void MustCheckOutOfBounds(uint64_t lo, uint64_t hi);
     void Restore(const Snapshot& snapshot);
     void StableEntries(uint64_t index, uint32_t term);

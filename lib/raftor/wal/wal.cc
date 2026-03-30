@@ -140,7 +140,7 @@ Result<void> WAL::ReplaySegment(Segment* segment) {
         }
 
         RecordHeader header = RecordHeader::Deserialize(
-            std::span<const uint8_t, 16>(header_data->data(), sizeof(RecordHeader))
+            nonstd::span<const uint8_t, 16>(header_data->data(), sizeof(RecordHeader))
         );
 
         // Check for end of data (zero-filled preallocated space)
@@ -276,7 +276,7 @@ Result<void> WAL::ReplaySegment(Segment* segment) {
     return {};
 }
 
-Result<void> WAL::Append(std::span<const Entry> entries) {
+Result<void> WAL::Append(nonstd::span<const Entry> entries) {
     if (entries.empty()) {
         return {};
     }
@@ -804,7 +804,7 @@ Result<void> WAL::Close() {
     return {};
 }
 
-Result<void> WAL::WriteRecord(RecordType type, std::span<const uint8_t> data) {
+Result<void> WAL::WriteRecord(RecordType type, nonstd::span<const uint8_t> data) {
     RecordBuilder builder;
     builder.SetType(type);
     builder.SetPayload(data);
@@ -839,7 +839,7 @@ Result<void> WAL::FlushWriteBuffer() {
     uint64_t flush_start_offset = segment->write_offset();
 
     auto write_result =
-        segment->Append(std::span<const uint8_t>(write_buffer_.data(), write_buffer_used_));
+        segment->Append(nonstd::span<const uint8_t>(write_buffer_.data(), write_buffer_used_));
     if (!write_result) {
         return write_result;
     }

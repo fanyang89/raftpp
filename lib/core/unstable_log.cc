@@ -166,10 +166,10 @@ size_t Unstable::entries_size() const {
     return entries_size_;
 }
 
-std::span<const Entry> Unstable::Slice(const uint64_t lo, const uint64_t hi) {
+nonstd::span<const Entry> Unstable::Slice(const uint64_t lo, const uint64_t hi) {
     MustCheckOutOfBounds(lo, hi);
     const auto off = offset_;
-    return std::span{entries_.begin() + lo - off, entries_.begin() + hi - off};
+    return nonstd::span{entries_.begin() + lo - off, entries_.begin() + hi - off};
 }
 
 }  // namespace raftpp

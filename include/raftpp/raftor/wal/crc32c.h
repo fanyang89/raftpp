@@ -2,7 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <span>
+#include <nonstd/span.hpp>
 
 namespace raftpp::raftor::wal {
 
@@ -11,7 +11,7 @@ class CRC32C {
     CRC32C();
 
     void Update(const void* data, size_t len);
-    void Update(std::span<const uint8_t> data);
+    void Update(nonstd::span<const uint8_t> data);
 
     // Finalize and return the CRC value
     [[nodiscard]] uint32_t Finalize() const;
@@ -21,7 +21,7 @@ class CRC32C {
 
     // Convenience static methods
     [[nodiscard]] static uint32_t Compute(const void* data, size_t len);
-    [[nodiscard]] static uint32_t Compute(std::span<const uint8_t> data);
+    [[nodiscard]] static uint32_t Compute(nonstd::span<const uint8_t> data);
 
   private:
     uint32_t crc_;

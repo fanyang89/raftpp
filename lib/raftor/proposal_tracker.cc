@@ -25,7 +25,7 @@ void FailAllPending(Map& pending, std::mutex& mutex, const RaftError& error) {
     }
     for (auto& [ctx, entry] : callbacks) {
         if (entry.callback) {
-            entry.callback(std::unexpected(error));
+            entry.callback(nonstd::make_unexpected(error));
         }
     }
 }
@@ -66,7 +66,7 @@ void ProposalTracker::Fail(const std::string& ctx, RaftError error) {
         proposals_.erase(it);
     }
     if (callback) {
-        callback(std::unexpected(std::move(error)));
+        callback(nonstd::make_unexpected(std::move(error)));
     }
 }
 
@@ -113,7 +113,7 @@ void ProposalTracker::FailRead(const std::string& ctx, RaftError error) {
         reads_.erase(it);
     }
     if (callback) {
-        callback(std::unexpected(std::move(error)));
+        callback(nonstd::make_unexpected(std::move(error)));
     }
 }
 
@@ -129,7 +129,7 @@ size_t ProposalTracker::PendingReadCount() const {
 
 bool ProposalTracker::IsReadPending(const std::string& ctx) const {
     std::lock_guard lock(mutex_);
-    return reads_.contains(ctx);
+    return reads_.count(ctx) != 0;
 }
 
 void ProposalTracker::ExpireTimeouts(std::chrono::steady_clock::time_point now) {
@@ -165,13 +165,13 @@ void ProposalTracker::ExpireTimeouts(std::chrono::steady_clock::time_point now) 
 
     for (auto& callback : proposal_callbacks) {
         if (callback) {
-            callback(std::unexpected(RaftError(RpcErrorCode::Timeout)));
+            callback(nonstd::make_unexpected(RaftError(RpcErrorCode::Timeout)));
         }
     }
 
     for (auto& callback : read_callbacks) {
         if (callback) {
-            callback(std::unexpected(RaftError(RpcErrorCode::Timeout)));
+            callback(nonstd::make_unexpected(RaftError(RpcErrorCode::Timeout)));
         }
     }
 }

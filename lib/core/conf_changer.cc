@@ -16,13 +16,13 @@ Result<void> CheckInvariants(const TrackerConfiguration& cfg, const IncrChangeMa
             return RaftError(ConfChangeError(fmt::format("no progress for learner {}", id)));
         }
 
-        if (cfg.voters.outgoing().contains(id)) {
+        if (cfg.voters.outgoing().count(id) != 0) {
             return RaftError(
                 ConfChangeError(fmt::format("{} is in learners and outgoing voters", id))
             );
         }
 
-        if (cfg.voters.incoming().contains(id)) {
+        if (cfg.voters.incoming().count(id) != 0) {
             return RaftError(
                 ConfChangeError(fmt::format("{} is in learners and incoming voters", id))
             );
@@ -34,7 +34,7 @@ Result<void> CheckInvariants(const TrackerConfiguration& cfg, const IncrChangeMa
             return RaftError(ConfChangeError(fmt::format("no progress for learner(next) {}", id)));
         }
 
-        if (!cfg.voters.outgoing().contains(id)) {
+        if (!cfg.voters.outgoing().count(id) != 0) {
             return RaftError(
                 ConfChangeError(fmt::format("{} is in learners_next and outgoing voters", id))
             );
@@ -68,7 +68,7 @@ bool IncrChangeMap::Contains(uint64_t id) const {
                 return false;
         }
     }
-    return base_.contains(id);
+    return base_.count(id) != 0;
 }
 
 MapChange IncrChangeMap::ToChanges() const {
@@ -90,7 +90,7 @@ bool Joint(const TrackerConfiguration& cfg) {
 ConfChanger::ConfChanger(ProgressTracker& tracker) : tracker_(tracker) {}
 
 Result<std::pair<TrackerConfiguration, MapChange>> ConfChanger::EnterJoint(
-    const bool auto_leave, const std::span<const ConfChangeSingle> ccs
+    const bool auto_leave, const nonstd::span<const ConfChangeSingle> ccs
 ) {
     if (Joint(tracker_.conf())) {
         return RaftError(ConfChangeErrorCode::ConfigAlreadyJoint);
@@ -138,7 +138,7 @@ ConfChanger::LeaveJoint() {
         cfg.learners_next.clear();
 
         for (const auto id : cfg.voters.outgoing()) {
-            if (!cfg.voters.incoming().contains(id) && !cfg.learners.contains(id)) {
+            if (!cfg.voters.incoming().count(id) != 0 && !cfg.learners.count(id) != 0) {
                 prs.changes().emplace_back(id, MapChangeType::Remove);
             }
         }
@@ -153,7 +153,7 @@ ConfChanger::LeaveJoint() {
 }
 
 Result<void> ConfChanger::Apply(
-    TrackerConfiguration& cfg, IncrChangeMap& prs, const std::span<const ConfChangeSingle> ccs
+    TrackerConfiguration& cfg, IncrChangeMap& prs, const nonstd::span<const ConfChangeSingle> ccs
 ) {
     for (const auto& cc : ccs) {
         auto cc_reader = capnp_util::reader<msg::ConfChangeSingle>(cc);
@@ -186,11 +186,11 @@ Result<std::pair<TrackerConfiguration, MapChange>> ConfChanger::Simple(
 ) const {
     std::vector<ConfChangeSingle> v;
     v.emplace_back(capnp_util::clone<msg::ConfChangeSingle>(ccs));
-    return Simple(std::span{v.begin(), v.end()});
+    return Simple(nonstd::span{v.begin(), v.end()});
 }
 
 Result<std::pair<TrackerConfiguration, MapChange>> ConfChanger::Simple(
-    const std::span<const ConfChangeSingle> ccs
+    const nonstd::span<const ConfChangeSingle> ccs
 ) const {
     if (Joint(tracker_.conf())) {
         return RaftError(ConfChangeErrorCode::CannotApplySimpleInJointConfig);
@@ -214,11 +214,14 @@ Result<std::pair<TrackerConfiguration, MapChange>> ConfChanger::Simple(
         std::vector<uint64_t> old_voters(
             tracker_.conf().voters.incoming().begin(), tracker_.conf().voters.incoming().end()
         );
-        std::ranges::sort(new_voters);
-        std::ranges::sort(old_voters);
+        std::sort(new_voters.begin(), new_voters.end());
+        std::sort(old_voters.begin(), old_voters.end());
 
         std::vector<uint64_t> diff;
-        std::ranges::set_symmetric_difference(new_voters, old_voters, std::back_inserter(diff));
+        std::set_symmetric_difference(
+            new_voters.begin(), new_voters.end(), old_voters.begin(), old_voters.end(),
+            std::back_inserter(diff)
+        );
         if (diff.size() > 1) {
             return RaftError(ConfChangeErrorCode::MultipleVotersChangedWithoutJoint);
         }
@@ -266,7 +269,7 @@ void ConfChanger::MakeLearner(TrackerConfiguration& cfg, IncrChangeMap& prs, con
         return;
     }
 
-    if (cfg.learners.contains(id)) {
+    if (cfg.learners.count(id) != 0) {
         return;
     }
 
@@ -274,7 +277,7 @@ void ConfChanger::MakeLearner(TrackerConfiguration& cfg, IncrChangeMap& prs, con
     cfg.learners.erase(id);
     cfg.learners_next.erase(id);
 
-    if (cfg.voters.outgoing().contains(id)) {
+    if (cfg.voters.outgoing().count(id) != 0) {
         cfg.learners_next.insert(id);
     } else {
         cfg.learners.insert(id);
@@ -291,7 +294,7 @@ void ConfChanger::Remove(TrackerConfiguration& cfg, IncrChangeMap& prs, uint64_t
     cfg.learners_next.erase(id);
 
     // If the peer is still a voter in the outgoing config, keep the Progress.
-    if (!cfg.voters.outgoing().contains(id)) {
+    if (!cfg.voters.outgoing().count(id) != 0) {
         prs.changes().emplace_back(id, MapChangeType::Remove);
     }
 }

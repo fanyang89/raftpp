@@ -27,7 +27,7 @@ namespace {
 
 class PosixSegmentIo final : public SegmentIo {
   public:
-    Result<void> PWrite(int fd, uint64_t offset, std::span<const uint8_t> data) override {
+    Result<void> PWrite(int fd, uint64_t offset, nonstd::span<const uint8_t> data) override {
         const ssize_t written = ::pwrite(fd, data.data(), data.size(), static_cast<off_t>(offset));
         if (written < 0) {
             return RaftError(StorageErrorOther{fmt::format("pwrite failed: {}", strerror(errno))});
@@ -42,7 +42,7 @@ class PosixSegmentIo final : public SegmentIo {
         return {};
     }
 
-    Result<void> PRead(int fd, uint64_t offset, std::span<uint8_t> data) override {
+    Result<void> PRead(int fd, uint64_t offset, nonstd::span<uint8_t> data) override {
         const ssize_t n = ::pread(fd, data.data(), data.size(), static_cast<off_t>(offset));
         if (n < 0) {
             return RaftError(StorageErrorOther{fmt::format("pread failed: {}", strerror(errno))});
@@ -135,7 +135,7 @@ class IoUringEngine {
         return engine;
     }
 
-    Result<void> PWrite(int fd, uint64_t offset, std::span<const uint8_t> data) {
+    Result<void> PWrite(int fd, uint64_t offset, nonstd::span<const uint8_t> data) {
         std::lock_guard lock(mutex_);
 
         io_uring_sqe* sqe = io_uring_get_sqe(&ring_);
@@ -146,7 +146,7 @@ class IoUringEngine {
         return SubmitAndWaitLocked("write", data.size());
     }
 
-    Result<void> PRead(int fd, uint64_t offset, std::span<uint8_t> data) {
+    Result<void> PRead(int fd, uint64_t offset, nonstd::span<uint8_t> data) {
         std::lock_guard lock(mutex_);
 
         io_uring_sqe* sqe = io_uring_get_sqe(&ring_);
@@ -221,11 +221,11 @@ class IoUringSegmentIo final : public SegmentIo {
   public:
     explicit IoUringSegmentIo(std::shared_ptr<IoUringEngine> engine) : engine_(std::move(engine)) {}
 
-    Result<void> PWrite(int fd, uint64_t offset, std::span<const uint8_t> data) override {
+    Result<void> PWrite(int fd, uint64_t offset, nonstd::span<const uint8_t> data) override {
         return engine_->PWrite(fd, offset, data);
     }
 
-    Result<void> PRead(int fd, uint64_t offset, std::span<uint8_t> data) override {
+    Result<void> PRead(int fd, uint64_t offset, nonstd::span<uint8_t> data) override {
         return engine_->PRead(fd, offset, data);
     }
 
@@ -367,7 +367,7 @@ Result<std::unique_ptr<Segment>> Segment::Create(
     header.first_index = first_index;
 
     std::array<uint8_t, sizeof(SegmentHeader)> header_buf{};
-    header.Serialize(std::span<uint8_t, 32>(header_buf));
+    header.Serialize(nonstd::span<uint8_t, 32>(header_buf));
 
     ssize_t written = ::write(fd, header_buf.data(), header_buf.size());
     if (written != static_cast<ssize_t>(header_buf.size())) {
@@ -423,7 +423,7 @@ Result<std::unique_ptr<Segment>> Segment::Open(
         );
     }
 
-    auto header = SegmentHeader::Deserialize(std::span<const uint8_t, 32>(header_buf));
+    auto header = SegmentHeader::Deserialize(nonstd::span<const uint8_t, 32>(header_buf));
     if (!header.IsValid()) {
         ::close(fd);
         return RaftError(StorageErrorCode::InvalidSegmentHeader);
@@ -455,7 +455,7 @@ Result<std::unique_ptr<Segment>> Segment::Open(
     return segment;
 }
 
-Result<void> Segment::Append(std::span<const uint8_t> data) {
+Result<void> Segment::Append(nonstd::span<const uint8_t> data) {
     if (fd_ < 0) {
         return RaftError(StorageErrorCode::SegmentNotOpen);
     }
@@ -477,7 +477,7 @@ Result<std::vector<uint8_t>> Segment::Read(uint64_t offset, uint32_t length) con
     }
 
     std::vector<uint8_t> data(length);
-    if (const auto result = io_->PRead(fd_, offset, std::span<uint8_t>(data)); !result) {
+    if (const auto result = io_->PRead(fd_, offset, nonstd::span<uint8_t>(data)); !result) {
         return result.error();
     }
     return data;

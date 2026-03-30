@@ -1,9 +1,9 @@
 #pragma once
 
-#include <expected>
 #include <variant>
 
 #include <libassert/assert.hpp>
+#include <nonstd/expected.hpp>
 #include <spdlog/fmt/fmt.h>
 
 namespace raftpp {
@@ -329,18 +329,27 @@ class RaftError;
 
 struct InvalidConfigError {
     std::string message;
+
+    explicit InvalidConfigError(std::string msg) : message(std::move(msg)) {}
+
     [[nodiscard]] RaftError ToError() const;
     bool operator==(const InvalidConfigError&) const;
 };
 
 struct ConfChangeError {
     std::string message;
+
+    explicit ConfChangeError(std::string msg) : message(std::move(msg)) {}
+
     [[nodiscard]] RaftError ToError() const;
     bool operator==(const ConfChangeError&) const;
 };
 
 struct FatalError {
     std::string message;
+
+    explicit FatalError(std::string msg) : message(std::move(msg)) {}
+
     [[nodiscard]] RaftError ToError() const;
     bool operator==(const FatalError&) const;
 };
@@ -363,7 +372,7 @@ class RaftError {
     explicit RaftError(T&& arg) : inner_(std::forward<T>(arg)) {}
 
     template <typename T>
-    [[nodiscard]] operator std::expected<T, RaftError>() const;
+    [[nodiscard]] operator nonstd::expected<T, RaftError>() const;
 
     template <typename T>
     bool Is() const;
@@ -383,8 +392,8 @@ class RaftError {
 };
 
 template <typename T>
-RaftError::operator std::expected<T, RaftError>() const {
-    return std::unexpected(*this);
+RaftError::operator nonstd::expected<T, RaftError>() const {
+    return nonstd::make_unexpected(*this);
 }
 
 template <typename T>
@@ -406,10 +415,10 @@ bool RaftError::operator==(const T& ec) const {
 }
 
 template <typename R, typename E = RaftError>
-using Result = std::expected<R, E>;
+using Result = nonstd::expected<R, E>;
 
 template <class T, class E>
-[[nodiscard]] constexpr T Unwrap(const std::expected<T, E>& ex) {
+[[nodiscard]] constexpr T Unwrap(const nonstd::expected<T, E>& ex) {
     if (ex) {
         return *ex;
     }
@@ -423,7 +432,7 @@ template <class T, class E>
 }
 
 template <class T, class E>
-[[nodiscard]] constexpr T UnwrapOr(const std::expected<T, E>& ex, const T& value) {
+[[nodiscard]] constexpr T UnwrapOr(const nonstd::expected<T, E>& ex, const T& value) {
     if (ex) {
         return *ex;
     }

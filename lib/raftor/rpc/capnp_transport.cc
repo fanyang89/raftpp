@@ -31,9 +31,9 @@ class RaftTransportImpl final : public raftpp::capnp::RaftTransport::Server {
     explicit RaftTransportImpl(CapnpTransport& owner) : owner_(owner) {}
 
     kj::Promise<void> sendMessages(SendMessagesContext context) override {
-        auto msgs = context.getParams().getMessages();
-        for (auto msg : msgs) {
-            owner_.EnqueueMessage(capnp_util::clone<msg::Message>(msg));
+        auto messages = context.getParams().getMessages();
+        for (auto message_reader : messages) {
+            owner_.EnqueueMessage(capnp_util::clone<msg::Message>(message_reader));
         }
         return kj::READY_NOW;
     }
@@ -49,6 +49,12 @@ class RaftTransportImpl final : public raftpp::capnp::RaftTransport::Server {
 };
 
 struct RpcClient {
+    RpcClient(
+        std::unique_ptr<::capnp::EzRpcClient> client_in,
+        raftpp::capnp::RaftTransport::Client cap_in, std::string addr_in
+    )
+        : client(std::move(client_in)), cap(std::move(cap_in)), addr(std::move(addr_in)) {}
+
     std::unique_ptr<::capnp::EzRpcClient> client;
     raftpp::capnp::RaftTransport::Client cap;
     std::string addr;
@@ -72,7 +78,7 @@ Result<void> CapnpTransport::Start() {
     // Validate address format early.
     if (auto addr_result = ParseAddress(config_.listen_addr); !addr_result) {
         telemetry::RecordErrorIf(span.span(), addr_result);
-        return std::unexpected(addr_result.error());
+        return nonstd::make_unexpected(addr_result.error());
     }
 
     running_ = true;
@@ -126,19 +132,19 @@ void CapnpTransport::RemovePeer(uint64_t id) {
     peers_.erase(id);
 }
 
-void CapnpTransport::Send(std::span<const Message> messages) {
+void CapnpTransport::Send(nonstd::span<const Message> messages) {
     telemetry::ScopedSpan span("raftor.transport.send", config_.node_id);
     span.span()->SetAttribute("raft.message.count", static_cast<int64_t>(messages.size()));
 
     Map<uint64_t, std::vector<Message>> batches;
 
-    for (const auto& msg : messages) {
-        const auto reader = capnp_util::reader<msg::Message>(msg);
+    for (const auto& message : messages) {
+        const auto reader = capnp_util::reader<msg::Message>(message);
         auto it = batches.find(reader.getTo());
         if (it == batches.end()) {
             it = batches.emplace(reader.getTo(), std::vector<Message>()).first;
         }
-        it->second.push_back(CloneMessage(msg));
+        it->second.push_back(CloneMessage(message));
     }
 
     if (batches.empty()) {
@@ -254,7 +260,7 @@ void CapnpTransport::RpcLoop(std::promise<Result<void>> start_promise) {
         size_t inflight_send_tasks = 0;
         auto last_backpressure_log = std::chrono::steady_clock::time_point::min();
 
-        std::unordered_map<uint64_t, RpcClient> clients;
+        std::unordered_map<uint64_t, std::unique_ptr<RpcClient>> clients;
 
         set_start({});
 
@@ -263,9 +269,9 @@ void CapnpTransport::RpcLoop(std::promise<Result<void>> start_promise) {
             std::vector<uint64_t> stale_clients;
             {
                 std::lock_guard lock(peers_mutex_);
-                for (const auto& [peer_id, client] : clients) {
-                    if (peers_.find(peer_id) == peers_.end()) {
-                        stale_clients.push_back(peer_id);
+                for (auto it = clients.begin(); it != clients.end(); ++it) {
+                    if (peers_.find(it->first) == peers_.end()) {
+                        stale_clients.push_back(it->first);
                     }
                 }
             }
@@ -316,7 +322,7 @@ void CapnpTransport::RpcLoop(std::promise<Result<void>> start_promise) {
                 }
 
                 auto client_it = clients.find(batch.peer_id);
-                if (client_it != clients.end() && client_it->second.addr != addr) {
+                if (client_it != clients.end() && client_it->second->addr != addr) {
                     clients.erase(client_it);
                     client_it = clients.end();
                 }
@@ -324,9 +330,14 @@ void CapnpTransport::RpcLoop(std::promise<Result<void>> start_promise) {
                     try {
                         auto client = std::make_unique<::capnp::EzRpcClient>(addr, 0);
                         auto cap = client->getMain<raftpp::capnp::RaftTransport>();
-                        client_it =
-                            clients.emplace(batch.peer_id, RpcClient{std::move(client), cap, addr})
-                                .first;
+                        client_it = clients
+                                        .emplace(
+                                            batch.peer_id,
+                                            std::make_unique<RpcClient>(
+                                                std::move(client), std::move(cap), addr
+                                            )
+                                        )
+                                        .first;
                     } catch (const kj::Exception& e) {
                         RAFTPP_LOG_ERROR(
                             "Failed to create RPC client for peer {} at {}: {}", batch.peer_id,
@@ -337,7 +348,7 @@ void CapnpTransport::RpcLoop(std::promise<Result<void>> start_promise) {
                     }
                 }
 
-                auto& cap = client_it->second.cap;
+                auto& cap = client_it->second->cap;
                 auto req = cap.sendMessagesRequest();
                 auto list = req.initMessages(batch.messages.size());
                 for (size_t i = 0; i < batch.messages.size(); ++i) {
@@ -388,26 +399,26 @@ void CapnpTransport::RpcLoop(std::promise<Result<void>> start_promise) {
             }
         }
     } catch (const kj::Exception& e) {
-        set_start(std::unexpected(RaftError(RpcErrorCode::BindFailed)));
+        set_start(nonstd::make_unexpected(RaftError(RpcErrorCode::BindFailed)));
         RAFTPP_LOG_ERROR("Cap'n Proto RPC loop failed: {}", e.getDescription().cStr());
         EnqueueError(0, e.getDescription().cStr());
     } catch (const std::exception& e) {
-        set_start(std::unexpected(RaftError(RpcErrorCode::BindFailed)));
+        set_start(nonstd::make_unexpected(RaftError(RpcErrorCode::BindFailed)));
         RAFTPP_LOG_ERROR("Cap'n Proto RPC loop failed: {}", e.what());
     } catch (...) {
-        set_start(std::unexpected(RaftError(RpcErrorCode::BindFailed)));
+        set_start(nonstd::make_unexpected(RaftError(RpcErrorCode::BindFailed)));
         RAFTPP_LOG_ERROR("Cap'n Proto RPC loop failed: unknown error");
     }
 }
 
-void CapnpTransport::EnqueueMessage(Message msg) {
+void CapnpTransport::EnqueueMessage(Message message) {
     uint64_t peer_id = 0;
     {
         std::lock_guard lock(incoming_mutex_);
         if (incoming_queue_.size() >= kMaxPendingIncomingMessages) {
-            peer_id = capnp_util::reader<msg::Message>(msg).getFrom();
+            peer_id = capnp_util::reader<msg::Message>(message).getFrom();
         } else {
-            incoming_queue_.push(std::move(msg));
+            incoming_queue_.push(std::move(message));
             return;
         }
     }

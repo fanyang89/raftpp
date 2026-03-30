@@ -78,7 +78,7 @@ void PeerManager::RecordActivity(uint64_t id) {
 }
 
 bool PeerManager::HasPeer(uint64_t id) const {
-    return peers_.contains(id);
+    return peers_.count(id) != 0;
 }
 
 size_t PeerManager::ConnectedCount() const {

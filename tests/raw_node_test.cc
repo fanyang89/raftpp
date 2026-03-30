@@ -1,6 +1,6 @@
 #include "raftpp/core/raw_node.h"
 
-#include <span>
+#include <nonstd/span.hpp>
 
 #include <doctest/doctest.h>
 #include <kj/array.h>
@@ -21,7 +21,7 @@ std::string DataToString(::capnp::Data::Reader data) {
 ConfChangeV2 ParseConfChangeV2FromEntry(const Entry& e) {
     auto data = capnp_util::reader<msg::Entry>(e).getData();
     return capnp_util::fromBytes<msg::ConfChangeV2>(
-        std::span<const uint8_t>(reinterpret_cast<const uint8_t*>(data.begin()), data.size())
+        nonstd::span<const uint8_t>(reinterpret_cast<const uint8_t*>(data.begin()), data.size())
     );
 }
 
