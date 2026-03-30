@@ -2,6 +2,7 @@
 
 #include <unistd.h>
 
+#include <cerrno>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -68,8 +69,8 @@ class CapturingLogRecord final : public opentelemetry::logs::LogRecord {
 
     void SetTimestamp(opentelemetry::common::SystemTimestamp /*timestamp*/) noexcept override {}
 
-    void SetObservedTimestamp(opentelemetry::common::SystemTimestamp /*timestamp*/) noexcept
-        override {}
+    void
+    SetObservedTimestamp(opentelemetry::common::SystemTimestamp /*timestamp*/) noexcept override {}
 
     void SetSeverity(opentelemetry::logs::Severity severity) noexcept override {
         captured_->severity = severity;
@@ -100,7 +101,8 @@ class CapturingLogRecord final : public opentelemetry::logs::LogRecord {
 
     void SetSpanId(const opentelemetry::trace::SpanId& /*span_id*/) noexcept override {}
 
-    void SetTraceFlags(const opentelemetry::trace::TraceFlags& /*trace_flags*/
+    void SetTraceFlags(
+        const opentelemetry::trace::TraceFlags& /*trace_flags*/
     ) noexcept override {}
 
   private:
@@ -113,8 +115,8 @@ class CapturingLogger final : public opentelemetry::logs::Logger {
 
     const opentelemetry::nostd::string_view GetName() noexcept override { return "test"; }
 
-    opentelemetry::nostd::unique_ptr<opentelemetry::logs::LogRecord> CreateLogRecord(
-    ) noexcept override {
+    opentelemetry::nostd::unique_ptr<opentelemetry::logs::LogRecord>
+    CreateLogRecord() noexcept override {
         return opentelemetry::nostd::unique_ptr<opentelemetry::logs::LogRecord>(
             new CapturingLogRecord(captured_)
         );
@@ -133,9 +135,11 @@ class CapturingLogger final : public opentelemetry::logs::Logger {
 class CapturingLoggerProvider final : public opentelemetry::logs::LoggerProvider {
   public:
     explicit CapturingLoggerProvider(CapturedLogRecord* captured)
-        : logger_(opentelemetry::nostd::shared_ptr<opentelemetry::logs::Logger>(
-              new CapturingLogger(captured)
-          )) {}
+        : logger_(
+              opentelemetry::nostd::shared_ptr<opentelemetry::logs::Logger>(
+                  new CapturingLogger(captured)
+              )
+          ) {}
 
     opentelemetry::nostd::shared_ptr<opentelemetry::logs::Logger> GetLogger(
         opentelemetry::nostd::string_view /*logger_name*/,
@@ -210,10 +214,22 @@ class ScopedStderrCapture {
         char buffer[256];
         while (true) {
             const ssize_t bytes_read = ::read(read_fd_, buffer, sizeof(buffer));
-            if (bytes_read <= 0) {
+            if (bytes_read > 0) {
+                out.append(buffer, static_cast<size_t>(bytes_read));
+                continue;
+            }
+
+            if (bytes_read == 0) {
                 break;
             }
-            out.append(buffer, static_cast<size_t>(bytes_read));
+
+            const int read_errno = errno;
+            if (read_errno == EINTR) {
+                continue;
+            }
+
+            REQUIRE_MESSAGE(false, "stderr capture read failed with errno=", read_errno);
+            return out;
         }
 
         REQUIRE(::close(read_fd_) == 0);
