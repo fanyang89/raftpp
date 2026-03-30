@@ -7,9 +7,9 @@
 
 #include <doctest/doctest.h>
 #include <kj/array.h>
-#include <spdlog/fmt/fmt.h>
 
 #include "raftpp/core/capnp_util.h"
+#include "raftpp/fmt.h"
 #include "raftpp/raftor/rpc/capnp_transport.h"
 
 using namespace raftpp;
@@ -682,9 +682,11 @@ TEST_SUITE("rpc::capnp") {
         for (int i = 0; i < 100; i++) {
             entries[i].setTerm(1);
             entries[i].setIndex(i + 1);
-            entries[i].setData(kj::arrayPtr(
-                reinterpret_cast<const kj::byte*>(large_data.data()), large_data.size()
-            ));
+            entries[i].setData(
+                kj::arrayPtr(
+                    reinterpret_cast<const kj::byte*>(large_data.data()), large_data.size()
+                )
+            );
         }
 
         t1.Send(nonstd::span(&msg, 1));

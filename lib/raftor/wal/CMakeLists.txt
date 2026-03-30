@@ -16,7 +16,6 @@ target_link_libraries(raftor-wal PUBLIC
 target_link_libraries(raftor-wal PRIVATE
   raftpp-proto
   crc32c
-  spdlog::spdlog
   opentelemetry-cpp::api)
 
 if(RAFTPP_WITH_LIBURING AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND TARGET uring::uring)

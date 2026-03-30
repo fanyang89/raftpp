@@ -11,7 +11,8 @@
 #include <opentelemetry/logs/severity.h>
 #include <opentelemetry/nostd/shared_ptr.h>
 #include <opentelemetry/nostd/string_view.h>
-#include <spdlog/fmt/fmt.h>
+
+#include "raftpp/fmt.h"
 
 namespace raftpp::logging {
 

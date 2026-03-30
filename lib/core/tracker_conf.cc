@@ -1,7 +1,5 @@
 #include "raftpp/core/tracker_conf.h"
 
-#include <spdlog/fmt/ranges.h>
-
 namespace raftpp {
 
 TrackerConfiguration::TrackerConfiguration() : auto_leave(false) {}

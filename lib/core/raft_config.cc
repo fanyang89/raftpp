@@ -1,7 +1,5 @@
 #include "raftpp/core/raft_config.h"
 
-#include <spdlog/fmt/fmt.h>
-
 namespace raftpp {
 
 size_t Config::MinElectionTick() const {
@@ -33,10 +31,12 @@ Result<void> Config::Validate() const {
     const size_t max_timeout = MaxElectionTick();
 
     if (min_timeout < election_tick) {
-        return InvalidConfigError(fmt::format(
-                                      "min election tick {} must not be less than election_tick {}",
-                                      min_timeout, election_tick
-                                  ))
+        return InvalidConfigError(
+                   fmt::format(
+                       "min election tick {} must not be less than election_tick {}", min_timeout,
+                       election_tick
+                   )
+        )
             .ToError();
     }
 

@@ -8,9 +8,9 @@
 #include <capnp/ez-rpc.h>
 #include <kj/async-io.h>
 #include <kj/async.h>
-#include <spdlog/fmt/fmt.h>
 
 #include "raftpp/core/types.h"
+#include "raftpp/fmt.h"
 #include "raftpp/logging.h"
 #include "raftpp/raftor/rpc/codec.h"
 #include "raftpp/raftor/telemetry.h"
@@ -264,8 +264,8 @@ void CapnpTransport::RpcLoop(std::promise<Result<void>> start_promise) {
 
         set_start({});
 
-        while (running_.load(std::memory_order_acquire) && !stopped_.load(std::memory_order_acquire)
-        ) {
+        while (running_.load(std::memory_order_acquire) &&
+               !stopped_.load(std::memory_order_acquire)) {
             std::vector<uint64_t> stale_clients;
             {
                 std::lock_guard lock(peers_mutex_);

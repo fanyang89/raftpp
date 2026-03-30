@@ -2,8 +2,6 @@
 
 #include <algorithm>
 
-#include <spdlog/fmt/ranges.h>
-
 namespace raftpp {
 
 size_t majority(const size_t total) {
@@ -64,7 +62,8 @@ std::pair<uint64_t, bool> MajorityConfig::CommittedIndex(
     return std::make_pair(matched.back().index, false);
 }
 
-VoteResult MajorityConfig::GetVoteResult(const std::function<std::optional<bool>(uint64_t)>& check
+VoteResult MajorityConfig::GetVoteResult(
+    const std::function<std::optional<bool>(uint64_t)>& check
 ) const {
     if (empty()) {
         return VoteResult::Won;

@@ -3,11 +3,11 @@
 #include <vector>
 
 #include <doctest/doctest.h>
-#include <spdlog/fmt/fmt.h>
 
 #include "raftpp/core/types.h"
 #include "raftpp/core/unstable_log.h"
 #include "raftpp/core/util.h"
+#include "raftpp/fmt.h"
 #include "test_util.h"
 
 using namespace raftpp;

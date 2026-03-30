@@ -1,11 +1,10 @@
 #include "raftpp/core/storage.h"
 
 #include <doctest/doctest.h>
-#include <spdlog/fmt/fmt.h>
-#include <spdlog/fmt/ranges.h>
 
 #include "harness/test_util.h"
 #include "raftpp/core/memory_storage.h"
+#include "raftpp/fmt.h"
 #include "test_util.h"
 
 using namespace raftpp;
@@ -29,10 +28,12 @@ struct fmt::formatter<std::vector<Entry>> : formatter<std::string_view> {
         for (const auto& v : values) {
             auto reader = capnp_util::reader<msg::Entry>(v);
             auto data = reader.getData();
-            s.emplace_back(fmt::format(
-                "{{index={} term={} data_size={}}}", reader.getIndex(), reader.getTerm(),
-                data.size()
-            ));
+            s.emplace_back(
+                fmt::format(
+                    "{{index={} term={} data_size={}}}", reader.getIndex(), reader.getTerm(),
+                    data.size()
+                )
+            );
         }
         return fmt::format_to(ctx.out(), "[\n{}\n]", fmt::join(s, ",\n"));
     }

@@ -14,5 +14,4 @@ target_link_libraries(raftor-rpc PUBLIC
   raftpp-proto
   CapnProto::capnp-rpc
   CapnProto::kj-async
-  spdlog
   opentelemetry-cpp::api)

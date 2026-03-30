@@ -1,8 +1,5 @@
-CPMAddPackage(
-  URI "https://github.com/gabime/spdlog.git@1.16.0"
-  OPTIONS
-    "SPDLOG_BUILD_SHARED OFF"
-    "SPDLOG_FMT_EXTERNAL OFF")
+add_library(raftpp-fmt INTERFACE)
+target_include_directories(raftpp-fmt INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/fmt/include)
 
 if(RAFTPP_BUILD_TESTING)
   CPMAddPackage(URI "https://github.com/fanyang89/doctest.git" GIT_TAG master)

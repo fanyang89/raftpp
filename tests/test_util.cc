@@ -1,11 +1,9 @@
 #include "test_util.h"
 
-#include <spdlog/fmt/fmt.h>
-#include <spdlog/fmt/ranges.h>
-
 #include "raftpp/core/capnp_util.h"
 #include "raftpp/core/raft_core.h"
 #include "raftpp/core/types.h"
+#include "raftpp/fmt.h"
 
 namespace raftpp {
 
@@ -24,9 +22,12 @@ doctest::String toString(const std::vector<Entry>& entries) {
     for (const auto& e : entries) {
         auto reader = capnp_util::reader<msg::Entry>(e);
         auto data = reader.getData();
-        entries_strings.emplace_back(fmt::format(
-            "Entry {{ index={} term={} size={} }}", reader.getIndex(), reader.getTerm(), data.size()
-        ));
+        entries_strings.emplace_back(
+            fmt::format(
+                "Entry {{ index={} term={} size={} }}", reader.getIndex(), reader.getTerm(),
+                data.size()
+            )
+        );
     }
     const auto s = fmt::format("{}", fmt::join(entries_strings, ",\n"));
     if (s.empty()) {
