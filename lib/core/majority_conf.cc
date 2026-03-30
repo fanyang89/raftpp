@@ -2,7 +2,6 @@
 
 #include <algorithm>
 
-#include <libassert/assert.hpp>
 #include <spdlog/fmt/ranges.h>
 
 namespace raftpp {

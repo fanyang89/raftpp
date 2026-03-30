@@ -117,8 +117,8 @@ Ready RawNode::GetReady() {
         const auto records = records_;
         records_.clear();
         for (auto& r : records) {
-            ASSERT(r.number, std::nullopt);
-            ASSERT(r.snapshot, std::nullopt);
+            ASSERT(r.last_entry == std::nullopt);
+            ASSERT(r.snapshot == std::nullopt);
         }
     }
 

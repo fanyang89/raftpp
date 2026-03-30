@@ -2,9 +2,10 @@
 
 #include <variant>
 
-#include <libassert/assert.hpp>
 #include <nonstd/expected.hpp>
 #include <spdlog/fmt/fmt.h>
+
+#include "raftpp/core/assert.h"
 
 namespace raftpp {
 

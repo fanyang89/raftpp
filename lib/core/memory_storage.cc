@@ -1,7 +1,6 @@
 #include "raftpp/core/memory_storage.h"
 
-#include <libassert/assert.hpp>
-
+#include "raftpp/core/assert.h"
 #include "raftpp/core/util.h"
 
 namespace raftpp {

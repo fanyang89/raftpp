@@ -16,7 +16,6 @@ target_link_libraries(raftor-wal PUBLIC
 target_link_libraries(raftor-wal PRIVATE
   raftpp-proto
   crc32c
-  libassert::assert
   spdlog::spdlog
   opentelemetry-cpp::api)
 

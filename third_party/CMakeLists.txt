@@ -1,12 +1,4 @@
 CPMAddPackage(
-  URI "https://github.com/jeremy-rifkin/cpptrace.git"
-  GIT_TAG "3db8da80111171c219ab5839905771386bee06b3")
-
-CPMAddPackage(
-  URI "https://github.com/jeremy-rifkin/libassert.git@2.2.1"
-  OPTIONS "LIBASSERT_USE_EXTERNAL_CPPTRACE ON")
-
-CPMAddPackage(
   URI "https://github.com/gabime/spdlog.git@1.16.0"
   OPTIONS
     "SPDLOG_BUILD_SHARED OFF"

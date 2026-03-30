@@ -1,7 +1,6 @@
 #include "raftpp/core/read_only.h"
 
-#include <libassert/assert.hpp>
-
+#include "raftpp/core/assert.h"
 #include "raftpp/core/util.h"
 
 namespace raftpp {
