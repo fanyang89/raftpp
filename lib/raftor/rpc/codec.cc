@@ -2,7 +2,6 @@
 
 #include <charconv>
 #include <cstring>
-#include <limits>
 
 #include <capnp/message.h>
 #include <capnp/serialize.h>
@@ -102,8 +101,12 @@ Result<size_t> Codec::FrameSize(nonstd::span<const uint8_t> buffer, size_t max_s
     uint32_t header_len;
     std::memcpy(&header_len, buffer.data() + 4, sizeof(header_len));
 
+    if (max_size < kPrefixSize || static_cast<size_t>(header_len) > max_size - kPrefixSize) {
+        return RaftError(RpcErrorCode::MessageTooLarge);
+    }
+
     // Need full header to get payload size
-    size_t min_frame_size = kPrefixSize + header_len;
+    size_t min_frame_size = kPrefixSize + static_cast<size_t>(header_len);
     if (buffer.size() < min_frame_size) {
         return 0;  // Incomplete header
     }
@@ -120,10 +123,12 @@ Result<size_t> Codec::FrameSize(nonstd::span<const uint8_t> buffer, size_t max_s
         );
         auto header_reader = reader.getRoot<capnp::RpcHeader>();
 
-        size_t total_size = kPrefixSize + header_len + header_reader.getPayloadSize();
-        if (total_size > max_size) {
+        const size_t payload_size = header_reader.getPayloadSize();
+        if (payload_size > max_size - min_frame_size) {
             return RaftError(RpcErrorCode::MessageTooLarge);
         }
+
+        size_t total_size = min_frame_size + payload_size;
 
         return total_size;
     } catch (...) {
@@ -147,7 +152,11 @@ Result<Codec::DecodeResult> Codec::Decode(nonstd::span<const uint8_t> buffer, si
     uint32_t header_len;
     std::memcpy(&header_len, buffer.data() + 4, sizeof(header_len));
 
-    size_t header_end = kPrefixSize + header_len;
+    if (max_size < kPrefixSize || static_cast<size_t>(header_len) > max_size - kPrefixSize) {
+        return RaftError(RpcErrorCode::MessageTooLarge);
+    }
+
+    size_t header_end = kPrefixSize + static_cast<size_t>(header_len);
     if (buffer.size() < header_end) {
         return DecodeResult{{}, {}, 0};  // Incomplete header
     }
@@ -166,10 +175,12 @@ Result<Codec::DecodeResult> Codec::Decode(nonstd::span<const uint8_t> buffer, si
     }
 
     auto header_reader = capnp_util::reader<capnp::RpcHeader>(header);
-    size_t total_size = header_end + header_reader.getPayloadSize();
-    if (total_size > max_size) {
+    const size_t payload_size = header_reader.getPayloadSize();
+    if (payload_size > max_size - header_end) {
         return RaftError(RpcErrorCode::MessageTooLarge);
     }
+
+    size_t total_size = header_end + payload_size;
 
     if (buffer.size() < total_size) {
         return DecodeResult{{}, {}, 0};  // Incomplete payload
@@ -228,14 +239,11 @@ Result<std::pair<RpcHandshake, size_t>> HandshakeCodec::Decode(
     uint32_t length;
     std::memcpy(&length, buffer.data() + 4, sizeof(length));
 
-    if (length > std::numeric_limits<size_t>::max() - kPrefixSize) {
+    if (max_size < kPrefixSize || static_cast<size_t>(length) > max_size - kPrefixSize) {
         return RaftError(RpcErrorCode::MessageTooLarge);
     }
 
-    size_t total_size = kPrefixSize + length;
-    if (total_size > max_size) {
-        return RaftError(RpcErrorCode::MessageTooLarge);
-    }
+    size_t total_size = kPrefixSize + static_cast<size_t>(length);
 
     if (buffer.size() < total_size) {
         return std::make_pair(RpcHandshake{}, size_t{0});  // Incomplete
