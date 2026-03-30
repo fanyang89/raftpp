@@ -1,11 +1,14 @@
 #include "raftpp/logging.h"
 
+#include <unistd.h>
+
+#include <cerrno>
 #include <cstdint>
 #include <memory>
-#include <sstream>
 #include <string>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 #include <doctest/doctest.h>
 #include <opentelemetry/common/attribute_value.h>
@@ -17,9 +20,6 @@
 #include <opentelemetry/nostd/shared_ptr.h>
 #include <opentelemetry/nostd/string_view.h>
 #include <opentelemetry/nostd/unique_ptr.h>
-#include <spdlog/logger.h>
-#include <spdlog/sinks/ostream_sink.h>
-#include <spdlog/spdlog.h>
 
 namespace {
 
@@ -172,32 +172,84 @@ class ScopedLoggerProvider {
     opentelemetry::nostd::shared_ptr<opentelemetry::logs::LoggerProvider> previous_;
 };
 
-class ScopedDefaultLogger {
+class ScopedLogLevel {
   public:
-    ScopedDefaultLogger()
-        : previous_(spdlog::default_logger()),
-          sink_(std::make_shared<spdlog::sinks::ostream_sink_mt>(stream_)),
-          logger_(std::make_shared<spdlog::logger>("test", sink_)) {
-        logger_->set_pattern("%v");
-        logger_->set_level(spdlog::level::trace);
-        spdlog::set_default_logger(logger_);
+    explicit ScopedLogLevel(const raftpp::logging::LogLevel level) {
+        raftpp::logging::SetLogLevel(level);
     }
 
-    ~ScopedDefaultLogger() { spdlog::set_default_logger(previous_); }
+    ~ScopedLogLevel() { raftpp::logging::SetLogLevel(raftpp::logging::LogLevel::kWarn); }
+
+    ScopedLogLevel(const ScopedLogLevel&) = delete;
+    ScopedLogLevel& operator=(const ScopedLogLevel&) = delete;
+};
+
+class ScopedStderrCapture {
+  public:
+    ScopedStderrCapture() {
+        std::fflush(stderr);
+        int pipe_fds[2] = {-1, -1};
+        REQUIRE(::pipe(pipe_fds) == 0);
+        read_fd_ = pipe_fds[0];
+        saved_fd_ = ::dup(STDERR_FILENO);
+        REQUIRE(saved_fd_ >= 0);
+        REQUIRE(::dup2(pipe_fds[1], STDERR_FILENO) >= 0);
+        REQUIRE(::close(pipe_fds[1]) == 0);
+    }
+
+    ~ScopedStderrCapture() {
+        Restore();
+        if (read_fd_ >= 0) {
+            ::close(read_fd_);
+        }
+    }
 
     std::string output() {
-        logger_->flush();
-        return stream_.str();
+        Restore();
+
+        std::string out;
+        char buffer[256];
+        while (true) {
+            const ssize_t bytes_read = ::read(read_fd_, buffer, sizeof(buffer));
+            if (bytes_read > 0) {
+                out.append(buffer, static_cast<size_t>(bytes_read));
+                continue;
+            }
+
+            if (bytes_read == 0) {
+                break;
+            }
+
+            const int read_errno = errno;
+            if (read_errno == EINTR) {
+                continue;
+            }
+
+            REQUIRE_MESSAGE(false, "stderr capture read failed with errno=", read_errno);
+            return out;
+        }
+
+        REQUIRE(::close(read_fd_) == 0);
+        read_fd_ = -1;
+        return out;
     }
 
-    ScopedDefaultLogger(const ScopedDefaultLogger&) = delete;
-    ScopedDefaultLogger& operator=(const ScopedDefaultLogger&) = delete;
+    ScopedStderrCapture(const ScopedStderrCapture&) = delete;
+    ScopedStderrCapture& operator=(const ScopedStderrCapture&) = delete;
 
   private:
-    std::ostringstream stream_;
-    std::shared_ptr<spdlog::sinks::ostream_sink_mt> sink_;
-    std::shared_ptr<spdlog::logger> logger_;
-    std::shared_ptr<spdlog::logger> previous_;
+    void Restore() {
+        if (saved_fd_ < 0) {
+            return;
+        }
+        std::fflush(stderr);
+        REQUIRE(::dup2(saved_fd_, STDERR_FILENO) >= 0);
+        REQUIRE(::close(saved_fd_) == 0);
+        saved_fd_ = -1;
+    }
+
+    int read_fd_ = -1;
+    int saved_fd_ = -1;
 };
 
 }  // namespace
@@ -234,8 +286,9 @@ TEST_CASE("logging: plain message logs keep external filepath unchanged") {
     CHECK_EQ(7, captured.line);
 }
 
-TEST_CASE("logging: spdlog output renders repository file as clickable basename") {
-    ScopedDefaultLogger logger;
+TEST_CASE("logging: stderr output renders repository file as clickable basename") {
+    ScopedLogLevel log_level(raftpp::logging::LogLevel::kTrace);
+    ScopedStderrCapture capture;
 
     const std::string absolute_path = std::string(RAFTPP_SOURCE_ROOT) + "lib/raftor/raftor.cc";
     raftpp::logging::LogWithLocation(
@@ -243,18 +296,19 @@ TEST_CASE("logging: spdlog output renders repository file as clickable basename"
         std::string_view("clickable log")
     );
 
-    CHECK(logger.output().find("[raftor.cc:123] clickable log") != std::string::npos);
+    CHECK(capture.output().find("[raftor.cc:123] clickable log") != std::string::npos);
 }
 
-TEST_CASE("logging: spdlog output keeps external absolute filepath") {
-    ScopedDefaultLogger logger;
+TEST_CASE("logging: stderr output keeps external absolute filepath") {
+    ScopedLogLevel log_level(raftpp::logging::LogLevel::kTrace);
+    ScopedStderrCapture capture;
 
     constexpr const char* kExternalPath = "/tmp/external/file.cc";
     raftpp::logging::LogWithLocation(
         opentelemetry::logs::Severity::kWarn, kExternalPath, 7, std::string_view("external log")
     );
 
-    CHECK(logger.output().find("[/tmp/external/file.cc:7] external log") != std::string::npos);
+    CHECK(capture.output().find("[/tmp/external/file.cc:7] external log") != std::string::npos);
 }
 
 TEST_SUITE_END();

@@ -2,10 +2,9 @@
 
 #include <functional>
 
-#include <spdlog/fmt/fmt.h>
-
 #include "ack_indexer.h"
 #include "primitives.h"
+#include "raftpp/fmt.h"
 
 namespace raftpp {
 

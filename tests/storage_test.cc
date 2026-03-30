@@ -1,11 +1,10 @@
 #include "raftpp/core/storage.h"
 
 #include <doctest/doctest.h>
-#include <spdlog/fmt/fmt.h>
-#include <spdlog/fmt/ranges.h>
 
 #include "harness/test_util.h"
 #include "raftpp/core/memory_storage.h"
+#include "raftpp/fmt.h"
 #include "test_util.h"
 
 using namespace raftpp;

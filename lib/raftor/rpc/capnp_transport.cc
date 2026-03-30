@@ -8,9 +8,9 @@
 #include <capnp/ez-rpc.h>
 #include <kj/async-io.h>
 #include <kj/async.h>
-#include <spdlog/fmt/fmt.h>
 
 #include "raftpp/core/types.h"
+#include "raftpp/fmt.h"
 #include "raftpp/logging.h"
 #include "raftpp/raftor/rpc/codec.h"
 #include "raftpp/raftor/telemetry.h"

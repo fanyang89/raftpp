@@ -3,9 +3,9 @@
 #include <variant>
 
 #include <nonstd/expected.hpp>
-#include <spdlog/fmt/fmt.h>
 
 #include "raftpp/core/assert.h"
+#include "raftpp/fmt.h"
 
 namespace raftpp {
 

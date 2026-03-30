@@ -2,8 +2,7 @@
 
 #include <optional>
 
-#include <spdlog/fmt/fmt.h>
-
+#include "raftpp/fmt.h"
 #include "types.h"
 
 namespace raftpp {

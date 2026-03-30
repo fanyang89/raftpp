@@ -1,7 +1,5 @@
 #include "raftpp/core/raft_config.h"
 
-#include <spdlog/fmt/fmt.h>
-
 namespace raftpp {
 
 size_t Config::MinElectionTick() const {

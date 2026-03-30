@@ -1,7 +1,5 @@
 #include "raftpp/core/storage.h"
 
-#include <spdlog/fmt/fmt.h>
-
 #include "raftpp/core/util.h"
 
 namespace raftpp {

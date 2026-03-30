@@ -7,8 +7,7 @@
 #include <type_traits>
 #include <utility>
 
-#include <spdlog/fmt/fmt.h>
-
+#include "raftpp/fmt.h"
 #include "raftpp/logging.h"
 
 namespace raftpp::detail {

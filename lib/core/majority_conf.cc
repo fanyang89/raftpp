@@ -2,8 +2,6 @@
 
 #include <algorithm>
 
-#include <spdlog/fmt/ranges.h>
-
 namespace raftpp {
 
 size_t majority(const size_t total) {

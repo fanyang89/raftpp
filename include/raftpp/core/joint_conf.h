@@ -1,8 +1,7 @@
 #pragma once
 
-#include <spdlog/fmt/fmt.h>
-
 #include "majority_conf.h"
+#include "raftpp/fmt.h"
 
 namespace raftpp {
 

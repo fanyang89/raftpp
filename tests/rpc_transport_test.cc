@@ -7,9 +7,9 @@
 
 #include <doctest/doctest.h>
 #include <kj/array.h>
-#include <spdlog/fmt/fmt.h>
 
 #include "raftpp/core/capnp_util.h"
+#include "raftpp/fmt.h"
 #include "raftpp/raftor/rpc/capnp_transport.h"
 
 using namespace raftpp;

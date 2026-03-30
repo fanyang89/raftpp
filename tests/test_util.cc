@@ -1,11 +1,9 @@
 #include "test_util.h"
 
-#include <spdlog/fmt/fmt.h>
-#include <spdlog/fmt/ranges.h>
-
 #include "raftpp/core/capnp_util.h"
 #include "raftpp/core/raft_core.h"
 #include "raftpp/core/types.h"
+#include "raftpp/fmt.h"
 
 namespace raftpp {
 

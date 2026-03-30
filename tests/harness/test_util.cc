@@ -3,9 +3,9 @@
 #include <set>
 
 #include <doctest/doctest.h>
-#include <spdlog/fmt/fmt.h>
 
 #include "raftpp/core/capnp_util.h"
+#include "raftpp/fmt.h"
 
 namespace raftpp {
 

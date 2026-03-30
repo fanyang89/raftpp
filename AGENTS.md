@@ -148,13 +148,13 @@ Entry constructors use `(index, term)` parameter order - be consistent with this
 
 ### Using fmt Library
 
-Always use spdlog's bundled fmt instead of the system fmt library:
+Always use the project fmt wrapper instead of including fmt headers directly:
 
 ```cpp
 // Correct
-#include <spdlog/fmt/fmt.h>
+#include "raftpp/fmt.h"
 
-// Wrong - causes linker errors
+// Wrong - bypasses the project wrapper
 #include <fmt/format.h>
 ```
 
@@ -162,7 +162,6 @@ Always use spdlog's bundled fmt instead of the system fmt library:
 
 - Do not write directly to the console from production code or tests: no `std::cout`, `std::cerr`, `std::clog`, `printf`/`fprintf`, `puts`, `fmt::print`, or `std::print`.
 - Use `raftpp/logging.h` for logging. Prefer `RAFTPP_LOG_DEBUG/INFO/WARN/ERROR/CRITICAL`.
-- `spdlog` is used as a backend dependency; avoid adding new direct `SPDLOG_*` or `spdlog::*` calls in normal project code unless you are changing the logging infrastructure itself.
 - Quick check before shipping changes:
   - `rg -n --glob '!build/**' --glob '!.cache/**' "\\bstd::cout\\b|\\bstd::cerr\\b|\\bstd::clog\\b|\\bprintf\\s*\\(|\\bfprintf\\s*\\(\\s*stderr\\b|\\bfmt::print\\b|\\bstd::print\\b" .`
 
