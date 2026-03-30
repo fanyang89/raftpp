@@ -164,11 +164,9 @@ std::string TraceIdToHex(const opentelemetry::trace::TraceId& trace_id) {
 
 std::string SpanIdToHex(const opentelemetry::trace::SpanId& span_id) {
     std::array<char, opentelemetry::trace::SpanId::kSize * 2> buffer{};
-    span_id.ToLowerBase16(
-        opentelemetry::nostd::span<char, opentelemetry::trace::SpanId::kSize * 2>(
-            buffer.data(), buffer.size()
-        )
-    );
+    span_id.ToLowerBase16(opentelemetry::nostd::span<char, opentelemetry::trace::SpanId::kSize * 2>(
+        buffer.data(), buffer.size()
+    ));
     return std::string(buffer.data(), buffer.size());
 }
 
@@ -262,17 +260,15 @@ class SpdlogLogger final : public opentelemetry::logs::Logger {
 
     const opentelemetry::nostd::string_view GetName() noexcept override { return name_; }
 
-    opentelemetry::nostd::unique_ptr<opentelemetry::logs::LogRecord>
-    CreateLogRecord() noexcept override {
-        return opentelemetry::nostd::unique_ptr<opentelemetry::logs::LogRecord>(
-            new SpdlogLogRecord()
-        );
+    opentelemetry::nostd::unique_ptr<opentelemetry::logs::LogRecord> CreateLogRecord(
+    ) noexcept override {
+        return opentelemetry::nostd::unique_ptr<opentelemetry::logs::LogRecord>(new SpdlogLogRecord(
+        ));
     }
 
     using Logger::EmitLogRecord;
 
-    void EmitLogRecord(
-        opentelemetry::nostd::unique_ptr<opentelemetry::logs::LogRecord>&& record
+    void EmitLogRecord(opentelemetry::nostd::unique_ptr<opentelemetry::logs::LogRecord>&& record
     ) noexcept override {
         auto* spdlog_record = dynamic_cast<SpdlogLogRecord*>(record.get());
         if (!spdlog_record) {
