@@ -1,6 +1,7 @@
 # raftpp
 
 [![zread][ask-zread]](https://zread.ai/fanyang89/raftpp)
+[![codecov](https://codecov.io/github/fanyang89/raftpp/graph/badge.svg?token=1AWR0SLV3M)](https://codecov.io/github/fanyang89/raftpp)
 
 A modern C++ implementation of the RAFT consensus algorithm.
 
