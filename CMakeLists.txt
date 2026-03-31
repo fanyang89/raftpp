@@ -83,19 +83,21 @@ if (MSVC)
   add_compile_options(/MP)
 endif ()
 
+set(RAFTPP_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
+add_subdirectory(third_party)
+
 if (RAFTPP_COVERAGE)
   if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     add_compile_options(-fprofile-instr-generate -fcoverage-mapping)
     add_link_options(-fprofile-instr-generate -fcoverage-mapping)
   else ()
+    message(WARNING "RAFTPP_COVERAGE with GCC: use gcov/lcov to generate reports (task coverage requires Clang)")
     add_compile_options(--coverage)
     add_link_options(--coverage)
   endif ()
 endif ()
 
-set(RAFTPP_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
-
-add_subdirectory(third_party)
 add_subdirectory(lib)
 add_subdirectory(proto)
 if (RAFTPP_BUILD_EXAMPLES)

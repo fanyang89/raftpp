@@ -129,13 +129,13 @@ jobs:
         run: |
           llvm-profdata merge -sparse build/*.profraw -o build/coverage.profdata
           llvm-cov export \
-            ./build/tests/raftpp-tests ./build/tests/datadriven/data-driven-tests \
+            ./build/tests/raftpp-tests -object ./build/tests/datadriven/data-driven-tests \
             -instr-profile=build/coverage.profdata \
             -format=lcov \
             -ignore-filename-regex='(tests|third_party|generated|\.pb\.)' \
             > build/coverage.lcov
           llvm-cov report \
-            ./build/tests/raftpp-tests ./build/tests/datadriven/data-driven-tests \
+            ./build/tests/raftpp-tests -object ./build/tests/datadriven/data-driven-tests \
             -instr-profile=build/coverage.profdata \
             -ignore-filename-regex='(tests|third_party|generated|\.pb\.)'
 

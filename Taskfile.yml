@@ -111,7 +111,7 @@ tasks:
     vars:
       PROF_DATA: build/coverage.profdata
       REPORT_DIR: build/coverage-report
-      BINS: ./build/tests/raftpp-tests ./build/tests/datadriven/data-driven-tests
+      BINS: ./build/tests/raftpp-tests -object ./build/tests/datadriven/data-driven-tests
       IGNORE: (tests|third_party|generated|\.pb\.)
     cmds:
       - cmake --preset=Coverage -B build -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN:-cmake/clang-toolchain.cmake}
