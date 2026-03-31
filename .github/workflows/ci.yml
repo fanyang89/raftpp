@@ -92,6 +92,60 @@ jobs:
       - name: Run Data-Driven Tests
         run: ./build/tests/datadriven/data-driven-tests
 
+  coverage:
+    name: Coverage (Clang / llvm-cov)
+    needs: [format-check, lint]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y ninja-build clang llvm cmake git
+
+      - name: Cache CPM dependencies
+        uses: actions/cache@v5
+        with:
+          path: .cache/cpm
+          key: cpm-${{ runner.arch }}-${{ hashFiles('third_party/CMakeLists.txt', 'cmake/CPM.cmake') }}
+          restore-keys: |
+            cpm-${{ runner.arch }}-
+
+      - name: Configure CMake
+        run: |
+          cmake --preset=Coverage -B build \
+            -DCMAKE_TOOLCHAIN_FILE=cmake/clang-toolchain.cmake
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Run tests
+        env:
+          LLVM_PROFILE_FILE: build/raftpp-%p.profraw
+        run: |
+          ./build/tests/raftpp-tests
+          ./build/tests/datadriven/data-driven-tests
+
+      - name: Generate coverage report
+        run: |
+          llvm-profdata merge -sparse build/*.profraw -o build/coverage.profdata
+          llvm-cov export \
+            ./build/tests/raftpp-tests -object ./build/tests/datadriven/data-driven-tests \
+            -instr-profile=build/coverage.profdata \
+            -format=lcov \
+            -ignore-filename-regex='(tests|third_party|generated|\.pb\.)' \
+            > build/coverage.lcov
+          llvm-cov report \
+            ./build/tests/raftpp-tests -object ./build/tests/datadriven/data-driven-tests \
+            -instr-profile=build/coverage.profdata \
+            -ignore-filename-regex='(tests|third_party|generated|\.pb\.)'
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: build/coverage.lcov
+          fail_ci_if_error: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+
   build-and-test-arm64:
     name: "arm64 / ${{ matrix.compiler }} / ${{ matrix.build_type }}${{ matrix.sanitizer && format(' / {0}', matrix.sanitizer) || '' }}"
     needs: [format-check, lint]
