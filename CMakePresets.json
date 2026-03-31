@@ -24,6 +24,15 @@
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
         "CMAKE_CXX_SCAN_FOR_MODULES": "OFF"
       }
+    },
+    {
+      "name": "Coverage",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_CXX_SCAN_FOR_MODULES": "OFF",
+        "RAFTPP_COVERAGE": "ON"
+      }
     }
   ]
 }

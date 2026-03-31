@@ -83,6 +83,16 @@ if (MSVC)
   add_compile_options(/MP)
 endif ()
 
+if (RAFTPP_COVERAGE)
+  if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    add_compile_options(-fprofile-instr-generate -fcoverage-mapping)
+    add_link_options(-fprofile-instr-generate -fcoverage-mapping)
+  else ()
+    add_compile_options(--coverage)
+    add_link_options(--coverage)
+  endif ()
+endif ()
+
 set(RAFTPP_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 add_subdirectory(third_party)
@@ -108,17 +118,3 @@ raftpp_enforce_cxx17(raftpp-tests)
 raftpp_enforce_cxx17(kvstore-example)
 raftpp_enforce_cxx17(kvstore-cli)
 raftpp_enforce_cxx17(kvstore-test)
-
-if (RAFTPP_COVERAGE)
-  if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-    target_compile_options(raftpp PUBLIC
-      -fprofile-instr-generate
-      -fcoverage-mapping)
-    target_link_options(raftpp PUBLIC
-      -fprofile-instr-generate
-      -fcoverage-mapping)
-  else ()
-    target_compile_options(raftpp PUBLIC --coverage)
-    target_link_options(raftpp PUBLIC --coverage)
-  endif ()
-endif ()
