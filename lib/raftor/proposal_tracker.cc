@@ -191,11 +191,9 @@ void ProposalQueue::Push(
     std::string data, ProposalCallback callback, std::chrono::milliseconds timeout
 ) {
     std::lock_guard lock(mutex_);
-    queue_.push_back(
-        ProposalQueue::Item{
-            std::move(data), std::move(callback), std::optional<std::chrono::milliseconds>{timeout}
-        }
-    );
+    queue_.push_back(ProposalQueue::Item{
+        std::move(data), std::move(callback), std::optional<std::chrono::milliseconds>{timeout}
+    });
 }
 
 std::optional<ProposalQueue::Item> ProposalQueue::TryPop() {
@@ -229,11 +227,9 @@ void ReadIndexQueue::Push(
     std::string ctx, ReadIndexCallback callback, std::chrono::milliseconds timeout
 ) {
     std::lock_guard lock(mutex_);
-    queue_.push_back(
-        ReadIndexQueue::Item{
-            std::move(ctx), std::move(callback), std::optional<std::chrono::milliseconds>{timeout}
-        }
-    );
+    queue_.push_back(ReadIndexQueue::Item{
+        std::move(ctx), std::move(callback), std::optional<std::chrono::milliseconds>{timeout}
+    });
 }
 
 std::optional<ReadIndexQueue::Item> ReadIndexQueue::TryPop() {

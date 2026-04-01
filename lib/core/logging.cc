@@ -176,17 +176,18 @@ std::string AttributeToString(const opentelemetry::common::AttributeValue& value
                 return format_span(v, [](std::string& out, const bool item) {
                     out.append(item ? "true" : "false");
                 });
-            } else if constexpr (
-                std::is_same_v<ValueType, SpanInt32> || std::is_same_v<ValueType, SpanInt64> ||
-                std::is_same_v<ValueType, SpanUInt32> || std::is_same_v<ValueType, SpanDouble> ||
-                std::is_same_v<ValueType, SpanUInt64>
-            ) {
+            } else if constexpr (std::is_same_v<ValueType, SpanInt32> ||
+                                 std::is_same_v<ValueType, SpanInt64> ||
+                                 std::is_same_v<ValueType, SpanUInt32> ||
+                                 std::is_same_v<ValueType, SpanDouble> ||
+                                 std::is_same_v<ValueType, SpanUInt64>) {
                 return format_span(v, [](std::string& out, const auto item) {
                     out.append(fmt::format("{}", item));
                 });
             } else if constexpr (std::is_same_v<ValueType, SpanStringView>) {
                 return format_span(
-                    v, [](std::string& out, const opentelemetry::nostd::string_view item) {
+                    v,
+                    [](std::string& out, const opentelemetry::nostd::string_view item) {
                         out.push_back('"');
                         out.append(item.data(), item.size());
                         out.push_back('"');
@@ -216,11 +217,9 @@ std::string TraceIdToHex(const opentelemetry::trace::TraceId& trace_id) {
 
 std::string SpanIdToHex(const opentelemetry::trace::SpanId& span_id) {
     std::array<char, opentelemetry::trace::SpanId::kSize * 2> buffer{};
-    span_id.ToLowerBase16(
-        opentelemetry::nostd::span<char, opentelemetry::trace::SpanId::kSize * 2>(
-            buffer.data(), buffer.size()
-        )
-    );
+    span_id.ToLowerBase16(opentelemetry::nostd::span<char, opentelemetry::trace::SpanId::kSize * 2>(
+        buffer.data(), buffer.size()
+    ));
     return std::string(buffer.data(), buffer.size());
 }
 
@@ -386,17 +385,15 @@ class StderrLogger final : public opentelemetry::logs::Logger {
 
     const opentelemetry::nostd::string_view GetName() noexcept override { return name_; }
 
-    opentelemetry::nostd::unique_ptr<opentelemetry::logs::LogRecord>
-    CreateLogRecord() noexcept override {
-        return opentelemetry::nostd::unique_ptr<opentelemetry::logs::LogRecord>(
-            new StderrLogRecord
+    opentelemetry::nostd::unique_ptr<opentelemetry::logs::LogRecord> CreateLogRecord(
+    ) noexcept override {
+        return opentelemetry::nostd::unique_ptr<opentelemetry::logs::LogRecord>(new StderrLogRecord
         );
     }
 
     using Logger::EmitLogRecord;
 
-    void EmitLogRecord(
-        opentelemetry::nostd::unique_ptr<opentelemetry::logs::LogRecord>&& record
+    void EmitLogRecord(opentelemetry::nostd::unique_ptr<opentelemetry::logs::LogRecord>&& record
     ) noexcept override {
         auto* stderr_record = dynamic_cast<StderrLogRecord*>(record.get());
         if (stderr_record == nullptr || !ShouldLogSeverity(stderr_record->severity())) {

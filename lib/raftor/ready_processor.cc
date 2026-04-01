@@ -451,7 +451,8 @@ void ReadyProcessor::MaybeCompletePendingReads() {
     // This is on a hot path: avoid allocating a new vector on every invocation.
     const auto applied_index = applied_index_;
     auto new_end = std::remove_if(
-        pending_reads_.begin(), pending_reads_.end(), [&](const PendingRead& pending) {
+        pending_reads_.begin(), pending_reads_.end(),
+        [&](const PendingRead& pending) {
             if (!proposal_tracker_.IsReadPending(pending.ctx)) {
                 return true;
             }

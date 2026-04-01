@@ -280,8 +280,8 @@ void CapnpTransport::RpcLoop(std::promise<Result<void>> start_promise) {
 
         set_start({});
 
-        while (running_.load(std::memory_order_acquire) &&
-               !stopped_.load(std::memory_order_acquire)) {
+        while (running_.load(std::memory_order_acquire) && !stopped_.load(std::memory_order_acquire)
+        ) {
             std::vector<uint64_t> stale_clients;
             {
                 std::lock_guard lock(peers_mutex_);
