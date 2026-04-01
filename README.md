@@ -19,15 +19,6 @@ task build
 task test
 ```
 
-## IWYU
-
-`include-what-you-use` integration is opt-in and runs only for project targets.
-Generated Cap'n Proto sources are excluded from the check.
-
-```bash
-task iwyu
-```
-
 If the executable is not on `PATH`, configure with
 `-DRAFTPP_IWYU_EXECUTABLE=/path/to/include-what-you-use`.
 
