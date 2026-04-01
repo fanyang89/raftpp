@@ -9,7 +9,7 @@ tasks:
   docker-build:
     desc: Build the format image
     cmds:
-      - docker build -t "${FORMAT_IMAGE:-ghcr.io/raftpp/clang-format:18}" .
+      - docker build -t "${FORMAT_IMAGE:-ghcr.io/fanyang89/clang-format:18}" .
 
   fmt:
     desc: Format all C++ source files with clang-format (via Docker)

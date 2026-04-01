@@ -25,7 +25,7 @@ case "$mode" in
         ;;
 esac
 
-format_image="${FORMAT_IMAGE:-ghcr.io/raftpp/clang-format:18}"
+format_image="${FORMAT_IMAGE:-ghcr.io/fanyang89/clang-format:18}"
 repo_root="$(git rev-parse --show-toplevel)"
 host_uid="$(id -u)"
 host_gid="$(id -g)"
