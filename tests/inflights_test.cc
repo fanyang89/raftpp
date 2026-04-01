@@ -143,8 +143,8 @@ TEST_CASE("inflights: SetCapacity") {
     DOCTEST_VALUE_PARAMETERIZED_DATA(start, starts);
 
     InflightsDebug inflight(128);
-    for (int64_t i = 0; i < start; ++i) {
-        inflight.Add(static_cast<uint64_t>(i));
+    for (uint64_t i = 0; i < start; ++i) {
+        inflight.Add(i);
     }
     inflight.FreeTo(start - 1);
     for (uint64_t i = 0; i < 16; ++i) {
