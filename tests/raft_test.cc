@@ -1,14 +1,30 @@
 // Port of raft-rs harness/tests/integration_cases/test_raft.rs
 // Core Raft algorithm tests.
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <algorithm>
+#include <memory>
+#include <optional>
+#include <string>
 #include <tuple>
+#include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include <doctest/doctest.h>
 
-#include "harness/network.h"
+#include "harness/interface.h"
 #include "harness/test_util.h"
+#include "raftpp.capnp.h"
+#include "raftpp/core/capnp_util.h"
+#include "raftpp/core/error.h"
+#include "raftpp/core/progress.h"
+#include "raftpp/core/progress_tracker.h"
+#include "raftpp/core/raft_config.h"
+#include "raftpp/core/raft_core.h"
+#include "raftpp/core/types.h"
 
 using namespace raftpp;
 

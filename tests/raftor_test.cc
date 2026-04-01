@@ -7,17 +7,23 @@
 #include <chrono>
 #include <filesystem>
 #include <memory>
+#include <mutex>
+#include <optional>
 #include <system_error>
 #include <thread>
+#include <tuple>
+#include <utility>
+#include <variant>
+#include <vector>
 
 #include <doctest/doctest.h>
+#include <nonstd/expected.hpp>
+#include <nonstd/span.hpp>
 
 #include "raftpp/core/capnp_util.h"
-#include "raftpp/core/memory_storage.h"
+#include "raftpp/core/types.h"
 #include "raftpp/logging.h"
-#include "raftpp/raftor/proposal_tracker.h"
 #include "raftpp/raftor/raftor_config.h"
-#include "raftpp/raftor/rpc/transport.h"
 #include "raftpp/raftor/state_machine.h"
 
 using namespace raftpp;

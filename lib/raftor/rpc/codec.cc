@@ -2,9 +2,14 @@
 
 #include <charconv>
 #include <cstring>
+#include <string_view>
+#include <system_error>
 
-#include <capnp/message.h>
+#include <capnp/common.h>
 #include <capnp/serialize.h>
+#include <kj/common.h>
+
+#include "raftpp/core/capnp_util.h"
 
 namespace raftpp::raftor::rpc {
 
@@ -23,9 +28,11 @@ std::vector<uint8_t> Codec::Encode(
     // Serialize message to get payload size
     auto msg_bytes = capnp_util::toBytes(msg);
     header_builder.setPayloadSize(static_cast<uint32_t>(msg_bytes.size()));
-    header_builder.setMsgType(capnp_util::cast_enum<capnp::MessageType>(
-        capnp_util::reader<msg::Message>(msg).getMsgType()
-    ));
+    header_builder.setMsgType(
+        capnp_util::cast_enum<capnp::MessageType>(
+            capnp_util::reader<msg::Message>(msg).getMsgType()
+        )
+    );
 
     // Serialize header
     auto header_bytes = capnp_util::toBytes(header);
@@ -116,7 +123,8 @@ Result<size_t> Codec::FrameSize(nonstd::span<const uint8_t> buffer, size_t max_s
             reinterpret_cast<const ::capnp::word*>(buffer.data() + kPrefixSize);
         size_t word_count = header_len / sizeof(::capnp::word);
 
-        ::capnp::FlatArrayMessageReader reader(kj::ArrayPtr<const ::capnp::word>(words, word_count)
+        ::capnp::FlatArrayMessageReader reader(
+            kj::ArrayPtr<const ::capnp::word>(words, word_count)
         );
         auto header_reader = reader.getRoot<capnp::RpcHeader>();
 
@@ -189,9 +197,9 @@ Result<Codec::DecodeResult> Codec::Decode(nonstd::span<const uint8_t> buffer, si
         const ::capnp::word* words =
             reinterpret_cast<const ::capnp::word*>(buffer.data() + header_end);
         size_t word_count = header_reader.getPayloadSize() / sizeof(::capnp::word);
-        msg =
-            capnp_util::fromWords<msg::Message>(kj::ArrayPtr<const ::capnp::word>(words, word_count)
-            );
+        msg = capnp_util::fromWords<msg::Message>(
+            kj::ArrayPtr<const ::capnp::word>(words, word_count)
+        );
     } catch (...) {
         return RaftError(RpcErrorCode::PayloadParseFailed);
     }

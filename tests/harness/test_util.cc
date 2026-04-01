@@ -1,10 +1,21 @@
 #include "harness/test_util.h"
 
 #include <set>
+#include <stdexcept>
+#include <tuple>
 
+#include <capnp/blob.h>
+#include <capnp/common.h>
 #include <doctest/doctest.h>
+#include <kj/common.h>
 
+#include "raftpp.capnp.h"
 #include "raftpp/core/capnp_util.h"
+#include "raftpp/core/memory_storage.h"
+#include "raftpp/core/raft.h"
+#include "raftpp/core/raft_log.h"
+#include "raftpp/core/read_only.h"
+#include "raftpp/core/unstable_log.h"
 #include "raftpp/fmt.h"
 
 namespace raftpp {

@@ -1,12 +1,36 @@
 #include "raftpp/core/raft.h"
 
+#include <algorithm>
+#include <cstddef>
 #include <exception>
+#include <limits>
 #include <numeric>
 #include <random>
+#include <tuple>
 
+#include <kj/common.h>
+#include <kj/exception.h>
+#include <kj/string.h>
+
+#include "raftpp.capnp.h"
+#include "raftpp/core/assert.h"
+#include "raftpp/core/capnp_util.h"
 #include "raftpp/core/conf_changer.h"
 #include "raftpp/core/conf_restore.h"
-#include "raftpp/core/util.h"
+#include "raftpp/core/inflights.h"
+#include "raftpp/core/joint_conf.h"
+#include "raftpp/core/primitives.h"
+#include "raftpp/core/progress.h"
+#include "raftpp/core/progress_tracker.h"
+#include "raftpp/core/raft_config.h"
+#include "raftpp/core/raft_core.h"
+#include "raftpp/core/raft_log.h"
+#include "raftpp/core/read_only.h"
+#include "raftpp/core/storage.h"
+#include "raftpp/core/tracker_conf.h"
+#include "raftpp/core/types.h"
+#include "raftpp/core/unstable_log.h"
+#include "raftpp/fmt.h"
 #include "raftpp/logging.h"
 
 namespace raftpp {

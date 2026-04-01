@@ -1,12 +1,31 @@
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
+#include <functional>
+#include <memory>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+#include <nonstd/span.hpp>
+
 #include "progress_tracker.h"
 #include "raft_config.h"
 #include "raft_core.h"
-#include "read_only.h"
+#include "raftpp/core/ack_indexer.h"
+#include "raftpp/core/error.h"
 #include "types.h"
 
 namespace raftpp {
+
+class Progress;
+class RaftLog;
+class Storage;
+struct GetEntriesContext;
+struct ReadState;
 
 class Raft : public RaftCore {
   public:

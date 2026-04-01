@@ -1,16 +1,27 @@
+#include <stddef.h>
+#include <stdint.h>
+
 #include <atomic>
 #include <chrono>
 #include <mutex>
 #include <optional>
+#include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
+#include <capnp/blob.h>
 #include <doctest/doctest.h>
-#include <kj/array.h>
+#include <kj/common.h>
+#include <nonstd/span.hpp>
 
+#include "raftpp.capnp.h"
 #include "raftpp/core/capnp_util.h"
+#include "raftpp/core/error.h"
+#include "raftpp/core/types.h"
 #include "raftpp/fmt.h"
 #include "raftpp/raftor/rpc/capnp_transport.h"
+#include "transport.h"
 
 using namespace raftpp;
 using namespace raftor::rpc;
@@ -664,9 +675,11 @@ TEST_SUITE("rpc::capnp") {
         for (int i = 0; i < 100; i++) {
             entries[i].setTerm(1);
             entries[i].setIndex(i + 1);
-            entries[i].setData(kj::arrayPtr(
-                reinterpret_cast<const kj::byte*>(large_data.data()), large_data.size()
-            ));
+            entries[i].setData(
+                kj::arrayPtr(
+                    reinterpret_cast<const kj::byte*>(large_data.data()), large_data.size()
+                )
+            );
         }
 
         t1.Send(nonstd::span(&msg, 1));

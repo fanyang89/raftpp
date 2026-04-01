@@ -1,7 +1,20 @@
-#include <doctest/doctest.h>
-#include <kj/array.h>
+#include <stdint.h>
 
+#include <algorithm>
+#include <cstring>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include <capnp/blob.h>
+#include <doctest/doctest.h>
+#include <kj/common.h>
+#include <nonstd/span.hpp>
+
+#include "raftpp.capnp.h"
 #include "raftpp/core/capnp_util.h"
+#include "raftpp/core/error.h"
+#include "raftpp/core/types.h"
 #include "raftpp/raftor/rpc/codec.h"
 #include "raftpp/raftor/rpc/peer_manager.h"
 

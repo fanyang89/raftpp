@@ -1,12 +1,25 @@
-#include <algorithm>
-#include <doctest/doctest.h>
-#include <nlohmann/json.hpp>
+#include <stdint.h>
 
+#include <algorithm>
+#include <cmath>
 #include <cstring>
+#include <map>
+#include <optional>
+#include <string>
+#include <vector>
+
+#include <doctest/doctest.h>
+#include <kj/common.h>
+#include <nlohmann/detail/json_ref.hpp>
+#include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
+#include <nonstd/span.hpp>
 
 #include "kv_store_state_machine.h"
 #include "raftpp/core/capnp_util.h"
+#include "raftpp/core/error.h"
 #include "raftpp/core/types.h"
+#include "raftpp/raftor/state_machine.h"
 
 using namespace kvstore;
 

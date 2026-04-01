@@ -1,7 +1,12 @@
 #include "raftpp/core/read_only.h"
 
+#include <unordered_map>
+#include <utility>
+
 #include "raftpp/core/assert.h"
-#include "raftpp/core/util.h"
+#include "raftpp/core/capnp_util.h"
+#include "raftpp/core/primitives.h"
+#include "raftpp/core/types.h"
 
 namespace raftpp {
 

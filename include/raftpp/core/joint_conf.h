@@ -1,6 +1,14 @@
 #pragma once
 
+#include <cstdint>
+#include <functional>
+#include <optional>
+#include <string_view>
+#include <utility>
+
+#include "ack_indexer.h"
 #include "majority_conf.h"
+#include "primitives.h"
 #include "raftpp/fmt.h"
 
 namespace raftpp {

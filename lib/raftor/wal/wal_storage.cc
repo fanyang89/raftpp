@@ -1,7 +1,15 @@
 #include "raftpp/raftor/wal/wal_storage.h"
 
+#include <optional>
+#include <utility>
+
+#include <nonstd/span.hpp>
+#include <opentelemetry/trace/span.h>
+
+#include "raftpp/core/capnp_util.h"
 #include "raftpp/logging.h"
 #include "raftpp/raftor/telemetry.h"
+#include "raftpp/raftor/wal/wal.h"
 
 namespace raftpp::raftor::wal {
 

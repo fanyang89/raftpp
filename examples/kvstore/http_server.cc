@@ -1,10 +1,24 @@
 #include "http_server.h"
 
+#include <httplib.h>
+#include <stddef.h>
+
+#include <exception>
 #include <functional>
+#include <future>
 #include <iostream>
+#include <map>
+#include <optional>
+#include <unordered_map>
 #include <utility>
 
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
+#include <nonstd/expected.hpp>
+
+#include "kv_store.h"
+#include "raftpp/core/error.h"
+#include "raftpp/raftor/raftor.h"
 
 namespace kvstore {
 

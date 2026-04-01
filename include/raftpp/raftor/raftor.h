@@ -1,5 +1,8 @@
 #pragma once
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <chrono>
 #include <future>
 #include <memory>
@@ -7,12 +10,22 @@
 
 #include "raftpp/core/error.h"
 #include "raftpp/core/raft_core.h"
-#include "raftpp/core/raw_node.h"
-#include "raftpp/core/storage.h"
+#include "raftpp/core/raw_node.h"  // IWYU pragma: export
 #include "raftpp/raftor/proposal_tracker.h"
-#include "raftpp/raftor/raftor_config.h"
-#include "raftpp/raftor/rpc/transport.h"
-#include "raftpp/raftor/state_machine.h"
+#include "raftpp/raftor/raftor_config.h"  // IWYU pragma: export
+#include "raftpp/raftor/state_machine.h"  // IWYU pragma: export
+
+namespace raftpp::raftor {
+
+namespace rpc {
+class Transport;
+}  // namespace rpc
+
+}  // namespace raftpp::raftor
+
+namespace raftpp {
+class Storage;
+}  // namespace raftpp
 
 namespace raftpp::raftor {
 

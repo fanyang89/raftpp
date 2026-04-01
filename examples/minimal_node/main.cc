@@ -1,7 +1,20 @@
+#include <stdint.h>
+
 #include <array>
 #include <chrono>
+#include <filesystem>
+#include <memory>
+#include <optional>
+#include <string>
+#include <utility>
+
+#include <nonstd/expected.hpp>
+#include <nonstd/span.hpp>
 
 #include "raftpp/core/capnp_util.h"
+#include "raftpp/core/error.h"
+#include "raftpp/core/raft_core.h"
+#include "raftpp/core/types.h"
 #include "raftpp/raftor/raftor.h"
 
 namespace {

@@ -1,6 +1,16 @@
 #include "raftpp/core/conf_restore.h"
 
+#include <utility>
+#include <vector>
+
+#include <nonstd/span.hpp>
+
+#include "raftpp.capnp.h"
+#include "raftpp/core/capnp_util.h"
 #include "raftpp/core/conf_changer.h"
+#include "raftpp/core/progress_tracker.h"
+#include "raftpp/core/tracker_conf.h"
+#include "raftpp/core/types.h"
 
 namespace raftpp {
 
@@ -24,8 +34,9 @@ std::pair<std::vector<ConfChangeSingle>, std::vector<ConfChangeSingle>> ToConfCh
         ConfChangeSingle s = capnp_util::make<msg::ConfChangeSingle>();
         auto builder = capnp_util::builder<msg::ConfChangeSingle>(s);
         builder.setNodeId(id);
-        builder.setChangeType(capnp_util::cast_enum<msg::ConfChangeType>(ConfChangeType::REMOVE_NODE
-        ));
+        builder.setChangeType(
+            capnp_util::cast_enum<msg::ConfChangeType>(ConfChangeType::REMOVE_NODE)
+        );
         incoming.emplace_back(std::move(s));
     }
 

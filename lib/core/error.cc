@@ -1,5 +1,7 @@
 #include "raftpp/core/error.h"
 
+#include "raftpp/fmt.h"
+
 namespace {
 
 struct ToStringVisitor {

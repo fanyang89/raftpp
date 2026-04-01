@@ -1,13 +1,25 @@
 #pragma once
 
+#include <cstdint>
+#include <deque>
+#include <memory>
 #include <optional>
+#include <string>
+#include <utility>
 #include <vector>
 
 #include "raft.h"
+#include "raftpp/core/error.h"
+#include "raftpp/core/raft_core.h"
+#include "raftpp/core/read_only.h"
 #include "status.h"
 #include "types.h"
 
 namespace raftpp {
+
+class Storage;
+struct Config;
+struct GetEntriesContext;
 
 struct Peer {
     /// The ID of the peer.

@@ -1,13 +1,19 @@
 #pragma once
 
+#include <stdint.h>
+
 #include <atomic>
+#include <chrono>
 #include <future>
 #include <mutex>
 #include <queue>
+#include <string>
 #include <thread>
 #include <vector>
 
+#include "raftpp/core/error.h"
 #include "raftpp/core/primitives.h"
+#include "raftpp/core/types.h"
 #include "raftpp/raftor/rpc/transport.h"
 
 namespace raftpp::raftor::rpc {

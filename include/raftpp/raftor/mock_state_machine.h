@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 
+#include "raftpp/core/error.h"
+#include "raftpp/core/types.h"
 #include "raftpp/raftor/state_machine.h"
 
 namespace raftpp::raftor {

@@ -2,9 +2,24 @@
 
 #include <algorithm>
 #include <cstring>
+#include <optional>
+#include <utility>
 
+#include <capnp/blob.h>
+#include <nonstd/expected.hpp>
+#include <nonstd/span.hpp>
+#include <opentelemetry/trace/span.h>
+
+#include "raftpp.capnp.h"
+#include "raftpp/core/capnp_util.h"
+#include "raftpp/core/raw_node.h"
+#include "raftpp/core/read_only.h"
 #include "raftpp/logging.h"
+#include "raftpp/raftor/proposal_tracker.h"
+#include "raftpp/raftor/state_machine.h"
 #include "raftpp/raftor/telemetry.h"
+#include "raftpp/raftor/wal/wal_storage.h"
+#include "transport.h"
 
 namespace raftpp::raftor {
 namespace {

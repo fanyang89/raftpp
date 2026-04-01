@@ -1,12 +1,31 @@
+#include <stddef.h>
+#include <stdint.h>
+
 #include <algorithm>
+#include <filesystem>
+#include <functional>
 #include <sstream>
+#include <stdexcept>
+#include <string>
+#include <unordered_map>
+#include <utility>
+#include <vector>
 
 #include <doctest/doctest.h>
+#include <nonstd/span.hpp>
 
 #include "datadriven.h"
+#include "raftpp.capnp.h"
 #include "raftpp/core/capnp_util.h"
 #include "raftpp/core/conf_changer.h"
+#include "raftpp/core/error.h"
+#include "raftpp/core/joint_conf.h"
+#include "raftpp/core/majority_conf.h"
+#include "raftpp/core/primitives.h"
+#include "raftpp/core/progress.h"
 #include "raftpp/core/progress_tracker.h"
+#include "raftpp/core/tracker_conf.h"
+#include "raftpp/core/types.h"
 
 namespace raftpp {
 namespace test {

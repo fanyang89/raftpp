@@ -1,6 +1,10 @@
 #pragma once
 
+#include <cstdint>
 #include <functional>
+#include <optional>
+#include <string_view>
+#include <utility>
 
 #include "ack_indexer.h"
 #include "primitives.h"
@@ -16,7 +20,8 @@ class MajorityConfig : public Set<uint64_t> {
     [[nodiscard]] std::pair<uint64_t, bool> CommittedIndex(
         bool use_group_commit, const AckedIndexer& l
     ) const;
-    [[nodiscard]] VoteResult GetVoteResult(const std::function<std::optional<bool>(uint64_t)>& check
+    [[nodiscard]] VoteResult GetVoteResult(
+        const std::function<std::optional<bool>(uint64_t)>& check
     ) const;
 };
 

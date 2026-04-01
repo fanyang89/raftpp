@@ -1,6 +1,14 @@
 #include "harness/interface.h"
 
+#include <optional>
+#include <tuple>
+#include <utility>
+
 #include "raftpp/core/capnp_util.h"
+#include "raftpp/core/memory_storage.h"
+#include "raftpp/core/raft_log.h"
+#include "raftpp/core/storage.h"
+#include "raftpp/core/unstable_log.h"
 
 namespace raftpp {
 

@@ -1,13 +1,17 @@
 #include "raftpp/raftor/wal/segment.h"
 
+#include <errno.h>
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #include <array>
 #include <cstring>
 #include <regex>
+#include <utility>
 
+#include "raftpp/fmt.h"
 #include "raftpp/logging.h"
 #include "raftpp/raftor/wal/record.h"
 
@@ -19,6 +23,8 @@
 #include <liburing.h>
 
 #include <mutex>
+
+#include <liburing/io_uring.h>
 #endif
 
 namespace raftpp::raftor::wal {
@@ -33,9 +39,11 @@ class PosixSegmentIo final : public SegmentIo {
             return RaftError(StorageErrorOther{fmt::format("pwrite failed: {}", strerror(errno))});
         }
         if (static_cast<size_t>(written) != data.size()) {
-            return RaftError(StorageErrorOther{
-                fmt::format("short write: expected {}, got {}", data.size(), written)
-            });
+            return RaftError(
+                StorageErrorOther{
+                    fmt::format("short write: expected {}, got {}", data.size(), written)
+                }
+            );
         }
         return {};
     }
@@ -343,9 +351,11 @@ Result<std::unique_ptr<Segment>> Segment::Create(
 ) {
     int fd = ::open(path.c_str(), O_RDWR | O_CREAT | O_EXCL, 0644);
     if (fd < 0) {
-        return RaftError(StorageErrorOther{
-            fmt::format("failed to create segment {}: {}", path.string(), strerror(errno))
-        });
+        return RaftError(
+            StorageErrorOther{
+                fmt::format("failed to create segment {}: {}", path.string(), strerror(errno))
+            }
+        );
     }
 
     // Preallocate space if requested
@@ -374,7 +384,7 @@ Result<std::unique_ptr<Segment>> Segment::Create(
         );
     }
 
-    struct stat st {};
+    struct stat st{};
 
     if (::fstat(fd, &st) < 0) {
         ::close(fd);
@@ -403,9 +413,11 @@ Result<std::unique_ptr<Segment>> Segment::Open(
 ) {
     int fd = ::open(path.c_str(), O_RDWR);
     if (fd < 0) {
-        return RaftError(StorageErrorOther{
-            fmt::format("failed to open segment {}: {}", path.string(), strerror(errno))
-        });
+        return RaftError(
+            StorageErrorOther{
+                fmt::format("failed to open segment {}: {}", path.string(), strerror(errno))
+            }
+        );
     }
 
     // Read and verify header
@@ -425,7 +437,7 @@ Result<std::unique_ptr<Segment>> Segment::Open(
     }
 
     // Get file size to determine write offset
-    struct stat st {};
+    struct stat st{};
 
     if (::fstat(fd, &st) < 0) {
         ::close(fd);

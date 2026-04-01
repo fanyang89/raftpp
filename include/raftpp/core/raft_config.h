@@ -1,5 +1,10 @@
 #pragma once
 
+#include <stddef.h>
+#include <stdint.h>
+
+#include <limits>
+
 #include "error.h"
 #include "read_only.h"
 

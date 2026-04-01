@@ -1,19 +1,35 @@
 #include "raftpp/raftor/rpc/capnp_transport.h"
 
+#include <string.h>
+#include <sys/types.h>
+
 #include <chrono>
+#include <exception>
+#include <memory>
 #include <thread>
 #include <unordered_map>
 #include <utility>
 
+#include <capnp/capability.h>
 #include <capnp/ez-rpc.h>
-#include <kj/async-io.h>
+#include <kj/async-prelude.h>
 #include <kj/async.h>
+#include <kj/common.h>
+#include <kj/exception.h>
+#include <kj/memory.h>
+#include <kj/string.h>
+#include <nonstd/expected.hpp>
+#include <nonstd/span.hpp>
+#include <opentelemetry/trace/span.h>
 
+#include "raftpp.capnp.h"
+#include "raftpp/core/capnp_util.h"
 #include "raftpp/core/types.h"
 #include "raftpp/fmt.h"
 #include "raftpp/logging.h"
 #include "raftpp/raftor/rpc/codec.h"
 #include "raftpp/raftor/telemetry.h"
+#include "transport.h"
 
 using raftpp::RaftError;
 using raftpp::Result;
@@ -264,8 +280,8 @@ void CapnpTransport::RpcLoop(std::promise<Result<void>> start_promise) {
 
         set_start({});
 
-        while (running_.load(std::memory_order_acquire) && !stopped_.load(std::memory_order_acquire)
-        ) {
+        while (running_.load(std::memory_order_acquire) &&
+               !stopped_.load(std::memory_order_acquire)) {
             std::vector<uint64_t> stale_clients;
             {
                 std::lock_guard lock(peers_mutex_);

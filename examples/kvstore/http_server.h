@@ -1,14 +1,24 @@
 #pragma once
 
-#include <httplib.h>
-
 #include <atomic>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <thread>
 
-#include "kv_store.h"
-#include "raftpp/raftor/raftor.h"
+namespace httplib {
+class Server;
+struct Request;
+struct Response;
+}  // namespace httplib
+
+namespace kvstore {
+class IKVStore;
+}
+
+namespace raftpp::raftor {
+class Raftor;
+}
 
 namespace kvstore {
 

@@ -1,24 +1,31 @@
 #pragma once
 
+#include <stddef.h>
+
 #include <cstdint>
 #include <limits>
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "harness/interface.h"
-#include "harness/network.h"
+#include "harness/network.h"  // IWYU pragma: export
 #include "raftpp/core/capnp_util.h"
-#include "raftpp/core/memory_storage.h"
-#include "raftpp/core/raft.h"
+#include "raftpp/core/error.h"
+#include "raftpp/core/memory_storage.h"  // IWYU pragma: export
+#include "raftpp/core/raft.h"            // IWYU pragma: export
 #include "raftpp/core/raft_config.h"
 #include "raftpp/core/raft_core.h"
-#include "raftpp/core/raft_log.h"
+#include "raftpp/core/raft_log.h"  // IWYU pragma: export
 #include "raftpp/core/raw_node.h"
+#include "raftpp/core/storage.h"
 #include "raftpp/core/types.h"
 
 namespace raftpp {
+
+struct ReadState;
 
 /// Helper to create a vector of Entry from variadic args (using moves)
 template <typename... Args>

@@ -1,5 +1,11 @@
 #include "raftpp/core/joint_conf.h"
 
+#include <algorithm>
+
+#include "raftpp/core/ack_indexer.h"
+#include "raftpp/core/majority_conf.h"
+#include "raftpp/core/primitives.h"
+
 namespace raftpp {
 
 JointConfiguration::JointConfiguration() = default;

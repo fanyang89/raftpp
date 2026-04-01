@@ -1,6 +1,19 @@
 #include "raftpp/core/raft_log.h"
 
-#include "raftpp/core/types.h"
+#include <stddef.h>
+
+#include <algorithm>
+#include <functional>
+#include <tuple>
+
+#include <nonstd/expected.hpp>
+#include <nonstd/span.hpp>
+
+#include "raftpp/core/assert.h"
+#include "raftpp/core/capnp_util.h"
+#include "raftpp/core/raft_config.h"
+#include "raftpp/core/storage.h"
+#include "raftpp/core/unstable_log.h"
 #include "raftpp/core/util.h"
 #include "raftpp/logging.h"
 
@@ -154,9 +167,11 @@ Result<RaftLog::MaybeAppendResult> RaftLog::MaybeAppend(
     if (conflict_idx == 0) {
         // no conflict
     } else if (conflict_idx <= committed_) {
-        return RaftError(FatalError{
-            fmt::format("entry {} conflict with committed entry {}", conflict_idx, committed_)
-        });
+        return RaftError(
+            FatalError{
+                fmt::format("entry {} conflict with committed entry {}", conflict_idx, committed_)
+            }
+        );
     } else {
         const size_t start = conflict_idx - (idx + 1);
         std::vector<Entry> to_append;
@@ -199,9 +214,11 @@ Result<void> RaftLog::CommitTo(uint64_t to_commit) {
     }
 
     if (LastIndex() < to_commit) {
-        return RaftError(FatalError{
-            fmt::format("to_commit {} is out of range [last_index {}]", to_commit, LastIndex())
-        });
+        return RaftError(
+            FatalError{
+                fmt::format("to_commit {} is out of range [last_index {}]", to_commit, LastIndex())
+            }
+        );
     }
 
     committed_ = to_commit;
@@ -224,10 +241,12 @@ Result<void> RaftLog::MustCheckOutOfBounds(uint64_t low, uint64_t high) const {
         const auto slice_high = high;
         const auto bound_first_index = first_index;
         const auto bound_last_index = LastIndex();
-        return RaftError(FatalError{fmt::format(
-            "slice[{},{}] out of bound[{},{}]", slice_low, slice_high, bound_first_index,
-            bound_last_index
-        )});
+        return RaftError(
+            FatalError{fmt::format(
+                "slice[{},{}] out of bound[{},{}]", slice_low, slice_high, bound_first_index,
+                bound_last_index
+            )}
+        );
     }
 
     return {};

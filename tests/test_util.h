@@ -1,10 +1,12 @@
 #pragma once
 
+#include <cstdint>
+#include <optional>
+#include <vector>
+
 #include <doctest/doctest.h>
 
-#include "harness/test_util.h"
-#include "raftpp/core/error.h"
-#include "raftpp/core/raft_core.h"
+#include "harness/test_util.h"  // IWYU pragma: export
 #include "raftpp/core/types.h"
 
 #define DOCTEST_VALUE_PARAMETERIZED_DATA(data, data_container)                           \
@@ -33,6 +35,8 @@
     } while (0)
 
 namespace raftpp {
+
+class RaftError;
 
 Snapshot NewSnapshot(uint64_t index, uint64_t term);
 

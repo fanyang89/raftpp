@@ -1,7 +1,19 @@
 #include "raftpp/core/memory_storage.h"
 
+#include <stddef.h>
+
+#include <algorithm>
+#include <memory>
+#include <type_traits>
+#include <utility>
+
+#include <capnp/blob.h>
+
 #include "raftpp/core/assert.h"
+#include "raftpp/core/capnp_util.h"
+#include "raftpp/core/storage.h"
 #include "raftpp/core/util.h"
+#include "raftpp/fmt.h"
 
 namespace raftpp {
 

@@ -1,13 +1,23 @@
 #include "raftpp/core/raw_node.h"
 
+#include <stdlib.h>
+
+#include <tuple>
+
+#include <capnp/blob.h>
 #include <doctest/doctest.h>
-#include <kj/array.h>
+#include <kj/common.h>
 #include <nonstd/span.hpp>
 
+#include "harness/interface.h"
 #include "harness/test_util.h"
+#include "raftpp.capnp.h"
+#include "raftpp/core/capnp_util.h"
 #include "raftpp/core/error.h"
-#include "raftpp/core/memory_storage.h"
 #include "raftpp/core/raft_config.h"
+#include "raftpp/core/status.h"
+#include "raftpp/core/storage.h"
+#include "raftpp/core/types.h"
 
 using namespace raftpp;
 
@@ -434,9 +444,11 @@ TEST_CASE("raw_node: start") {
     storage->Append(rd3.entries).value();
     auto light_rd2 = raw_node.Advance(rd3);
     CHECK_EQ(light_rd2.commit_index, std::make_optional<uint64_t>(3));
-    CHECK(raftpp::operator==(
-        light_rd2.committed_entries, MakeEntryVec(NewEntry(3, 2, "somedata", ""))
-    ));
+    CHECK(
+        raftpp::operator==(
+            light_rd2.committed_entries, MakeEntryVec(NewEntry(3, 2, "somedata", ""))
+        )
+    );
 
     CHECK_FALSE(raw_node.HasReady());
 }

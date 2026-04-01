@@ -1,5 +1,12 @@
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
+#include <utility>
+#include <vector>
+
+#include "ack_indexer.h"
+#include "primitives.h"
 #include "progress.h"
 #include "tracker_conf.h"
 

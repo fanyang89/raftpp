@@ -1,7 +1,12 @@
 #include "raftpp/raftor/wal/segment_manager.h"
 
 #include <algorithm>
+#include <optional>
+#include <string>
+#include <system_error>
+#include <utility>
 
+#include "raftpp/fmt.h"
 #include "raftpp/logging.h"
 
 namespace raftpp::raftor::wal {
@@ -209,11 +214,13 @@ std::vector<SegmentInfo> SegmentManager::ListSegments() const {
     result.reserve(segments_.size());
 
     for (const auto& [seg_id, segment] : segments_) {
-        result.push_back(SegmentInfo{
-            .segment_id = seg_id,
-            .first_index = segment->first_index(),
-            .path = segment->path(),
-        });
+        result.push_back(
+            SegmentInfo{
+                .segment_id = seg_id,
+                .first_index = segment->first_index(),
+                .path = segment->path(),
+            }
+        );
     }
 
     return result;

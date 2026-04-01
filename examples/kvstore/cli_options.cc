@@ -1,5 +1,6 @@
 #include "cli_options.h"
 
+#include <cstdlib>
 #include <iostream>
 #include <sstream>
 #include <string>

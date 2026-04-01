@@ -1,15 +1,21 @@
 #pragma once
 
+#include <stdint.h>
+
 #include <memory>
 #include <mutex>
 #include <string>
 #include <string_view>
+#include <vector>
 
+#include "raftpp/core/error.h"
 #include "raftpp/core/storage.h"
-#include "raftpp/raftor/wal/wal.h"
+#include "raftpp/core/types.h"
 #include "raftpp/raftor/wal/wal_config.h"
 
 namespace raftpp::raftor::wal {
+
+class WAL;
 
 // WALStorage implements the Storage interface using a Write-Ahead Log
 // This provides durable storage for Raft log entries

@@ -1,5 +1,15 @@
 #include "raftpp/core/tracker_conf.h"
 
+#include <cstddef>
+#include <unordered_map>
+
+#include "raftpp/core/capnp_util.h"
+#include "raftpp/core/joint_conf.h"
+#include "raftpp/core/majority_conf.h"
+#include "raftpp/core/primitives.h"
+#include "raftpp/core/types.h"
+#include "raftpp/fmt.h"
+
 namespace raftpp {
 
 TrackerConfiguration::TrackerConfiguration() : auto_leave(false) {}

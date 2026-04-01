@@ -1,8 +1,13 @@
 #include "raftpp/core/read_only.h"
 
+#include <tuple>
+#include <utility>
+
 #include <doctest/doctest.h>
 
+#include "raftpp.capnp.h"
 #include "raftpp/core/capnp_util.h"
+#include "raftpp/core/primitives.h"
 #include "raftpp/core/types.h"
 #include "test_util.h"
 

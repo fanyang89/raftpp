@@ -1,11 +1,20 @@
 #pragma once
 
+#include <stdint.h>
+
+#include <utility>
+#include <vector>
+
+#include <nonstd/span.hpp>
+
 #include "progress_tracker.h"
 #include "raftpp/core/error.h"
 #include "tracker_conf.h"
 #include "types.h"
 
 namespace raftpp {
+
+class ProgressMap;
 
 class IncrChangeMap {
   public:
@@ -26,8 +35,9 @@ class ConfChanger {
   public:
     explicit ConfChanger(ProgressTracker& tracker);
 
-    [[nodiscard]] Result<std::pair<TrackerConfiguration, MapChange>>
-    EnterJoint(bool auto_leave, nonstd::span<const ConfChangeSingle>);
+    [[nodiscard]] Result<std::pair<TrackerConfiguration, MapChange>> EnterJoint(
+        bool auto_leave, nonstd::span<const ConfChangeSingle>
+    );
 
     [[nodiscard]] Result<
         std::pair<TrackerConfiguration, std::vector<std::pair<uint64_t, MapChangeType>>>, RaftError>

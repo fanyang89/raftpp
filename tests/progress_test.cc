@@ -1,6 +1,11 @@
 #include "raftpp/core/progress.h"
 
 #include <list>
+#include <ostream>
+#include <string>
+#include <tuple>
+#include <utility>
+#include <vector>
 
 #include <doctest/doctest.h>
 

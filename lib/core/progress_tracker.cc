@@ -1,6 +1,15 @@
 #include "raftpp/core/progress_tracker.h"
 
+#include <functional>
+#include <optional>
+#include <unordered_map>
+
+#include "raftpp/core/ack_indexer.h"
 #include "raftpp/core/assert.h"
+#include "raftpp/core/joint_conf.h"
+#include "raftpp/core/primitives.h"
+#include "raftpp/core/progress.h"
+#include "raftpp/core/tracker_conf.h"
 
 namespace raftpp {
 

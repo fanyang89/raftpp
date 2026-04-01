@@ -1,8 +1,19 @@
 #include "raftpp/raftor/wal/wal.h"
 
+#include <cstring>
+#include <filesystem>
+#include <map>
+#include <mutex>
+#include <utility>
+
+#include <capnp/common.h>
+#include <kj/common.h>
+
 #include "raftpp/core/capnp_util.h"
+#include "raftpp/fmt.h"
 #include "raftpp/logging.h"
 #include "raftpp/raftor/wal/record.h"
+#include "raftpp/raftor/wal/segment_manager.h"
 
 namespace raftpp::raftor::wal {
 
@@ -103,9 +114,11 @@ Result<void> WAL::Recover() {
     uint64_t last_idx = LastIndexUnlocked();
     auto hs_reader = capnp_util::reader<msg::HardState>(hard_state_);
     if (last_idx < hs_reader.getCommit()) {
-        return RaftError(FatalError{fmt::format(
-            "WAL inconsistent: last_index {} < committed {}", last_idx, hs_reader.getCommit()
-        )});
+        return RaftError(
+            FatalError{fmt::format(
+                "WAL inconsistent: last_index {} < committed {}", last_idx, hs_reader.getCommit()
+            )}
+        );
     }
 
     RAFTPP_LOG_DEBUG(
@@ -291,10 +304,12 @@ Result<void> WAL::Append(nonstd::span<const Entry> entries) {
             // Truncate the index
             index_.TruncateFrom(first_entry_reader.getIndex());
         } else if (first_entry_reader.getIndex() != expected_index) {
-            return RaftError(FatalError{fmt::format(
-                "non-continuous entries: expected {}, got {}", expected_index,
-                first_entry_reader.getIndex()
-            )});
+            return RaftError(
+                FatalError{fmt::format(
+                    "non-continuous entries: expected {}, got {}", expected_index,
+                    first_entry_reader.getIndex()
+                )}
+            );
         }
     }
 
@@ -362,11 +377,13 @@ Result<void> WAL::Append(nonstd::span<const Entry> entries) {
         write_buffer_used_ += record.size();
 
         // Cache pending index information
-        pending_entries_.push_back(PendingEntry{
-            entry_reader.getIndex(), entry_reader.getTerm(),
-            static_cast<uint32_t>(write_buffer_used_ - record.size()),
-            static_cast<uint32_t>(record.size())
-        });
+        pending_entries_.push_back(
+            PendingEntry{
+                entry_reader.getIndex(), entry_reader.getTerm(),
+                static_cast<uint32_t>(write_buffer_used_ - record.size()),
+                static_cast<uint32_t>(record.size())
+            }
+        );
 
         auto flush_if_needed_result = FlushWriteBufferIfNeeded();
         if (!flush_if_needed_result) {

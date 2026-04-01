@@ -1,10 +1,13 @@
 #include "kv_store_state_machine.h"
 
 #include <array>
+#include <cstddef>
 #include <istream>
-#include <streambuf>
 
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
+#include <nonstd/expected.hpp>
+#include <nonstd/span.hpp>
 
 #include "raftpp/core/capnp_util.h"
 
@@ -93,9 +96,13 @@ raftpp::Result<std::map<std::string, std::string>> deserializeData(
         if (stream_buf.error().has_value()) {
             return nonstd::make_unexpected(*stream_buf.error());
         }
-        return nonstd::make_unexpected(raftpp::RaftError(raftpp::StorageErrorOther{
-            std::string("kvstore snapshot parse failed: ") + e.what(),
-        }));
+        return nonstd::make_unexpected(
+            raftpp::RaftError(
+                raftpp::StorageErrorOther{
+                    std::string("kvstore snapshot parse failed: ") + e.what(),
+                }
+            )
+        );
     }
 }
 
@@ -162,9 +169,11 @@ raftpp::Result<raftpp::SnapshotMetadata> KvStoreStateMachine::TakeSnapshot(
 ) {
     std::lock_guard lock(mutex_);
     std::string data_str = serializeData(data_);
-    auto write_result = writer.Write(nonstd::span<const uint8_t>(
-        reinterpret_cast<const uint8_t*>(data_str.data()), data_str.size()
-    ));
+    auto write_result = writer.Write(
+        nonstd::span<const uint8_t>(
+            reinterpret_cast<const uint8_t*>(data_str.data()), data_str.size()
+        )
+    );
     if (!write_result) {
         return nonstd::make_unexpected(write_result.error());
     }
@@ -182,9 +191,13 @@ raftpp::Result<void> KvStoreStateMachine::RestoreSnapshot(
 ) {
     auto meta = raftpp::capnp_util::reader<raftpp::msg::SnapshotMetadata>(metadata);
     if (meta.getIndex() == 0) {
-        return nonstd::make_unexpected(raftpp::RaftError(raftpp::StorageErrorOther{
-            "kvstore snapshot metadata index must be non-zero",
-        }));
+        return nonstd::make_unexpected(
+            raftpp::RaftError(
+                raftpp::StorageErrorOther{
+                    "kvstore snapshot metadata index must be non-zero",
+                }
+            )
+        );
     }
 
     auto data_result = deserializeData(reader);

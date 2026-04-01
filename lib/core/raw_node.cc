@@ -1,6 +1,21 @@
 #include "raftpp/core/raw_node.h"
 
-#include "raftpp/core/util.h"
+#include <functional>
+#include <tuple>
+
+#include <kj/common.h>
+
+#include "raftpp.capnp.h"
+#include "raftpp/core/assert.h"
+#include "raftpp/core/capnp_util.h"
+#include "raftpp/core/progress_tracker.h"
+#include "raftpp/core/raft.h"
+#include "raftpp/core/raft_config.h"
+#include "raftpp/core/raft_log.h"
+#include "raftpp/core/status.h"
+#include "raftpp/core/storage.h"
+#include "raftpp/core/types.h"
+#include "raftpp/core/unstable_log.h"
 #include "raftpp/logging.h"
 
 namespace raftpp {
@@ -366,9 +381,11 @@ Result<void> RawNode::Propose(const std::string& ctx, const std::string& data) {
 
     auto entries = m_builder.initEntries(1);
     auto entry_builder = entries[0];
-    entry_builder.setData(kj::arrayPtr(reinterpret_cast<const kj::byte*>(data.data()), data.size())
+    entry_builder.setData(
+        kj::arrayPtr(reinterpret_cast<const kj::byte*>(data.data()), data.size())
     );
-    entry_builder.setContext(kj::arrayPtr(reinterpret_cast<const kj::byte*>(ctx.data()), ctx.size())
+    entry_builder.setContext(
+        kj::arrayPtr(reinterpret_cast<const kj::byte*>(ctx.data()), ctx.size())
     );
 
     return raft_.Step(m);
@@ -385,14 +402,16 @@ Result<void> RawNode::ProposeConfChange(const std::string& ctx, const ConfChange
 
     auto entries = m_builder.initEntries(1);
     auto entry_builder = entries[0];
-    entry_builder.setEntryType(capnp_util::cast_enum<msg::EntryType>(EntryType::ENTRY_CONF_CHANGE_V2
-    ));
+    entry_builder.setEntryType(
+        capnp_util::cast_enum<msg::EntryType>(EntryType::ENTRY_CONF_CHANGE_V2)
+    );
 
     const std::string serialized = capnp_util::toString(cc);
     entry_builder.setData(
         kj::arrayPtr(reinterpret_cast<const kj::byte*>(serialized.data()), serialized.size())
     );
-    entry_builder.setContext(kj::arrayPtr(reinterpret_cast<const kj::byte*>(ctx.data()), ctx.size())
+    entry_builder.setContext(
+        kj::arrayPtr(reinterpret_cast<const kj::byte*>(ctx.data()), ctx.size())
     );
 
     return raft_.Step(m);

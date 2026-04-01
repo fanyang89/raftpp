@@ -1,7 +1,12 @@
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
+#include <functional>
 #include <optional>
 #include <vector>
+
+#include <nonstd/span.hpp>
 
 #include "types.h"
 

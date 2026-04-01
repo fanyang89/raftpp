@@ -1,11 +1,15 @@
 #pragma once
 
+#include <stdint.h>
+
 #include <map>
 #include <mutex>
 #include <optional>
 #include <string>
+#include <utility>
 
 #include "kv_store.h"
+#include "raftpp/core/error.h"
 #include "raftpp/core/types.h"
 #include "raftpp/raftor/state_machine.h"
 

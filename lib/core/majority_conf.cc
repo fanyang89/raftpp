@@ -1,6 +1,14 @@
 #include "raftpp/core/majority_conf.h"
 
 #include <algorithm>
+#include <cstddef>
+#include <limits>
+#include <unordered_map>
+#include <vector>
+
+#include "raftpp/core/ack_indexer.h"
+#include "raftpp/core/primitives.h"
+#include "raftpp/fmt.h"
 
 namespace raftpp {
 
@@ -62,7 +70,8 @@ std::pair<uint64_t, bool> MajorityConfig::CommittedIndex(
     return std::make_pair(matched.back().index, false);
 }
 
-VoteResult MajorityConfig::GetVoteResult(const std::function<std::optional<bool>(uint64_t)>& check
+VoteResult MajorityConfig::GetVoteResult(
+    const std::function<std::optional<bool>(uint64_t)>& check
 ) const {
     if (empty()) {
         return VoteResult::Won;
