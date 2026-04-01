@@ -31,7 +31,7 @@ Message AcceptAndReply(const Message& m) {
 }
 
 // Commit the no-op entry that the leader creates after election.
-void CommitNoopEntry(Interface& r, MemoryStorage& s) {
+void CommitNoopEntry(Interface& r, MemoryStorage& /*s*/) {
     CHECK_EQ(r->state(), StateRole::Leader);
     r->BroadcastAppend();
 

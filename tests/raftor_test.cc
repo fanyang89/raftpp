@@ -82,8 +82,9 @@ class MockStateMachine : public StateMachine {
         return metadata;
     }
 
-    Result<void> RestoreSnapshot(const SnapshotMetadata& metadata, SnapshotReader& reader)
-        override {
+    Result<void> RestoreSnapshot(
+        const SnapshotMetadata& metadata, SnapshotReader& reader
+    ) override {
         std::lock_guard lock(mutex_);
         (void)metadata;
         std::array<uint8_t, 1024> buffer{};
@@ -192,20 +193,6 @@ bool HasLeader(const std::vector<std::unique_ptr<Raftor>>& raftors) {
         }
     }
     return false;
-}
-
-bool WaitForLeader(
-    std::vector<std::unique_ptr<Raftor>>& raftors, std::chrono::milliseconds timeout,
-    std::chrono::milliseconds step = 25ms
-) {
-    auto deadline = std::chrono::steady_clock::now() + timeout;
-    while (std::chrono::steady_clock::now() < deadline) {
-        PollAll(raftors, step);
-        if (HasLeader(raftors)) {
-            return true;
-        }
-    }
-    return HasLeader(raftors);
 }
 
 bool HasStableLeader(const std::vector<std::unique_ptr<Raftor>>& raftors) {
@@ -439,8 +426,7 @@ TEST_CASE("three_node_read_index_from_follower_completes") {
     std::promise<bool> proposal_completed;
     auto proposal_future = proposal_completed.get_future();
     raftors[leader_id - 1]->Propose(
-        "readindex_warmup",
-        [&proposal_completed](Result<std::string> r) {
+        "readindex_warmup", [&proposal_completed](Result<std::string> r) {
             proposal_completed.set_value(r.has_value());
         }
     );

@@ -8,14 +8,6 @@
 
 using namespace raftpp;
 
-namespace {
-
-Snapshot TestingSnapshot() {
-    return NewSnapshot(11, 11, {1, 2});
-}
-
-}  // namespace
-
 TEST_SUITE_BEGIN("raft_snap");
 
 TEST_CASE("sending snapshot set pending snapshot") {

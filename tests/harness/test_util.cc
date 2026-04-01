@@ -326,23 +326,29 @@ Entry NewEntry(
     builder.setIndex(index);
     builder.setTerm(term);
     if (data.has_value()) {
-        builder.setData(::capnp::Data::Reader(
-            reinterpret_cast<const ::capnp::byte*>(data->data()), data->size()
-        ));
+        builder.setData(
+            ::capnp::Data::Reader(
+                reinterpret_cast<const ::capnp::byte*>(data->data()), data->size()
+            )
+        );
         // Always set context when data is set, to match Raft's internal behavior
         // (HandleAppendEntries always calls setContext, even if empty)
         if (context.has_value()) {
-            builder.setContext(::capnp::Data::Reader(
-                reinterpret_cast<const ::capnp::byte*>(context->data()), context->size()
-            ));
+            builder.setContext(
+                ::capnp::Data::Reader(
+                    reinterpret_cast<const ::capnp::byte*>(context->data()), context->size()
+                )
+            );
         } else {
             // Set empty context to match Raft's behavior
             builder.setContext(::capnp::Data::Reader(nullptr, 0));
         }
     } else if (context.has_value()) {
-        builder.setContext(::capnp::Data::Reader(
-            reinterpret_cast<const ::capnp::byte*>(context->data()), context->size()
-        ));
+        builder.setContext(
+            ::capnp::Data::Reader(
+                reinterpret_cast<const ::capnp::byte*>(context->data()), context->size()
+            )
+        );
     }
     return e;
 }
@@ -576,7 +582,7 @@ std::vector<Entry> NextEntries(Raft& r, MemoryStorage& s) {
     return std::vector<Entry>{};
 }
 
-void CommitNoopEntry(Network& network, MemoryStorage& storage, Raft& raft) {
+void CommitNoopEntry(Network& /*network*/, MemoryStorage& storage, Raft& raft) {
     // This helper commits the initial no-op entry after leader election
     // by having the leader broadcast and receive responses
 

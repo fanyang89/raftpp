@@ -18,10 +18,25 @@ function(raftpp_enforce_cxx17 target_name)
   endif ()
 endfunction()
 
+function(raftpp_enable_project_warnings target_name)
+  if (TARGET ${target_name} AND RAFTPP_ENABLE_WARNINGS)
+    target_compile_options(${target_name} PRIVATE
+      $<$<COMPILE_LANG_AND_ID:CXX,Clang,GNU>:-Wall>
+      $<$<COMPILE_LANG_AND_ID:CXX,Clang,GNU>:-Wextra>
+      $<$<COMPILE_LANG_AND_ID:CXX,Clang,GNU>:-Wunused>
+      $<$<COMPILE_LANG_AND_ID:CXX,Clang,GNU>:-Wunused-variable>
+      $<$<COMPILE_LANG_AND_ID:CXX,Clang,GNU>:-Wunused-parameter>
+      $<$<COMPILE_LANG_AND_ID:CXX,Clang,GNU>:-Wunused-function>
+      $<$<COMPILE_LANG_AND_ID:CXX,Clang,GNU>:-Wunused-value>
+      $<$<COMPILE_LANG_AND_ID:CXX,Clang>:-Wunreachable-code>)
+  endif ()
+endfunction()
+
 option(RAFTPP_BUILD_TESTING "Build unit tests" ON)
 option(RAFTPP_BUILD_EXAMPLES "Build examples" ON)
 option(RAFTPP_WITH_CCACHE "Build with ccache" ON)
 option(RAFTPP_WITH_LLD "Build with lld" OFF)
+option(RAFTPP_ENABLE_WARNINGS "Enable project compiler warnings" OFF)
 option(RAFTPP_USE_EXTERNAL_FMT "Use external/system fmt instead of vendored fmt" OFF)
 set(RAFTPP_LIBURING_DEPS_AVAILABLE OFF)
 if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
@@ -120,3 +135,18 @@ raftpp_enforce_cxx17(raftpp-tests)
 raftpp_enforce_cxx17(kvstore-example)
 raftpp_enforce_cxx17(kvstore-cli)
 raftpp_enforce_cxx17(kvstore-test)
+raftpp_enforce_cxx17(minimal-node-example)
+
+raftpp_enable_project_warnings(raftpp-proto)
+raftpp_enable_project_warnings(raftpp)
+raftpp_enable_project_warnings(raftor-rpc)
+raftpp_enable_project_warnings(raftor-wal)
+raftpp_enable_project_warnings(raftor)
+raftpp_enable_project_warnings(raftpp-test-harness)
+raftpp_enable_project_warnings(data-driven)
+raftpp_enable_project_warnings(data-driven-tests)
+raftpp_enable_project_warnings(raftpp-tests)
+raftpp_enable_project_warnings(kvstore-example)
+raftpp_enable_project_warnings(kvstore-cli)
+raftpp_enable_project_warnings(kvstore-test)
+raftpp_enable_project_warnings(minimal-node-example)

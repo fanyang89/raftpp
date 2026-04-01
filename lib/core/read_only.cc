@@ -52,7 +52,7 @@ ReadOnlyOption ReadOnly::option() const {
 std::vector<ReadIndexStatus> ReadOnly::Advance(const std::string& ctx) {
     std::vector<ReadIndexStatus> rss;
 
-    size_t p = -1;
+    std::optional<size_t> p;
     for (size_t i = 0; i < read_index_queue_.size(); ++i) {
         const auto& x = read_index_queue_[i];
         if (pending_read_index_.count(x) == 0) {
@@ -64,8 +64,8 @@ std::vector<ReadIndexStatus> ReadOnly::Advance(const std::string& ctx) {
         }
     }
 
-    if (p != -1) {
-        for (size_t i = 0; i <= p; ++i) {
+    if (p.has_value()) {
+        for (size_t i = 0; i <= *p; ++i) {
             const auto rs = read_index_queue_.front();
             read_index_queue_.pop_front();
 

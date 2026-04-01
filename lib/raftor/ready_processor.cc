@@ -286,8 +286,6 @@ Result<void> ReadyProcessor::ApplyEntry(const Entry& entry) {
             auto data = entry_reader.getData();
 
             try {
-                const ::capnp::word* words = reinterpret_cast<const ::capnp::word*>(data.begin());
-                size_t word_count = data.size() / sizeof(::capnp::word);
                 cc_v1 = capnp_util::fromBytes<msg::ConfChange>(
                     nonstd::span<const uint8_t>(data.begin(), data.size())
                 );
@@ -438,8 +436,7 @@ void ReadyProcessor::MaybeCompletePendingReads() {
     // This is on a hot path: avoid allocating a new vector on every invocation.
     const auto applied_index = applied_index_;
     auto new_end = std::remove_if(
-        pending_reads_.begin(), pending_reads_.end(),
-        [&](const PendingRead& pending) {
+        pending_reads_.begin(), pending_reads_.end(), [&](const PendingRead& pending) {
             if (!proposal_tracker_.IsReadPending(pending.ctx)) {
                 return true;
             }

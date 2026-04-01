@@ -6,9 +6,9 @@
 namespace raftpp::raftor::wal {
 
 WALStorage::WALStorage()
-    : snapshot_(capnp_util::make<msg::Snapshot>()),
-      effective_io_backend_(WALIoBackend::Auto),
-      io_backend_note_() {}
+    : effective_io_backend_(WALIoBackend::Auto),
+      io_backend_note_(),
+      snapshot_(capnp_util::make<msg::Snapshot>()) {}
 
 WALStorage::~WALStorage() = default;
 

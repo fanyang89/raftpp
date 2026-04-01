@@ -55,10 +55,12 @@ Result<void> MemoryStorageCore::Compact(uint64_t compact_index) {
     }
 
     if (compact_index > last_index() + 1) {
-        return RaftError(FatalError{fmt::format(
-            "compact not received raft logs, compact_index={} last_index={}", compact_index,
-            last_index()
-        )});
+        return RaftError(
+            FatalError{fmt::format(
+                "compact not received raft logs, compact_index={} last_index={}", compact_index,
+                last_index()
+            )}
+        );
     }
 
     if (entries_.empty()) {
@@ -82,16 +84,21 @@ Result<void> MemoryStorageCore::MayAppend(const std::vector<Entry>& ents) {
     const auto new_appended = capnp_util::reader<msg::Entry>(ents.front()).getIndex();
     if (first_index() > new_appended) {
         const auto compacted = first_index() - 1;
-        return RaftError(FatalError{fmt::format(
-            "overwrite compacted raft logs, compacted={} new_appended={}", compacted, new_appended
-        )});
+        return RaftError(
+            FatalError{fmt::format(
+                "overwrite compacted raft logs, compacted={} new_appended={}", compacted,
+                new_appended
+            )}
+        );
     }
 
     if (last_index() + 1 < new_appended) {
-        return RaftError(FatalError{fmt::format(
-            "raft logs should be continuous, last_index={} new_appended={}", last_index(),
-            new_appended
-        )});
+        return RaftError(
+            FatalError{fmt::format(
+                "raft logs should be continuous, last_index={} new_appended={}", last_index(),
+                new_appended
+            )}
+        );
     }
 
     if (const uint64_t diff = new_appended - first_index(); diff < entries_.size()) {
@@ -298,7 +305,7 @@ Result<uint64_t> MemoryStorage::LastIndex() {
     return core_.last_index();
 }
 
-Result<Snapshot> MemoryStorage::GetSnapshot(const uint64_t request_index, uint64_t to) {
+Result<Snapshot> MemoryStorage::GetSnapshot(const uint64_t request_index, uint64_t /*to*/) {
     std::lock_guard lock(mutex_);
     if (core_.trigger_snapshot_unavailable_) {
         core_.trigger_snapshot_unavailable_ = false;

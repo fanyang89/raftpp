@@ -91,7 +91,7 @@ TEST_CASE("raft_log: is up-to-date") {
 
 TEST_CASE("raft_log: append") {
     auto run_test = [](const std::vector<Entry>& entries, uint64_t w_index,
-                       std::vector<Entry> w_entries, uint64_t w_unstable) {
+                       std::vector<Entry> w_entries, uint64_t /*w_unstable*/) {
         auto previous_entries = Entries(NewEntry(1, 1), NewEntry(2, 2));
         auto store = std::make_unique<MemoryStorage>();
         const auto r = store->MayAppend(previous_entries);
@@ -106,10 +106,12 @@ TEST_CASE("raft_log: append") {
             REQUIRE(ents);
             REQUIRE_EQ(ents->size(), w_entries.size());
             for (size_t i = 0; i < ents->size(); ++i) {
-                CHECK(capnp_util::equal<msg::Entry>(
-                    capnp_util::reader<msg::Entry>(ents->at(i)),
-                    capnp_util::reader<msg::Entry>(w_entries.at(i))
-                ));
+                CHECK(
+                    capnp_util::equal<msg::Entry>(
+                        capnp_util::reader<msg::Entry>(ents->at(i)),
+                        capnp_util::reader<msg::Entry>(w_entries.at(i))
+                    )
+                );
             }
         } else {
             FAIL("GetEntries()");
@@ -665,8 +667,7 @@ TEST_CASE("raft_log: scan") {
     // Test that the callback early return.
     int iters = 0;
     REQUIRE(raft_log.Scan(
-        offset + 1, half, 0, GetEntriesContext::Empty(false),
-        [&iters](const std::vector<Entry>&) {
+        offset + 1, half, 0, GetEntriesContext::Empty(false), [&iters](const std::vector<Entry>&) {
             iters++;
             if (iters == 2) {
                 return false;
@@ -945,8 +946,9 @@ TEST_CASE("raft_log: commit to") {
 
     TestParam test;
     const std::vector tests{
-        TestParam{3, 3, false}, TestParam{1, 2, false},  // never decrease
-        TestParam{4, 0, true},                           // commit out of range -> panic
+        TestParam{3, 3, false},
+        TestParam{1, 2, false},  // never decrease
+        TestParam{4, 0, true},   // commit out of range -> panic
     };
     DOCTEST_VALUE_PARAMETERIZED_DATA(test, tests);
     const auto [commit, w_commit, w_panic] = test;
