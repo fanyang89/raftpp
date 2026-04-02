@@ -39,6 +39,65 @@ function(raftpp_enable_iwyu target_name)
   endif ()
 endfunction()
 
+function(raftpp_apply_to_targets function_name)
+  foreach(target_name IN ITEMS ${ARGN})
+    cmake_language(CALL ${function_name} ${target_name})
+  endforeach()
+endfunction()
+
+function(raftpp_resolve_iwyu)
+  if (NOT RAFTPP_ENABLE_IWYU)
+    return()
+  endif ()
+
+  if (RAFTPP_IWYU_EXECUTABLE AND IS_ABSOLUTE "${RAFTPP_IWYU_EXECUTABLE}")
+    if (NOT EXISTS "${RAFTPP_IWYU_EXECUTABLE}")
+      message(FATAL_ERROR "RAFTPP_IWYU_EXECUTABLE does not exist: ${RAFTPP_IWYU_EXECUTABLE}")
+    endif ()
+    set(raftpp_iwyu_bin "${RAFTPP_IWYU_EXECUTABLE}")
+  elseif (RAFTPP_IWYU_EXECUTABLE)
+    find_program(raftpp_iwyu_bin NAMES "${RAFTPP_IWYU_EXECUTABLE}" REQUIRED)
+  else ()
+    find_program(raftpp_iwyu_bin NAMES include-what-you-use iwyu REQUIRED)
+  endif ()
+
+  set(RAFTPP_IWYU_BIN "${raftpp_iwyu_bin}" PARENT_SCOPE)
+endfunction()
+
+function(raftpp_detect_liburing)
+  set(raftpp_liburing_deps_available OFF)
+
+  if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    find_package(PkgConfig QUIET)
+    if (PkgConfig_FOUND)
+      pkg_check_modules(LIBURING QUIET IMPORTED_TARGET liburing)
+      if (TARGET PkgConfig::LIBURING)
+        set(raftpp_liburing_deps_available ON)
+        if (NOT TARGET uring::uring)
+          add_library(uring::uring INTERFACE IMPORTED GLOBAL)
+          target_link_libraries(uring::uring INTERFACE PkgConfig::LIBURING)
+        endif ()
+      endif ()
+    endif ()
+  endif ()
+
+  set(RAFTPP_LIBURING_DEPS_AVAILABLE ${raftpp_liburing_deps_available} PARENT_SCOPE)
+endfunction()
+
+function(raftpp_validate_liburing)
+  if (NOT RAFTPP_WITH_LIBURING)
+    return()
+  endif ()
+
+  if (NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    message(FATAL_ERROR "RAFTPP_WITH_LIBURING is ON but liburing is Linux-only")
+  endif ()
+
+  if (NOT RAFTPP_LIBURING_DEPS_AVAILABLE)
+    message(FATAL_ERROR "RAFTPP_WITH_LIBURING is ON but system liburing was not found via pkg-config")
+  endif ()
+endfunction()
+
 option(RAFTPP_BUILD_TESTING "Build unit tests" ON)
 option(RAFTPP_BUILD_EXAMPLES "Build examples" ON)
 option(RAFTPP_WITH_CCACHE "Build with ccache" ON)
@@ -47,18 +106,7 @@ option(RAFTPP_ENABLE_WARNINGS "Enable project compiler warnings" OFF)
 option(RAFTPP_ENABLE_IWYU "Run include-what-you-use during C++ builds" OFF)
 option(RAFTPP_USE_EXTERNAL_FMT "Use external/system fmt instead of vendored fmt" OFF)
 set(RAFTPP_IWYU_EXECUTABLE "" CACHE FILEPATH "Path to the include-what-you-use executable")
-set(RAFTPP_LIBURING_DEPS_AVAILABLE OFF)
-if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
-  find_package(PkgConfig QUIET)
-  if (PkgConfig_FOUND)
-    pkg_check_modules(LIBURING QUIET IMPORTED_TARGET liburing)
-    if (TARGET PkgConfig::LIBURING)
-      set(RAFTPP_LIBURING_DEPS_AVAILABLE ON)
-      add_library(uring::uring INTERFACE IMPORTED GLOBAL)
-      target_link_libraries(uring::uring INTERFACE PkgConfig::LIBURING)
-    endif ()
-  endif ()
-endif ()
+raftpp_detect_liburing()
 option(RAFTPP_WITH_LIBURING "Build with system liburing discovered via pkg-config" ${RAFTPP_LIBURING_DEPS_AVAILABLE})
 set(RAFTPP_SANITIZE "" CACHE STRING "Sanitizer to enable (address or thread)")
 set_property(CACHE RAFTPP_SANITIZE PROPERTY STRINGS "" "address" "thread")
@@ -70,20 +118,7 @@ option(RAFTPP_COVERAGE "Build with code coverage instrumentation" OFF)
 set(CPM_SOURCE_CACHE "${CMAKE_CURRENT_SOURCE_DIR}/.cache/cpm" CACHE STRING "CPM cache path")
 include(cmake/CPM.cmake)
 
-if (RAFTPP_ENABLE_IWYU)
-  if (RAFTPP_IWYU_EXECUTABLE)
-    if (IS_ABSOLUTE "${RAFTPP_IWYU_EXECUTABLE}")
-      if (NOT EXISTS "${RAFTPP_IWYU_EXECUTABLE}")
-        message(FATAL_ERROR "RAFTPP_IWYU_EXECUTABLE does not exist: ${RAFTPP_IWYU_EXECUTABLE}")
-      endif ()
-      set(RAFTPP_IWYU_BIN "${RAFTPP_IWYU_EXECUTABLE}")
-    else ()
-      find_program(RAFTPP_IWYU_BIN NAMES "${RAFTPP_IWYU_EXECUTABLE}" REQUIRED)
-    endif ()
-  else ()
-    find_program(RAFTPP_IWYU_BIN NAMES include-what-you-use iwyu REQUIRED)
-  endif ()
-endif ()
+raftpp_resolve_iwyu()
 
 if (RAFTPP_WITH_LLD)
   find_program(LLD_FOUND lld)
@@ -94,13 +129,7 @@ if (RAFTPP_WITH_LLD)
   endif ()
 endif ()
 
-if (RAFTPP_WITH_LIBURING AND CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT RAFTPP_LIBURING_DEPS_AVAILABLE)
-  message(FATAL_ERROR "RAFTPP_WITH_LIBURING is ON but system liburing was not found via pkg-config")
-endif ()
-
-if (RAFTPP_WITH_LIBURING AND NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
-  message(FATAL_ERROR "RAFTPP_WITH_LIBURING is ON but liburing is Linux-only")
-endif ()
+raftpp_validate_liburing()
 
 set(RAFTPP_SUPPORTED_SANITIZERS address thread)
 if (RAFTPP_SANITIZE)
@@ -147,43 +176,35 @@ if (RAFTPP_BUILD_TESTING)
   add_subdirectory(tests)
 endif ()
 
-raftpp_enforce_cxx17(raftpp-proto)
-raftpp_enforce_cxx17(raftpp)
-raftpp_enforce_cxx17(raftor-rpc)
-raftpp_enforce_cxx17(raftor-wal)
-raftpp_enforce_cxx17(raftor)
-raftpp_enforce_cxx17(raftpp-test-harness)
-raftpp_enforce_cxx17(data-driven)
-raftpp_enforce_cxx17(data-driven-tests)
-raftpp_enforce_cxx17(raftpp-tests)
-raftpp_enforce_cxx17(kvstore-example)
-raftpp_enforce_cxx17(kvstore-cli)
-raftpp_enforce_cxx17(kvstore-test)
-raftpp_enforce_cxx17(minimal-node-example)
+set(RAFTPP_CONFIGURED_TARGETS
+  raftpp-proto
+  raftpp
+  raftor-rpc
+  raftor-wal
+  raftor
+  raftpp-test-harness
+  data-driven
+  data-driven-tests
+  raftpp-tests
+  kvstore-example
+  kvstore-cli
+  kvstore-test
+  minimal-node-example)
 
-raftpp_enable_project_warnings(raftpp-proto)
-raftpp_enable_project_warnings(raftpp)
-raftpp_enable_project_warnings(raftor-rpc)
-raftpp_enable_project_warnings(raftor-wal)
-raftpp_enable_project_warnings(raftor)
-raftpp_enable_project_warnings(raftpp-test-harness)
-raftpp_enable_project_warnings(data-driven)
-raftpp_enable_project_warnings(data-driven-tests)
-raftpp_enable_project_warnings(raftpp-tests)
-raftpp_enable_project_warnings(kvstore-example)
-raftpp_enable_project_warnings(kvstore-cli)
-raftpp_enable_project_warnings(kvstore-test)
-raftpp_enable_project_warnings(minimal-node-example)
+set(RAFTPP_IWYU_TARGETS
+  raftpp
+  raftor-rpc
+  raftor-wal
+  raftor
+  raftpp-test-harness
+  data-driven
+  data-driven-tests
+  raftpp-tests
+  kvstore-example
+  kvstore-cli
+  kvstore-test
+  minimal-node-example)
 
-raftpp_enable_iwyu(raftpp)
-raftpp_enable_iwyu(raftor-rpc)
-raftpp_enable_iwyu(raftor-wal)
-raftpp_enable_iwyu(raftor)
-raftpp_enable_iwyu(raftpp-test-harness)
-raftpp_enable_iwyu(data-driven)
-raftpp_enable_iwyu(data-driven-tests)
-raftpp_enable_iwyu(raftpp-tests)
-raftpp_enable_iwyu(kvstore-example)
-raftpp_enable_iwyu(kvstore-cli)
-raftpp_enable_iwyu(kvstore-test)
-raftpp_enable_iwyu(minimal-node-example)
+raftpp_apply_to_targets(raftpp_enforce_cxx17 ${RAFTPP_CONFIGURED_TARGETS})
+raftpp_apply_to_targets(raftpp_enable_project_warnings ${RAFTPP_CONFIGURED_TARGETS})
+raftpp_apply_to_targets(raftpp_enable_iwyu ${RAFTPP_IWYU_TARGETS})
