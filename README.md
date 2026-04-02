@@ -19,9 +19,6 @@ task build
 task test
 ```
 
-If the executable is not on `PATH`, configure with
-`-DRAFTPP_IWYU_EXECUTABLE=/path/to/include-what-you-use`.
-
 ## Examples
 
 See `examples/` for runnable examples.
