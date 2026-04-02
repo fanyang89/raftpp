@@ -191,19 +191,8 @@ set(RAFTPP_CONFIGURED_TARGETS
   kvstore-test
   minimal-node-example)
 
-set(RAFTPP_IWYU_TARGETS
-  raftpp
-  raftor-rpc
-  raftor-wal
-  raftor
-  raftpp-test-harness
-  data-driven
-  data-driven-tests
-  raftpp-tests
-  kvstore-example
-  kvstore-cli
-  kvstore-test
-  minimal-node-example)
+set(RAFTPP_IWYU_TARGETS ${RAFTPP_CONFIGURED_TARGETS})
+list(REMOVE_ITEM RAFTPP_IWYU_TARGETS raftpp-proto)
 
 raftpp_apply_to_targets(raftpp_enforce_cxx17 ${RAFTPP_CONFIGURED_TARGETS})
 raftpp_apply_to_targets(raftpp_enable_project_warnings ${RAFTPP_CONFIGURED_TARGETS})
