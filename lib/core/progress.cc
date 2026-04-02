@@ -1,6 +1,13 @@
 #include "raftpp/core/progress.h"
 
+#include <algorithm>
+#include <optional>
+#include <unordered_map>
+#include <utility>
+
+#include "raftpp/core/ack_indexer.h"
 #include "raftpp/core/assert.h"
+#include "raftpp/core/inflights.h"
 #include "raftpp/core/primitives.h"
 #include "raftpp/logging.h"
 

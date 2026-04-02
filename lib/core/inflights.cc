@@ -1,5 +1,7 @@
 #include "raftpp/core/inflights.h"
 
+#include <utility>
+
 #include "raftpp/core/assert.h"
 
 namespace raftpp {

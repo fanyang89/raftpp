@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
 #include <string_view>
 
 #include "ack_indexer.h"
@@ -28,8 +30,6 @@ constexpr std::string_view format_as(ProgressState c) {
     }
     return "Unknown";
 }
-
-class ProgressDebug;
 
 class Progress {
   public:

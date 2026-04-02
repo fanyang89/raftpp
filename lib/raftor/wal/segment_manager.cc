@@ -1,7 +1,12 @@
 #include "raftpp/raftor/wal/segment_manager.h"
 
 #include <algorithm>
+#include <optional>
+#include <string>
+#include <system_error>
+#include <utility>
 
+#include "raftpp/fmt.h"
 #include "raftpp/logging.h"
 
 namespace raftpp::raftor::wal {

@@ -1,8 +1,19 @@
 #include "raftpp/raftor/wal/wal.h"
 
+#include <cstring>
+#include <filesystem>
+#include <map>
+#include <mutex>
+#include <utility>
+
+#include <capnp/common.h>
+#include <kj/common.h>
+
 #include "raftpp/core/capnp_util.h"
+#include "raftpp/fmt.h"
 #include "raftpp/logging.h"
 #include "raftpp/raftor/wal/record.h"
+#include "raftpp/raftor/wal/segment_manager.h"
 
 namespace raftpp::raftor::wal {
 

@@ -1,6 +1,16 @@
 #include "raftpp/core/conf_restore.h"
 
+#include <utility>
+#include <vector>
+
+#include <nonstd/span.hpp>
+
+#include "raftpp.capnp.h"
+#include "raftpp/core/capnp_util.h"
 #include "raftpp/core/conf_changer.h"
+#include "raftpp/core/progress_tracker.h"
+#include "raftpp/core/tracker_conf.h"
+#include "raftpp/core/types.h"
 
 namespace raftpp {
 

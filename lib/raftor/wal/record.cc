@@ -1,5 +1,7 @@
 #include "raftpp/raftor/wal/record.h"
 
+#include <cstddef>
+
 #include "raftpp/raftor/wal/crc32c.h"
 
 namespace raftpp::raftor::wal {

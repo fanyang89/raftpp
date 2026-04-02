@@ -1,16 +1,23 @@
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
+#include <memory>
 #include <optional>
+#include <string_view>
+#include <vector>
 
 #include <nonstd/span.hpp>
 
-#include "progress.h"
-#include "raft_config.h"
 #include "raft_log.h"
-#include "storage.h"
+#include "read_only.h"
 #include "types.h"
 
 namespace raftpp {
+
+class Progress;
+class Storage;
+struct Config;
 
 enum class StateRole : uint8_t {
     /// The node is a follower of the leader.

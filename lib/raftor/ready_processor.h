@@ -1,17 +1,36 @@
 #pragma once
 
+#include <stdint.h>
+
 #include <memory>
 #include <string>
 #include <vector>
 
 #include "raftpp/core/error.h"
 #include "raftpp/core/raft_core.h"
-#include "raftpp/core/raw_node.h"
-#include "raftpp/core/storage.h"
-#include "raftpp/raftor/proposal_tracker.h"
-#include "raftpp/raftor/rpc/transport.h"
-#include "raftpp/raftor/state_machine.h"
-#include "raftpp/raftor/wal/wal_storage.h"
+#include "raftpp/core/types.h"
+
+namespace raftpp::raftor {
+
+class ProposalTracker;
+class StateMachine;
+
+namespace rpc {
+class Transport;
+}  // namespace rpc
+
+namespace wal {
+class WALStorage;
+}  // namespace wal
+
+}  // namespace raftpp::raftor
+
+namespace raftpp {
+class RawNode;
+struct LightReady;
+struct ReadState;
+struct Ready;
+}  // namespace raftpp
 
 namespace raftpp::raftor {
 

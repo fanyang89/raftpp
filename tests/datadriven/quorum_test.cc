@@ -1,13 +1,25 @@
+#include <stddef.h>
+#include <stdint.h>
+
 #include <algorithm>
+#include <filesystem>
+#include <functional>
 #include <iomanip>
 #include <limits>
+#include <optional>
 #include <sstream>
+#include <string>
+#include <unordered_map>
+#include <utility>
+#include <vector>
 
 #include <doctest/doctest.h>
 
 #include "datadriven.h"
+#include "raftpp/core/ack_indexer.h"
 #include "raftpp/core/joint_conf.h"
 #include "raftpp/core/majority_conf.h"
+#include "raftpp/core/primitives.h"
 
 namespace raftpp {
 namespace test {

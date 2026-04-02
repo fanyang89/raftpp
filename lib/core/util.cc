@@ -1,5 +1,11 @@
 #include "raftpp/core/util.h"
 
+#include <limits>
+#include <memory>
+
+#include "raftpp/core/capnp_util.h"
+#include "raftpp/core/types.h"
+
 namespace raftpp {
 
 IndexTerm::IndexTerm(const uint64_t index, const uint64_t term) : index(index), term(term) {}

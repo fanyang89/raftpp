@@ -1,9 +1,16 @@
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <string>
+#include <utility>
 #include <vector>
 
+#include <capnp/message.h>
 #include <nonstd/span.hpp>
 
+#include "raftpp.capnp.h"
 #include "raftpp/core/error.h"
 #include "raftpp/core/types.h"
 

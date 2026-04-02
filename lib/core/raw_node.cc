@@ -1,6 +1,21 @@
 #include "raftpp/core/raw_node.h"
 
-#include "raftpp/core/util.h"
+#include <functional>
+#include <tuple>
+
+#include <kj/common.h>
+
+#include "raftpp.capnp.h"
+#include "raftpp/core/assert.h"
+#include "raftpp/core/capnp_util.h"
+#include "raftpp/core/progress_tracker.h"
+#include "raftpp/core/raft.h"
+#include "raftpp/core/raft_config.h"
+#include "raftpp/core/raft_log.h"
+#include "raftpp/core/status.h"
+#include "raftpp/core/storage.h"
+#include "raftpp/core/types.h"
+#include "raftpp/core/unstable_log.h"
 #include "raftpp/logging.h"
 
 namespace raftpp {

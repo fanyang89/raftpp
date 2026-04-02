@@ -1,14 +1,17 @@
 #pragma once
 
+#include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <random>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
 #include "harness/interface.h"
+#include "raftpp/core/error.h"
 #include "raftpp/core/memory_storage.h"
-#include "raftpp/core/raft.h"
 #include "raftpp/core/raft_config.h"
 #include "raftpp/core/types.h"
 

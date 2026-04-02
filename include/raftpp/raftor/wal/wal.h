@@ -1,5 +1,8 @@
 #pragma once
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <memory>
 #include <optional>
 #include <shared_mutex>
@@ -9,14 +12,17 @@
 
 #include <nonstd/span.hpp>
 
+#include "raftpp/core/error.h"
 #include "raftpp/core/types.h"
 #include "raftpp/raftor/wal/metadata_store.h"
-#include "raftpp/raftor/wal/record.h"
-#include "raftpp/raftor/wal/segment_manager.h"
+#include "raftpp/raftor/wal/segment.h"
 #include "raftpp/raftor/wal/wal_config.h"
 #include "raftpp/raftor/wal/wal_index.h"
 
 namespace raftpp::raftor::wal {
+
+class SegmentManager;
+enum class RecordType : uint8_t;
 
 // Core Write-Ahead Log implementation
 // Provides durable storage for Raft log entries and hard state

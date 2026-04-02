@@ -1,8 +1,11 @@
 #pragma once
 
-#include <nonstd/expected.hpp>
+#include <cstdint>
+#include <optional>
+#include <vector>
 
 #include "error.h"
+#include "raftpp/core/capnp_util.h"
 #include "types.h"
 
 namespace raftpp {

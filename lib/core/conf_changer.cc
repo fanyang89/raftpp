@@ -1,6 +1,20 @@
 #include "raftpp/core/conf_changer.h"
 
+#include <algorithm>
+#include <iterator>
+#include <unordered_map>
+
+#include "raftpp.capnp.h"
+#include "raftpp/core/assert.h"
+#include "raftpp/core/capnp_util.h"
+#include "raftpp/core/joint_conf.h"
+#include "raftpp/core/majority_conf.h"
+#include "raftpp/core/primitives.h"
+#include "raftpp/core/progress.h"
+#include "raftpp/core/progress_tracker.h"
+#include "raftpp/core/tracker_conf.h"
 #include "raftpp/core/types.h"
+#include "raftpp/fmt.h"
 
 namespace raftpp {
 

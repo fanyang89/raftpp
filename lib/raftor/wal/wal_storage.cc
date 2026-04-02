@@ -1,14 +1,22 @@
 #include "raftpp/raftor/wal/wal_storage.h"
 
+#include <optional>
+#include <utility>
+
+#include <nonstd/span.hpp>
+#include <opentelemetry/trace/span.h>
+
+#include "raftpp/core/capnp_util.h"
 #include "raftpp/logging.h"
 #include "raftpp/raftor/telemetry.h"
+#include "raftpp/raftor/wal/wal.h"
 
 namespace raftpp::raftor::wal {
 
 WALStorage::WALStorage()
-    : snapshot_(capnp_util::make<msg::Snapshot>()),
-      effective_io_backend_(WALIoBackend::Auto),
-      io_backend_note_() {}
+    : effective_io_backend_(WALIoBackend::Auto),
+      io_backend_note_(),
+      snapshot_(capnp_util::make<msg::Snapshot>()) {}
 
 WALStorage::~WALStorage() = default;
 

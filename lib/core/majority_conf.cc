@@ -1,6 +1,14 @@
 #include "raftpp/core/majority_conf.h"
 
 #include <algorithm>
+#include <cstddef>
+#include <limits>
+#include <unordered_map>
+#include <vector>
+
+#include "raftpp/core/ack_indexer.h"
+#include "raftpp/core/primitives.h"
+#include "raftpp/fmt.h"
 
 namespace raftpp {
 

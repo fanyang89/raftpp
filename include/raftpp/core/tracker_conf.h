@@ -1,7 +1,11 @@
 #pragma once
 
+#include <cstdint>
+#include <string_view>
+
 #include "joint_conf.h"
 #include "primitives.h"
+#include "raftpp/fmt.h"
 #include "types.h"
 
 namespace raftpp {

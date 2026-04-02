@@ -4,9 +4,8 @@
 #include <functional>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
-
-#include <doctest/doctest.h>
 
 namespace raftpp {
 namespace test {

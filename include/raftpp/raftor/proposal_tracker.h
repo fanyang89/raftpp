@@ -1,13 +1,12 @@
 #pragma once
 
 #include <chrono>
-#include <cstdint>
+#include <cstddef>
 #include <deque>
 #include <functional>
 #include <mutex>
 #include <optional>
 #include <string>
-#include <utility>
 
 #include "raftpp/core/error.h"
 #include "raftpp/core/primitives.h"

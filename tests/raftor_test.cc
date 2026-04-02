@@ -7,17 +7,23 @@
 #include <chrono>
 #include <filesystem>
 #include <memory>
+#include <mutex>
+#include <optional>
 #include <system_error>
 #include <thread>
+#include <tuple>
+#include <utility>
+#include <variant>
+#include <vector>
 
 #include <doctest/doctest.h>
+#include <nonstd/expected.hpp>
+#include <nonstd/span.hpp>
 
 #include "raftpp/core/capnp_util.h"
-#include "raftpp/core/memory_storage.h"
+#include "raftpp/core/types.h"
 #include "raftpp/logging.h"
-#include "raftpp/raftor/proposal_tracker.h"
 #include "raftpp/raftor/raftor_config.h"
-#include "raftpp/raftor/rpc/transport.h"
 #include "raftpp/raftor/state_machine.h"
 
 using namespace raftpp;
@@ -192,20 +198,6 @@ bool HasLeader(const std::vector<std::unique_ptr<Raftor>>& raftors) {
         }
     }
     return false;
-}
-
-bool WaitForLeader(
-    std::vector<std::unique_ptr<Raftor>>& raftors, std::chrono::milliseconds timeout,
-    std::chrono::milliseconds step = 25ms
-) {
-    auto deadline = std::chrono::steady_clock::now() + timeout;
-    while (std::chrono::steady_clock::now() < deadline) {
-        PollAll(raftors, step);
-        if (HasLeader(raftors)) {
-            return true;
-        }
-    }
-    return HasLeader(raftors);
 }
 
 bool HasStableLeader(const std::vector<std::unique_ptr<Raftor>>& raftors) {

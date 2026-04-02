@@ -1,10 +1,12 @@
 #include "raftpp/core/unstable_log.h"
 
-#include <cstddef>
+#include <memory>
+#include <utility>
 
 #include "raftpp/core/assert.h"
+#include "raftpp/core/capnp_util.h"
+#include "raftpp/core/types.h"
 #include "raftpp/core/util.h"
-#include "raftpp/logging.h"
 
 namespace raftpp {
 

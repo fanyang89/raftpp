@@ -1,6 +1,10 @@
 #include "raftpp/raftor/proposal_tracker.h"
 
+#include <unordered_map>
+#include <utility>
 #include <vector>
+
+#include <nonstd/expected.hpp>
 
 namespace raftpp::raftor {
 

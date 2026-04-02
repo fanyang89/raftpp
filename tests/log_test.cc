@@ -1,9 +1,25 @@
-#include <doctest/doctest.h>
+#include <stddef.h>
+#include <stdint.h>
 
-#include "harness/test_util.h"
-#include "raftpp/core/memory_storage.h"
-#include "raftpp/core/raft_log.h"
+#include <algorithm>
+#include <limits>
+#include <memory>
+#include <numeric>
+#include <optional>
+#include <tuple>
+#include <utility>
+#include <variant>
+#include <vector>
+
+#include <doctest/doctest.h>
+#include <kj/common.h>
+
+#include "raftpp/core/capnp_util.h"
+#include "raftpp/core/error.h"
+#include "raftpp/core/raft_config.h"
+#include "raftpp/core/storage.h"
 #include "raftpp/core/types.h"
+#include "raftpp/core/unstable_log.h"
 #include "test_util.h"
 
 using namespace raftpp;
@@ -91,7 +107,7 @@ TEST_CASE("raft_log: is up-to-date") {
 
 TEST_CASE("raft_log: append") {
     auto run_test = [](const std::vector<Entry>& entries, uint64_t w_index,
-                       std::vector<Entry> w_entries, uint64_t w_unstable) {
+                       std::vector<Entry> w_entries, uint64_t /*w_unstable*/) {
         auto previous_entries = Entries(NewEntry(1, 1), NewEntry(2, 2));
         auto store = std::make_unique<MemoryStorage>();
         const auto r = store->MayAppend(previous_entries);

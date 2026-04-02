@@ -1,7 +1,19 @@
 #include "raftpp/core/memory_storage.h"
 
+#include <stddef.h>
+
+#include <algorithm>
+#include <memory>
+#include <type_traits>
+#include <utility>
+
+#include <capnp/blob.h>
+
 #include "raftpp/core/assert.h"
+#include "raftpp/core/capnp_util.h"
+#include "raftpp/core/storage.h"
 #include "raftpp/core/util.h"
+#include "raftpp/fmt.h"
 
 namespace raftpp {
 
@@ -298,7 +310,7 @@ Result<uint64_t> MemoryStorage::LastIndex() {
     return core_.last_index();
 }
 
-Result<Snapshot> MemoryStorage::GetSnapshot(const uint64_t request_index, uint64_t to) {
+Result<Snapshot> MemoryStorage::GetSnapshot(const uint64_t request_index, uint64_t /*to*/) {
     std::lock_guard lock(mutex_);
     if (core_.trigger_snapshot_unavailable_) {
         core_.trigger_snapshot_unavailable_ = false;

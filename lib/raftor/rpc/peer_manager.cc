@@ -1,6 +1,8 @@
 #include "raftpp/raftor/rpc/peer_manager.h"
 
 #include <algorithm>
+#include <unordered_map>
+#include <utility>
 
 namespace raftpp::raftor::rpc {
 

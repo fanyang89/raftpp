@@ -3,10 +3,8 @@
 #include <array>
 #include <atomic>
 #include <cctype>
-#include <chrono>
 #include <cstdio>
 #include <cstdlib>
-#include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -16,12 +14,18 @@
 #include <vector>
 
 #include <opentelemetry/common/attribute_value.h>
+#include <opentelemetry/common/timestamp.h>
+#include <opentelemetry/logs/log_record.h>
 #include <opentelemetry/logs/logger.h>
+#include <opentelemetry/logs/logger_provider.h>
 #include <opentelemetry/logs/noop.h>
-#include <opentelemetry/nostd/variant.h>
+#include <opentelemetry/logs/provider.h>
 #include <opentelemetry/trace/span_id.h>
 #include <opentelemetry/trace/trace_flags.h>
 #include <opentelemetry/trace/trace_id.h>
+
+#include "opentelemetry/nostd/unique_ptr.h"
+#include "opentelemetry/nostd/variant.h"
 
 namespace raftpp::logging {
 namespace {

@@ -9,7 +9,7 @@ tasks:
   docker-build:
     desc: Build the format image
     cmds:
-      - docker build -t "${FORMAT_IMAGE:-ghcr.io/raftpp/clang-format:18}" .
+      - docker build -t "${FORMAT_IMAGE:-ghcr.io/fanyang89/clang-format:18}" .
 
   fmt:
     desc: Format all C++ source files with clang-format (via Docker)
@@ -100,9 +100,9 @@ tasks:
       - gh pr comment --body "@gemini-code-assist review"
 
   clean:
-    desc: Clear the default build directory
+    desc: Clear local build directories
     cmds:
-      - rm -rf ./build
+      - rm -rf ./build ./build-*
 
   coverage:
     desc: Get test coverage report (using llvm-cov)
@@ -165,3 +165,9 @@ tasks:
         -enable-checker alpha.unix.PthreadLock
         -enable-checker alpha.deadcode.UnreachableCode
         ninja -C build
+
+  iwyu:
+    desc: Run include-what-you-use on project targets
+    cmds:
+      - cmake --preset=Debug -B build-iwyu -DCMAKE_TOOLCHAIN_FILE=${TOOLCHAIN:-cmake/clang-toolchain.cmake} -DRAFTPP_ENABLE_IWYU=ON
+      - cmake --build build-iwyu --clean-first

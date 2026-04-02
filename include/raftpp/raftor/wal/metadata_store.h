@@ -1,6 +1,8 @@
 #pragma once
 
+#include <cstdint>
 #include <filesystem>
+#include <vector>
 
 #include "raftpp/core/error.h"
 #include "raftpp/core/types.h"

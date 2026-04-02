@@ -1,16 +1,27 @@
+#include <stddef.h>
+#include <stdint.h>
+
 #include <atomic>
 #include <chrono>
 #include <mutex>
 #include <optional>
+#include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
+#include <capnp/blob.h>
 #include <doctest/doctest.h>
-#include <kj/array.h>
+#include <kj/common.h>
+#include <nonstd/span.hpp>
 
+#include "raftpp.capnp.h"
 #include "raftpp/core/capnp_util.h"
+#include "raftpp/core/error.h"
+#include "raftpp/core/types.h"
 #include "raftpp/fmt.h"
 #include "raftpp/raftor/rpc/capnp_transport.h"
+#include "transport.h"
 
 using namespace raftpp;
 using namespace raftor::rpc;

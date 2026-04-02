@@ -2,9 +2,24 @@
 
 #include <algorithm>
 #include <cstring>
+#include <optional>
+#include <utility>
 
+#include <capnp/blob.h>
+#include <nonstd/expected.hpp>
+#include <nonstd/span.hpp>
+#include <opentelemetry/trace/span.h>
+
+#include "raftpp.capnp.h"
+#include "raftpp/core/capnp_util.h"
+#include "raftpp/core/raw_node.h"
+#include "raftpp/core/read_only.h"
 #include "raftpp/logging.h"
+#include "raftpp/raftor/proposal_tracker.h"
+#include "raftpp/raftor/state_machine.h"
 #include "raftpp/raftor/telemetry.h"
+#include "raftpp/raftor/wal/wal_storage.h"
+#include "transport.h"
 
 namespace raftpp::raftor {
 namespace {
@@ -286,8 +301,6 @@ Result<void> ReadyProcessor::ApplyEntry(const Entry& entry) {
             auto data = entry_reader.getData();
 
             try {
-                const ::capnp::word* words = reinterpret_cast<const ::capnp::word*>(data.begin());
-                size_t word_count = data.size() / sizeof(::capnp::word);
                 cc_v1 = capnp_util::fromBytes<msg::ConfChange>(
                     nonstd::span<const uint8_t>(data.begin(), data.size())
                 );

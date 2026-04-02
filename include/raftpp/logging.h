@@ -4,14 +4,15 @@
 #include <exception>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include <opentelemetry/common/key_value_iterable_view.h>
 #include <opentelemetry/logs/logger.h>
-#include <opentelemetry/logs/provider.h>
 #include <opentelemetry/logs/severity.h>
-#include <opentelemetry/nostd/shared_ptr.h>
-#include <opentelemetry/nostd/string_view.h>
+#include <opentelemetry/nostd/span.h>
 
+#include "opentelemetry/nostd/shared_ptr.h"
+#include "opentelemetry/nostd/string_view.h"
 #include "raftpp/fmt.h"
 
 namespace raftpp::logging {

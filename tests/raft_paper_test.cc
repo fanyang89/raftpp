@@ -1,14 +1,29 @@
 // Port of raft-rs harness/tests/integration_cases/test_raft_paper.rs
 // Tests that verify the implementation against the Raft paper.
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include <algorithm>
 #include <map>
+#include <memory>
+#include <optional>
+#include <string>
+#include <tuple>
+#include <utility>
 #include <vector>
 
 #include <doctest/doctest.h>
 
-#include "harness/network.h"
+#include "harness/interface.h"
 #include "harness/test_util.h"
+#include "raftpp.capnp.h"
+#include "raftpp/core/capnp_util.h"
+#include "raftpp/core/error.h"
+#include "raftpp/core/primitives.h"
+#include "raftpp/core/progress_tracker.h"
+#include "raftpp/core/raft_core.h"
+#include "raftpp/core/types.h"
 
 using namespace raftpp;
 
@@ -31,7 +46,7 @@ Message AcceptAndReply(const Message& m) {
 }
 
 // Commit the no-op entry that the leader creates after election.
-void CommitNoopEntry(Interface& r, MemoryStorage& s) {
+void CommitNoopEntry(Interface& r, MemoryStorage& /*s*/) {
     CHECK_EQ(r->state(), StateRole::Leader);
     r->BroadcastAppend();
 

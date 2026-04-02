@@ -1,6 +1,10 @@
 #pragma once
 
+#include <cstdint>
 #include <functional>
+#include <optional>
+#include <string_view>
+#include <utility>
 
 #include "ack_indexer.h"
 #include "primitives.h"

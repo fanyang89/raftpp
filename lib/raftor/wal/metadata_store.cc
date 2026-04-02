@@ -1,11 +1,22 @@
 #include "raftpp/raftor/wal/metadata_store.h"
 
+#include <errno.h>
 #include <fcntl.h>
+#include <stdio.h>
+#include <sys/types.h>
 #include <unistd.h>
 
+#include <cstddef>
 #include <cstring>
+#include <string>
+#include <system_error>
+
+#include <capnp/common.h>
+#include <kj/array.h>
+#include <kj/common.h>
 
 #include "raftpp/core/capnp_util.h"
+#include "raftpp/fmt.h"
 #include "raftpp/logging.h"
 #include "raftpp/raftor/wal/crc32c.h"
 #include "raftpp/raftor/wal/record.h"

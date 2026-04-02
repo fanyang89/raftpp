@@ -1,13 +1,19 @@
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <vector>
 
-#include "raftpp/core/memory_storage.h"
+#include "raftpp/core/error.h"
 #include "raftpp/core/raft.h"
 #include "raftpp/core/types.h"
 
 namespace raftpp {
+
+class MemoryStorage;
+class ProgressTracker;
+class RaftLog;
+enum class StateRole : uint8_t;
 
 /// A simulated Raft facade for testing.
 ///

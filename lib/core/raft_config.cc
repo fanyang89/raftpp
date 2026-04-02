@@ -1,5 +1,12 @@
 #include "raftpp/core/raft_config.h"
 
+#include <string>
+
+#include "raftpp/core/error.h"
+#include "raftpp/core/primitives.h"
+#include "raftpp/core/read_only.h"
+#include "raftpp/fmt.h"
+
 namespace raftpp {
 
 size_t Config::MinElectionTick() const {

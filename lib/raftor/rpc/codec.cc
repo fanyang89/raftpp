@@ -2,9 +2,14 @@
 
 #include <charconv>
 #include <cstring>
+#include <string_view>
+#include <system_error>
 
-#include <capnp/message.h>
+#include <capnp/common.h>
 #include <capnp/serialize.h>
+#include <kj/common.h>
+
+#include "raftpp/core/capnp_util.h"
 
 namespace raftpp::raftor::rpc {
 

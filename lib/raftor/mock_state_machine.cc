@@ -1,7 +1,13 @@
 #include "raftpp/raftor/mock_state_machine.h"
 
 #include <array>
+#include <optional>
 #include <utility>
+
+#include <nonstd/expected.hpp>
+#include <nonstd/span.hpp>
+
+#include "raftpp/core/capnp_util.h"
 
 namespace raftpp::raftor {
 

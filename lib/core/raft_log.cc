@@ -1,6 +1,19 @@
 #include "raftpp/core/raft_log.h"
 
-#include "raftpp/core/types.h"
+#include <stddef.h>
+
+#include <algorithm>
+#include <functional>
+#include <tuple>
+
+#include <nonstd/expected.hpp>
+#include <nonstd/span.hpp>
+
+#include "raftpp/core/assert.h"
+#include "raftpp/core/capnp_util.h"
+#include "raftpp/core/raft_config.h"
+#include "raftpp/core/storage.h"
+#include "raftpp/core/unstable_log.h"
 #include "raftpp/core/util.h"
 #include "raftpp/logging.h"
 

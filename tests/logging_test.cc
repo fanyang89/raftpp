@@ -1,25 +1,26 @@
 #include "raftpp/logging.h"
 
+#include <sys/types.h>
 #include <unistd.h>
 
 #include <cerrno>
 #include <cstdint>
-#include <memory>
+#include <cstdio>
 #include <string>
 #include <type_traits>
-#include <utility>
-#include <vector>
 
 #include <doctest/doctest.h>
 #include <opentelemetry/common/attribute_value.h>
+#include <opentelemetry/common/timestamp.h>
 #include <opentelemetry/logs/log_record.h>
 #include <opentelemetry/logs/logger.h>
 #include <opentelemetry/logs/logger_provider.h>
 #include <opentelemetry/logs/provider.h>
 #include <opentelemetry/logs/severity.h>
-#include <opentelemetry/nostd/shared_ptr.h>
-#include <opentelemetry/nostd/string_view.h>
-#include <opentelemetry/nostd/unique_ptr.h>
+
+#include "fmt/format.h"
+#include "opentelemetry/nostd/unique_ptr.h"
+#include "opentelemetry/nostd/variant.h"
 
 namespace {
 

@@ -2,7 +2,6 @@
 
 #include <doctest/doctest.h>
 
-#include "raftpp/core/primitives.h"
 #include "test_util.h"
 
 using namespace raftpp;

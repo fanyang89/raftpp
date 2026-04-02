@@ -1,13 +1,17 @@
 #include "raftpp/raftor/wal/segment.h"
 
+#include <errno.h>
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #include <array>
 #include <cstring>
 #include <regex>
+#include <utility>
 
+#include "raftpp/fmt.h"
 #include "raftpp/logging.h"
 #include "raftpp/raftor/wal/record.h"
 
@@ -19,6 +23,8 @@
 #include <liburing.h>
 
 #include <mutex>
+
+#include <liburing/io_uring.h>
 #endif
 
 namespace raftpp::raftor::wal {

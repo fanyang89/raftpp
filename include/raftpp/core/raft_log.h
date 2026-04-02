@@ -1,10 +1,21 @@
 #pragma once
 
-#include "raft_config.h"
+#include <stdint.h>
+
+#include <memory>
+#include <optional>
+#include <utility>
+#include <vector>
+
+#include "raftpp/core/error.h"
+#include "raftpp/core/types.h"
+#include "raftpp/fmt.h"
 #include "storage.h"
 #include "unstable_log.h"
 
 namespace raftpp {
+
+struct Config;
 
 class RaftLog {
   public:

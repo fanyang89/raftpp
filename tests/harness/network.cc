@@ -1,8 +1,12 @@
 #include "harness/network.h"
 
 #include <cassert>
+#include <iterator>
+#include <utility>
 
 #include "harness/test_util.h"
+#include "raftpp.capnp.h"
+#include "raftpp/core/capnp_util.h"
 #include "raftpp/logging.h"
 
 namespace raftpp {

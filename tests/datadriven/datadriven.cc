@@ -1,10 +1,13 @@
 #include "datadriven.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <fstream>
 #include <regex>
 #include <sstream>
 #include <stdexcept>
+
+#include <doctest/doctest.h>
 
 namespace raftpp {
 namespace test {

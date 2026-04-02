@@ -1,10 +1,16 @@
 #include <httplib.h>
 
+#include <cstdlib>
+#include <exception>
+#include <functional>
 #include <iostream>
+#include <map>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include "cli_options.h"
 

@@ -1,20 +1,27 @@
 // Port of raft-rs harness/tests/integration_cases/test_raft_snap.rs
 // Snapshot-related tests.
 
+#include <stdint.h>
+
+#include <memory>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
+
 #include <doctest/doctest.h>
 
-#include "harness/network.h"
+#include "harness/interface.h"
 #include "harness/test_util.h"
+#include "raftpp.capnp.h"
+#include "raftpp/core/capnp_util.h"
+#include "raftpp/core/error.h"
+#include "raftpp/core/primitives.h"
+#include "raftpp/core/progress.h"
+#include "raftpp/core/progress_tracker.h"
+#include "raftpp/core/types.h"
 
 using namespace raftpp;
-
-namespace {
-
-Snapshot TestingSnapshot() {
-    return NewSnapshot(11, 11, {1, 2});
-}
-
-}  // namespace
 
 TEST_SUITE_BEGIN("raft_snap");
 
