@@ -48,9 +48,40 @@ jobs:
       - name: Run cppcheck
         run: task lint
 
+  preflight:
+    name: Smoke Test (Clang / build + tests)
+    needs: [format-check, lint]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y ninja-build clang llvm cmake git
+
+      - name: Cache CPM dependencies
+        uses: actions/cache@v5
+        with:
+          path: .cache/cpm
+          key: cpm-${{ runner.arch }}-${{ hashFiles('third_party/CMakeLists.txt', 'cmake/CPM.cmake') }}
+          restore-keys: |
+            cpm-${{ runner.arch }}-
+
+      - name: Configure CMake
+        run: |
+          cmake --preset=Coverage -B build \
+            -DCMAKE_TOOLCHAIN_FILE=cmake/clang-toolchain.cmake
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Run tests
+        run: |
+          ./build/tests/raftpp-tests
+          ./build/tests/datadriven/data-driven-tests
+
   build-and-test-x64:
     name: "x64 / ${{ matrix.compiler }} / ${{ matrix.build_type }}${{ matrix.sanitizer && format(' / {0}', matrix.sanitizer) || '' }}"
-    needs: [format-check, lint]
+    needs: [preflight]
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -94,7 +125,7 @@ jobs:
 
   coverage:
     name: Coverage (Clang / llvm-cov)
-    needs: [format-check, lint]
+    needs: [preflight]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
@@ -148,7 +179,7 @@ jobs:
 
   build-and-test-arm64:
     name: "arm64 / ${{ matrix.compiler }} / ${{ matrix.build_type }}${{ matrix.sanitizer && format(' / {0}', matrix.sanitizer) || '' }}"
-    needs: [format-check, lint]
+    needs: [preflight]
     runs-on: ubuntu-24.04-arm
     strategy:
       fail-fast: false
