@@ -25,6 +25,7 @@ struct Entry {
     index @2 :UInt64;
     data @3 :Data;
     context @4 :Data;
+    checksum @5 :UInt32;
 }
 
 struct SnapshotMetadata {

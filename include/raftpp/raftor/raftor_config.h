@@ -92,6 +92,11 @@ struct RaftorConfig {
     /// Auto snapshot at fixed time interval (0 to disable)
     std::chrono::milliseconds snapshot_interval{0};
 
+    /// Enable end-to-end checksum verification for proposals.
+    /// Keep this disabled during rolling upgrades or when replaying legacy WAL data
+    /// that was written before checksums were introduced.
+    bool enable_entry_checksum = false;
+
     /// Validate the configuration
     /// @return void on success, or error describing what's invalid
     [[nodiscard]] Result<void> Validate() const;

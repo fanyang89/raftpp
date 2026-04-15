@@ -3,6 +3,7 @@
 #include <stdint.h>
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -47,7 +48,7 @@ class ReadyProcessor {
   public:
     ReadyProcessor(
         RawNode& raw_node, std::shared_ptr<wal::WALStorage> storage, StateMachine& state_machine,
-        rpc::Transport& transport, ProposalTracker& proposal_tracker
+        rpc::Transport& transport, ProposalTracker& proposal_tracker, bool checksum_enabled
     );
 
     /// Process one Ready cycle
@@ -82,7 +83,9 @@ class ReadyProcessor {
     [[nodiscard]] Result<void> ApplyEntry(const Entry& entry);
 
     /// Process light ready (after Advance)
-    void ProcessLightReady(const LightReady& light_rd);
+    [[nodiscard]] Result<void> ProcessLightReady(const LightReady& light_rd);
+
+    void EnterFatalState(const RaftError& error);
 
     /// Record read states from Ready
     void EnqueueReadStates(const std::vector<ReadState>& read_states);
@@ -106,6 +109,8 @@ class ReadyProcessor {
 
     // Track applied index
     uint64_t applied_index_ = 0;
+    std::optional<RaftError> fatal_error_;
+    bool checksum_enabled_ = false;
 
     struct PendingRead {
         uint64_t index = 0;

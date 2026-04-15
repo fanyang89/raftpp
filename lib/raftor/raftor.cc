@@ -200,6 +200,10 @@ class RaftorImpl : public Raftor {
     void InitializeSnapshotState();
     [[nodiscard]] uint64_t GetWalDirSizeBytes() const;
     void ProcessRaftWork();
+    void EnterTerminalState(const RaftError& error);
+    void FailQueuedRequests(const RaftError& error);
+    [[nodiscard]] std::optional<RaftError> GetTerminalError() const;
+    [[nodiscard]] std::optional<RaftError> GetRequestRejectionError() const;
 
     RaftorConfig config_;
     std::unique_ptr<StateMachine> state_machine_;
@@ -225,6 +229,9 @@ class RaftorImpl : public Raftor {
     mutable std::mutex status_mutex_;
     NodeStatus cached_status_{};
 
+    mutable std::mutex terminal_error_mutex_;
+    std::optional<RaftError> terminal_error_;
+
     // Auto snapshot tracking
     uint64_t last_snapshot_attempt_index_ = 0;
     std::chrono::steady_clock::time_point last_snapshot_attempt_time_{};
@@ -246,7 +253,8 @@ RaftorImpl::RaftorImpl(
 
     // Create ReadyProcessor
     ready_processor_ = std::make_unique<ReadyProcessor>(
-        *raw_node_, storage_, *state_machine_, *transport_, proposal_tracker_
+        *raw_node_, storage_, *state_machine_, *transport_, proposal_tracker_,
+        config_.enable_entry_checksum
     );
 
     RefreshStatus();
@@ -271,6 +279,12 @@ RaftorImpl::~RaftorImpl() {
 
 Result<void> RaftorImpl::Start() {
     telemetry::ScopedSpan span("raftor.start", config_.node_id);
+
+    if (auto error = GetTerminalError(); error.has_value()) {
+        telemetry::RecordError(span.span(), error->ToString());
+        RAFTPP_LOG_ERROR("Start rejected for node {}: {}", config_.node_id, error->ToString());
+        return nonstd::make_unexpected(*error);
+    }
 
     if (started_.exchange(true)) {
         telemetry::RecordError(span.span(), "already started");
@@ -316,17 +330,7 @@ void RaftorImpl::Stop() {
 
     const auto shutdown_error = RaftError(RaftErrorCode::ShuttingDown);
 
-    // Fail requests still waiting in the cross-thread queues.
-    while (auto item = proposal_queue_.TryPop()) {
-        if (item->callback) {
-            item->callback(nonstd::make_unexpected(shutdown_error));
-        }
-    }
-    while (auto item = read_index_queue_.TryPop()) {
-        if (item->callback) {
-            item->callback(nonstd::make_unexpected(shutdown_error));
-        }
-    }
+    FailQueuedRequests(shutdown_error);
 
     // Fail all pending proposals
     proposal_tracker_.FailAll(shutdown_error);
@@ -359,6 +363,10 @@ void RaftorImpl::EventLoop() {
 }
 
 void RaftorImpl::Poll(std::chrono::milliseconds timeout) {
+    if (!running_) {
+        return;
+    }
+
     transport_->Poll(timeout);
 
     if (ShouldTick()) {
@@ -370,6 +378,10 @@ void RaftorImpl::Poll(std::chrono::milliseconds timeout) {
 }
 
 bool RaftorImpl::Tick() {
+    if (!running_) {
+        return false;
+    }
+
     bool ticked = raw_node_->Tick();
     last_tick_ = std::chrono::steady_clock::now();
 
@@ -405,6 +417,11 @@ uint64_t RaftorImpl::GetWalDirSizeBytes() const {
 }
 
 void RaftorImpl::ProcessRaftWork() {
+    if (auto error = GetTerminalError(); error.has_value()) {
+        RefreshStatus();
+        return;
+    }
+
     telemetry::ScopedSpan span("raftor.process_work", config_.node_id);
     span.span()->SetAttribute(
         "raft.pending_proposals", static_cast<int64_t>(proposal_tracker_.PendingCount())
@@ -419,6 +436,11 @@ void RaftorImpl::ProcessRaftWork() {
     if (auto result = ready_processor_->Process(); !result) {
         RAFTPP_LOG_ERROR("Ready processing failed: {}", result.error().ToString());
         telemetry::RecordErrorIf(span.span(), result);
+        if (result.error() == RaftErrorCode::ChecksumMismatch) {
+            EnterTerminalState(result.error());
+            RefreshStatus();
+            return;
+        }
     }
 
     ProcessReadIndexQueue();
@@ -513,6 +535,13 @@ void RaftorImpl::ProcessProposalQueue() {
         auto callback = std::move(item->callback);
         const auto timeout = item->timeout.value_or(config_.proposal_timeout);
 
+        if (auto error = GetRequestRejectionError(); error.has_value()) {
+            if (callback) {
+                callback(nonstd::make_unexpected(*error));
+            }
+            continue;
+        }
+
         // Generate a unique context for tracking this proposal
         std::string ctx = GenerateProposalContext();
 
@@ -540,6 +569,13 @@ void RaftorImpl::ProcessReadIndexQueue() {
         auto ctx = std::move(item->ctx);
         auto callback = std::move(item->callback);
         const auto timeout = item->timeout.value_or(config_.read_index_timeout);
+
+        if (auto error = GetRequestRejectionError(); error.has_value()) {
+            if (callback) {
+                callback(nonstd::make_unexpected(*error));
+            }
+            continue;
+        }
 
         telemetry::ScopedSpan span("raftor.read_index.process", config_.node_id);
         span.span()->SetAttribute("raft.read.ctx_bytes", static_cast<int64_t>(ctx.size()));
@@ -574,6 +610,11 @@ void RaftorImpl::EnqueueProposal(
         }
     };
 
+    if (auto error = GetRequestRejectionError(); error.has_value()) {
+        wrapped_callback(nonstd::make_unexpected(*error));
+        return;
+    }
+
     proposal_queue_.Push(std::move(data), std::move(wrapped_callback), timeout);
 }
 
@@ -592,7 +633,64 @@ void RaftorImpl::EnqueueReadIndex(
         }
     };
 
+    if (auto error = GetRequestRejectionError(); error.has_value()) {
+        wrapped_callback(nonstd::make_unexpected(*error));
+        return;
+    }
+
     read_index_queue_.Push(std::move(ctx), std::move(wrapped_callback), timeout);
+}
+
+void RaftorImpl::FailQueuedRequests(const RaftError& error) {
+    while (auto item = proposal_queue_.TryPop()) {
+        if (item->callback) {
+            item->callback(nonstd::make_unexpected(error));
+        }
+    }
+    while (auto item = read_index_queue_.TryPop()) {
+        if (item->callback) {
+            item->callback(nonstd::make_unexpected(error));
+        }
+    }
+}
+
+std::optional<RaftError> RaftorImpl::GetTerminalError() const {
+    std::lock_guard lock(terminal_error_mutex_);
+    return terminal_error_;
+}
+
+std::optional<RaftError> RaftorImpl::GetRequestRejectionError() const {
+    if (auto error = GetTerminalError(); error.has_value()) {
+        return error;
+    }
+
+    if (!started_ || !running_) {
+        return RaftError(RaftErrorCode::ShuttingDown);
+    }
+
+    return std::nullopt;
+}
+
+void RaftorImpl::EnterTerminalState(const RaftError& error) {
+    {
+        std::lock_guard lock(terminal_error_mutex_);
+        if (terminal_error_.has_value()) {
+            return;
+        }
+        terminal_error_ = error;
+    }
+
+    running_ = false;
+    started_ = false;
+
+    FailQueuedRequests(error);
+    proposal_tracker_.FailAll(error);
+    proposal_tracker_.FailAllReads(error);
+    transport_->Stop();
+
+    RAFTPP_LOG_CRITICAL(
+        "Raftor node {} entered terminal state: {}", config_.node_id, error.ToString()
+    );
 }
 
 void RaftorImpl::ProcessTimeouts() {

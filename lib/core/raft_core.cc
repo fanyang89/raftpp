@@ -80,6 +80,7 @@ bool RaftCore::TryBatching(
                         entry_builder.setIndex(e.getIndex());
                         entry_builder.setData(e.getData());
                         entry_builder.setContext(e.getContext());
+                        entry_builder.setChecksum(e.getChecksum());
                     });
                     all_entries.push_back(std::move(entry));
                 }
@@ -101,6 +102,7 @@ bool RaftCore::TryBatching(
                     dst.setIndex(src_reader.getIndex());
                     dst.setData(src_reader.getData());
                     dst.setContext(src_reader.getContext());
+                    dst.setChecksum(src_reader.getChecksum());
                 }
 
                 const auto size = all_entries.size();
@@ -133,6 +135,7 @@ void RaftCore::PrepareSendEntries(
         dst.setIndex(src_reader.getIndex());
         dst.setData(src_reader.getData());
         dst.setContext(src_reader.getContext());
+        dst.setChecksum(src_reader.getChecksum());
     }
 
     msg_builder.setCommit(raft_log_.committed());

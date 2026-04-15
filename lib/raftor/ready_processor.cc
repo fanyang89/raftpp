@@ -15,6 +15,7 @@
 #include "raftpp/core/raw_node.h"
 #include "raftpp/core/read_only.h"
 #include "raftpp/logging.h"
+#include "raftpp/raftor/entry_checksum.h"
 #include "raftpp/raftor/proposal_tracker.h"
 #include "raftpp/raftor/state_machine.h"
 #include "raftpp/raftor/telemetry.h"
@@ -22,7 +23,42 @@
 #include "transport.h"
 
 namespace raftpp::raftor {
+
+using namespace wal;
+
 namespace {
+
+bool IsFatalApplyError(const RaftError& error) {
+    return error == RaftErrorCode::ChecksumMismatch;
+}
+
+Result<void> VerifyEntryChecksum(
+    msg::Entry::Reader entry_reader, ProposalTracker& proposal_tracker
+) {
+    if (IsChecksumExemptEntry(entry_reader)) {
+        return {};
+    }
+
+    const uint32_t expected_checksum = entry_reader.getChecksum();
+    const uint32_t actual_checksum = ComputeEntryChecksum(entry_reader);
+    if (actual_checksum == expected_checksum) {
+        return {};
+    }
+
+    RAFTPP_LOG_ERROR(
+        "Data corruption detected: checksum mismatch for entry at index {}; expected {:08x}, got "
+        "{:08x}",
+        entry_reader.getIndex(), expected_checksum, actual_checksum
+    );
+
+    auto context = entry_reader.getContext();
+    if (context.size() > 0) {
+        std::string ctx_str(reinterpret_cast<const char*>(context.begin()), context.size());
+        proposal_tracker.Fail(ctx_str, RaftError(RaftErrorCode::ChecksumMismatch));
+    }
+
+    return RaftError(RaftErrorCode::ChecksumMismatch);
+}
 
 class SnapshotDataReader final : public SnapshotReader {
   public:
@@ -84,15 +120,20 @@ SnapshotMetadata CloneSnapshotMetadata(msg::SnapshotMetadata::Reader snap_meta) 
 
 ReadyProcessor::ReadyProcessor(
     RawNode& raw_node, std::shared_ptr<wal::WALStorage> storage, StateMachine& state_machine,
-    rpc::Transport& transport, ProposalTracker& proposal_tracker
+    rpc::Transport& transport, ProposalTracker& proposal_tracker, bool checksum_enabled
 )
     : raw_node_(raw_node),
       storage_(std::move(storage)),
       state_machine_(state_machine),
       transport_(transport),
-      proposal_tracker_(proposal_tracker) {}
+      proposal_tracker_(proposal_tracker),
+      checksum_enabled_(checksum_enabled) {}
 
 Result<bool> ReadyProcessor::Process() {
+    if (fatal_error_) {
+        return nonstd::make_unexpected(*fatal_error_);
+    }
+
     if (!raw_node_.HasReady()) {
         return false;
     }
@@ -152,6 +193,11 @@ Result<bool> ReadyProcessor::Process() {
 
     // 5. Apply committed entries to state machine
     if (auto result = ApplyCommittedEntries(rd.light.committed_entries); !result) {
+        if (IsFatalApplyError(result.error())) {
+            std::ignore = raw_node_.AdvanceAppend(rd);
+            raw_node_.AdvanceApplyTo(applied_index_);
+            EnterFatalState(result.error());
+        }
         telemetry::RecordErrorIf(span.span(), result);
         return result.error();
     }
@@ -163,7 +209,13 @@ Result<bool> ReadyProcessor::Process() {
     LightReady light_rd = raw_node_.Advance(rd);
 
     // 8. Process light ready
-    ProcessLightReady(light_rd);
+    if (auto result = ProcessLightReady(light_rd); !result) {
+        if (IsFatalApplyError(result.error())) {
+            EnterFatalState(result.error());
+        }
+        telemetry::RecordErrorIf(span.span(), result);
+        return result.error();
+    }
 
     return true;
 }
@@ -276,6 +328,10 @@ Result<void> ReadyProcessor::ApplyCommittedEntries(const std::vector<Entry>& ent
                 "Failed to apply entry at index {}: {}", entry_reader.getIndex(),
                 result.error().ToString()
             );
+            if (IsFatalApplyError(result.error())) {
+                telemetry::RecordErrorIf(span.span(), result);
+                return result.error();
+            }
             has_error = true;
         }
         applied_index_ = capnp_util::reader<msg::Entry>(entry).getIndex();
@@ -289,6 +345,11 @@ Result<void> ReadyProcessor::ApplyCommittedEntries(const std::vector<Entry>& ent
 
 Result<void> ReadyProcessor::ApplyEntry(const Entry& entry) {
     auto entry_reader = capnp_util::reader<msg::Entry>(entry);
+    if (checksum_enabled_) {
+        if (auto result = VerifyEntryChecksum(entry_reader, proposal_tracker_); !result) {
+            return result;
+        }
+    }
 
     // Handle configuration changes
     if (entry_reader.getEntryType() == EntryType::ENTRY_CONF_CHANGE ||
@@ -371,7 +432,8 @@ Result<void> ReadyProcessor::ApplyEntry(const Entry& entry) {
 
     // Handle normal entries
     auto data = entry_reader.getData();
-    if (data.size() == 0) {
+    auto context = entry_reader.getContext();
+    if (data.size() == 0 && context.size() == 0) {
         // Empty entry after leader election - no callback to complete
         return {};
     }
@@ -379,7 +441,6 @@ Result<void> ReadyProcessor::ApplyEntry(const Entry& entry) {
     auto result = state_machine_.Apply(entry);
     if (!result) {
         // State machine error - still complete the proposal but with error
-        auto context = entry_reader.getContext();
         if (context.size() > 0) {
             std::string ctx_str(reinterpret_cast<const char*>(context.begin()), context.size());
             proposal_tracker_.Fail(ctx_str, result.error());
@@ -388,7 +449,6 @@ Result<void> ReadyProcessor::ApplyEntry(const Entry& entry) {
     }
 
     // Complete the proposal callback
-    auto context = entry_reader.getContext();
     if (context.size() > 0) {
         std::string ctx_str(reinterpret_cast<const char*>(context.begin()), context.size());
         std::string response = result->response.value_or("");
@@ -398,7 +458,7 @@ Result<void> ReadyProcessor::ApplyEntry(const Entry& entry) {
     return {};
 }
 
-void ReadyProcessor::ProcessLightReady(const LightReady& light_rd) {
+Result<void> ReadyProcessor::ProcessLightReady(const LightReady& light_rd) {
     telemetry::ScopedSpan span("raftor.ready.process_light");
     span.span()->SetAttribute("raft.message.count", static_cast<int64_t>(light_rd.messages.size()));
     span.span()->SetAttribute(
@@ -416,6 +476,11 @@ void ReadyProcessor::ProcessLightReady(const LightReady& light_rd) {
                 "Failed to apply entry at index {}: {}", entry_reader.getIndex(),
                 result.error().ToString()
             );
+            if (IsFatalApplyError(result.error())) {
+                raw_node_.AdvanceApplyTo(applied_index_);
+                telemetry::RecordErrorIf(span.span(), result);
+                return result.error();
+            }
             telemetry::RecordErrorIf(span.span(), result);
         }
         applied_index_ = capnp_util::reader<msg::Entry>(entry).getIndex();
@@ -426,6 +491,18 @@ void ReadyProcessor::ProcessLightReady(const LightReady& light_rd) {
     if (!light_rd.committed_entries.empty()) {
         raw_node_.AdvanceApply();
     }
+
+    return {};
+}
+
+void ReadyProcessor::EnterFatalState(const RaftError& error) {
+    if (fatal_error_) {
+        return;
+    }
+
+    fatal_error_ = error;
+    proposal_tracker_.FailAll(error);
+    proposal_tracker_.FailAllReads(error);
 }
 
 void ReadyProcessor::EnqueueReadStates(const std::vector<ReadState>& read_states) {

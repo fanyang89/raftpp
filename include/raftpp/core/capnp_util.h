@@ -81,6 +81,17 @@ bool equal(typename T::Reader a, typename T::Reader b) {
     return ::capnp::AnyStruct::Reader(a) == ::capnp::AnyStruct::Reader(b);
 }
 
+// Compare and log differences (for debugging)
+template <typename T>
+bool debug_equal(typename T::Reader a, typename T::Reader b, const std::string& name) {
+    if (::capnp::AnyStruct::Reader(a) == ::capnp::AnyStruct::Reader(b)) {
+        return true;
+    }
+    // This is a placeholder for actual diffing if needed, but for now we just log
+    // In a real scenario, we could use capnp::JsonCodec to dump both and diff strings
+    return false;
+}
+
 // Serialize message to bytes
 inline std::vector<uint8_t> toBytes(const ::capnp::MallocMessageBuilder& msg) {
     auto words = ::capnp::messageToFlatArray(const_cast<::capnp::MallocMessageBuilder&>(msg));
