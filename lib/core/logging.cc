@@ -13,7 +13,9 @@ namespace {
 
 std::mutex g_logger_mutex;
 
-std::string ToString(std::string_view value) { return {value.data(), value.size()}; }
+std::string ToString(std::string_view value) {
+    return {value.data(), value.size()};
+}
 
 std::optional<LogLevel> ParseLogLevel(std::string_view value) {
     std::string normalized;
@@ -69,7 +71,8 @@ spdlog::level::level_enum ToSpdlogLevel(LogLevel level) {
 }
 
 std::shared_ptr<spdlog::logger> GetLogger(std::string_view logger_name) {
-    const std::string name = ToString(logger_name.empty() ? std::string_view("raftpp") : logger_name);
+    const std::string name =
+        ToString(logger_name.empty() ? std::string_view("raftpp") : logger_name);
     if (auto logger = spdlog::get(name); logger != nullptr) {
         return logger;
     }
@@ -85,7 +88,9 @@ std::shared_ptr<spdlog::logger> GetLogger(std::string_view logger_name) {
     return logger;
 }
 
-spdlog::logger* GetLoggerRaw(std::string_view logger_name) { return GetLogger(logger_name).get(); }
+spdlog::logger* GetLoggerRaw(std::string_view logger_name) {
+    return GetLogger(logger_name).get();
+}
 
 void SetLogger(std::string logger_name, std::shared_ptr<spdlog::logger> logger) {
     if (logger == nullptr) {
@@ -100,7 +105,9 @@ void SetLogger(std::string logger_name, std::shared_ptr<spdlog::logger> logger) 
     spdlog::register_logger(std::move(logger));
 }
 
-void SetLogLevel(LogLevel level) { SetLoggerLevel("raftpp", level); }
+void SetLogLevel(LogLevel level) {
+    SetLoggerLevel("raftpp", level);
+}
 
 void SetLoggerLevel(std::string_view logger_name, LogLevel level) {
     GetLogger(logger_name)->set_level(ToSpdlogLevel(level));

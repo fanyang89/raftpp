@@ -34,7 +34,9 @@ class CapturingSink final : public spdlog::sinks::sink {
     }
 
     void flush() override {}
+
     void set_pattern(const std::string& /*pattern*/) override {}
+
     void set_formatter(std::unique_ptr<spdlog::formatter> /*sink_formatter*/) override {}
 
   private:
@@ -44,9 +46,8 @@ class CapturingSink final : public spdlog::sinks::sink {
 class ScopedLogger {
   public:
     ScopedLogger(std::string name, CapturedLogRecord* captured) : name_(std::move(name)) {
-        logger_ = std::make_shared<spdlog::logger>(
-            name_, std::make_shared<CapturingSink>(captured)
-        );
+        logger_ =
+            std::make_shared<spdlog::logger>(name_, std::make_shared<CapturingSink>(captured));
         logger_->set_level(spdlog::level::trace);
         raftpp::logging::SetLogger(name_, logger_);
     }
@@ -71,8 +72,8 @@ TEST_CASE("logging: formatted logs trim repository root from code filepath") {
 
     const std::string absolute_path = std::string(RAFTPP_SOURCE_ROOT) + "include/raftpp/logging.h";
     raftpp::logging::LogWithLocation(
-        "test", raftpp::logging::LogLevel::kInfo, absolute_path.c_str(), 42, "test",
-        "hello {}", "raftpp"
+        "test", raftpp::logging::LogLevel::kInfo, absolute_path.c_str(), 42, "test", "hello {}",
+        "raftpp"
     );
 
     CHECK_EQ("test", captured.logger_name);

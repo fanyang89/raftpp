@@ -120,10 +120,13 @@ class NoopTransport final : public rpc::Transport {
     }
 
     void AddPeer(uint64_t, const std::string&) override {}
+
     void RemovePeer(uint64_t) override {}
+
     void Send(nonstd::span<const Message>) override {}
 
     void SetMessageCallback(rpc::MessageCallback cb) override { on_message_ = std::move(cb); }
+
     void SetErrorCallback(rpc::ErrorCallback cb) override { on_error_ = std::move(cb); }
 
     void Poll(std::chrono::milliseconds timeout) override {
@@ -157,7 +160,7 @@ bool IsSingleNodeCluster(wal::WALStorage& storage, uint64_t node_id) {
     auto conf = capnp_util::reader<msg::ConfState>(state->conf_state);
     auto voters = conf.getVoters();
     return voters.size() == 1 && voters[0] == node_id && conf.getLearners().size() == 0 &&
-           conf.getVotersOutgoing().size() == 0 && conf.getLearnersNext().size() == 0;
+        conf.getVotersOutgoing().size() == 0 && conf.getLearnersNext().size() == 0;
 }
 }  // namespace
 

@@ -67,30 +67,32 @@ inline void Log(
     spdlog::string_view_t message
 ) {
     GetLoggerRaw(logger_name)
-        ->log(spdlog::source_loc{TrimSourceRoot(file), line, function}, ToSpdlogLevel(level), message);
+        ->log(
+            spdlog::source_loc{TrimSourceRoot(file), line, function}, ToSpdlogLevel(level), message
+        );
 }
 
 }  // namespace raftpp::logging
 
-#define RAFTPP_LOGGER_CALL(logger_name, level, ...)                                             \
-    do {                                                                                       \
-        if (::raftpp::logging::ShouldLog(logger_name, level)) {                                \
-            ::raftpp::logging::LogWithLocation(                                                \
-                logger_name, level, __FILE__, __LINE__, __func__, __VA_ARGS__                  \
-            );                                                                                 \
-        }                                                                                      \
+#define RAFTPP_LOGGER_CALL(logger_name, level, ...)                           \
+    do {                                                                      \
+        if (::raftpp::logging::ShouldLog(logger_name, level)) {               \
+            ::raftpp::logging::LogWithLocation(                               \
+                logger_name, level, __FILE__, __LINE__, __func__, __VA_ARGS__ \
+            );                                                                \
+        }                                                                     \
     } while (0)
 
-#define RAFTPP_LOG_TRACE(...)                                                                  \
+#define RAFTPP_LOG_TRACE(...) \
     RAFTPP_LOGGER_CALL("raftpp", ::raftpp::logging::LogLevel::kTrace, __VA_ARGS__)
-#define RAFTPP_LOG_DEBUG(...)                                                                  \
+#define RAFTPP_LOG_DEBUG(...) \
     RAFTPP_LOGGER_CALL("raftpp", ::raftpp::logging::LogLevel::kDebug, __VA_ARGS__)
-#define RAFTPP_LOG_INFO(...)                                                                   \
+#define RAFTPP_LOG_INFO(...) \
     RAFTPP_LOGGER_CALL("raftpp", ::raftpp::logging::LogLevel::kInfo, __VA_ARGS__)
-#define RAFTPP_LOG_WARN(...)                                                                   \
+#define RAFTPP_LOG_WARN(...) \
     RAFTPP_LOGGER_CALL("raftpp", ::raftpp::logging::LogLevel::kWarn, __VA_ARGS__)
-#define RAFTPP_LOG_ERROR(...)                                                                  \
+#define RAFTPP_LOG_ERROR(...) \
     RAFTPP_LOGGER_CALL("raftpp", ::raftpp::logging::LogLevel::kError, __VA_ARGS__)
-#define RAFTPP_LOG_FATAL(...)                                                                  \
+#define RAFTPP_LOG_FATAL(...) \
     RAFTPP_LOGGER_CALL("raftpp", ::raftpp::logging::LogLevel::kCritical, __VA_ARGS__)
 #define RAFTPP_LOG_CRITICAL(...) RAFTPP_LOG_FATAL(__VA_ARGS__)
