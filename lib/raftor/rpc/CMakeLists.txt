@@ -1,7 +1,8 @@
 add_library(raftor-rpc
   codec.cc
   peer_manager.cc
-  capnp_transport.cc)
+  capnp_transport.cc
+  noop_transport.cc)
 
 target_include_directories(raftor-rpc PUBLIC
   ${RAFTPP_INCLUDE_DIR}
