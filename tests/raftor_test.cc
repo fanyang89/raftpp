@@ -343,6 +343,25 @@ TEST_CASE("conf_state_initialized_from_initial_peers") {
     REQUIRE_MESSAGE(status.role != StateRole::Leader, "Node should not be leader without quorum");
 }
 
+TEST_CASE("noop_transport_allows_empty_listen_address") {
+    TestNode node;
+    const auto pid = static_cast<uint64_t>(::getpid());
+    node.temp_dir =
+        std::filesystem::temp_directory_path() / ("raftpp_noop_test_" + std::to_string(pid));
+    std::error_code ec;
+    std::filesystem::remove_all(node.temp_dir, ec);
+    std::filesystem::create_directories(node.temp_dir);
+    node.temp_dir_cleanup = std::make_unique<TempDirCleanup>(node.temp_dir);
+
+    node.config.node_id = 1;
+    node.config.transport_kind = TransportKind::Noop;
+    node.config.data_dir = node.temp_dir;
+
+    auto state_machine = std::make_unique<MockStateMachine>();
+    auto raftor_result = Raftor::Create(node.config, std::move(state_machine));
+    REQUIRE(raftor_result.has_value());
+}
+
 TEST_CASE("three_node_proposal_after_bootstrap") {
     std::vector<PeerConfig> peers = {
         PeerConfig{1, "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort())},

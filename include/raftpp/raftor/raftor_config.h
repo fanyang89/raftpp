@@ -15,6 +15,8 @@ namespace raftpp::raftor {
 enum class TransportKind {
     /// Cap'n Proto RPC transport (default).
     Capnp,
+    /// No network transport. Use only when no remote peers are expected.
+    Noop,
 };
 
 /// Peer node configuration

@@ -78,12 +78,12 @@ std::string BuildAssertMessage(
 }
 
 [[noreturn]] inline void Panic(const char* file, int line) {
-    logging::LogWithLocation(opentelemetry::logs::Severity::kFatal, file, line, "panic");
+    logging::LogWithLocation("raftpp", logging::LogLevel::kCritical, file, line, __func__, "panic");
     std::abort();
 }
 
 [[noreturn]] inline void Panic(const char* file, int line, std::string_view message) {
-    logging::LogWithLocation(opentelemetry::logs::Severity::kFatal, file, line, message);
+    logging::Log("raftpp", logging::LogLevel::kCritical, file, line, __func__, message);
     std::abort();
 }
 

@@ -31,6 +31,7 @@
 #include "raftpp/logging.h"
 #include "raftpp/raftor/raftor_config.h"
 #include "raftpp/raftor/rpc/capnp_transport.h"
+#include "raftpp/raftor/rpc/noop_transport.h"
 #include "raftpp/raftor/state_machine.h"
 #include "raftpp/raftor/telemetry.h"
 #include "raftpp/raftor/wal/wal_config.h"
@@ -102,6 +103,7 @@ Result<void> LoadSnapshotDataFromFile(
 
     return {};
 }
+
 }  // namespace
 
 // === RaftorConfig implementation ===
@@ -110,7 +112,7 @@ Result<void> RaftorConfig::Validate() const {
     if (node_id == 0) {
         return nonstd::make_unexpected(RaftError(ConfigErrorCode::InvalidNodeId));
     }
-    if (listen_addr.empty()) {
+    if (transport_kind == TransportKind::Capnp && listen_addr.empty()) {
         return nonstd::make_unexpected(RaftError(ConfigErrorCode::ListenAddressEmpty));
     }
     if (data_dir.empty()) {
@@ -940,13 +942,21 @@ Result<std::unique_ptr<Raftor>> Raftor::Create(
         RAFTPP_LOG_INFO("WAL already initialized, ignoring initial_peers");
     }
 
-    // Create RPC transport
     rpc::TransportConfig transport_config;
     transport_config.listen_addr = config.listen_addr;
     transport_config.node_id = config.node_id;
     transport_config.connect_timeout = config.connect_timeout;
     transport_config.max_message_size = config.max_size_per_message;
-    auto transport = std::make_unique<rpc::CapnpTransport>(transport_config);
+
+    std::unique_ptr<rpc::Transport> transport;
+    switch (config.transport_kind) {
+        case TransportKind::Capnp:
+            transport = std::make_unique<rpc::CapnpTransport>(transport_config);
+            break;
+        case TransportKind::Noop:
+            transport = std::make_unique<rpc::NoopTransport>(transport_config);
+            break;
+    }
 
     return Create(config, std::move(state_machine), std::move(storage), std::move(transport));
 }

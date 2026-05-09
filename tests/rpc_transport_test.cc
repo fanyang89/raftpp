@@ -21,6 +21,7 @@
 #include "raftpp/core/types.h"
 #include "raftpp/fmt.h"
 #include "raftpp/raftor/rpc/capnp_transport.h"
+#include "raftpp/raftor/rpc/noop_transport.h"
 #include "transport.h"
 
 using namespace raftpp;
@@ -196,6 +197,34 @@ std::string DataToString(::capnp::Data::Reader data) {
 }
 
 }  // namespace
+
+// =============================================================================
+// Noop Transport Tests
+// =============================================================================
+
+TEST_SUITE("rpc::noop") {
+    TEST_CASE("noop_start_stop" * doctest::timeout(5)) {
+        TransportConfig config{"", 1};
+        NoopTransport transport(config);
+
+        CHECK(transport.Start().has_value());
+        transport.Poll(1ms);
+        transport.Stop();
+    }
+
+    TEST_CASE("noop_drops_messages_and_peers" * doctest::timeout(5)) {
+        TransportConfig config{"", 1};
+        NoopTransport transport(config);
+        REQUIRE(transport.Start().has_value());
+
+        transport.AddPeer(2, "127.0.0.1:19000");
+        auto msg = MakeMessage(1, 2);
+        transport.Send(nonstd::span(&msg, 1));
+        transport.RemovePeer(2);
+
+        transport.Stop();
+    }
+}
 
 // =============================================================================
 // Capnp Transport Tests
