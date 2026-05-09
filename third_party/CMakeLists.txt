@@ -15,6 +15,19 @@ else()
   target_compile_definitions(raftpp-fmt INTERFACE FMT_HEADER_ONLY)
 endif()
 
+if(TARGET raftpp-fmt AND NOT TARGET fmt::fmt)
+  add_library(fmt::fmt ALIAS raftpp-fmt)
+endif()
+if(TARGET raftpp-fmt AND NOT TARGET fmt::fmt-header-only)
+  add_library(fmt::fmt-header-only ALIAS raftpp-fmt)
+endif()
+
+CPMAddPackage(
+  URI "https://github.com/gabime/spdlog.git@1.17.0"
+  OPTIONS
+    "SPDLOG_FMT_EXTERNAL_HO ON"
+)
+
 if(RAFTPP_BUILD_TESTING)
   CPMAddPackage(URI "https://github.com/fanyang89/doctest.git" GIT_TAG master)
 endif()

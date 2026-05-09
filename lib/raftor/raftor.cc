@@ -102,6 +102,63 @@ Result<void> LoadSnapshotDataFromFile(
 
     return {};
 }
+
+class NoopTransport final : public rpc::Transport {
+  public:
+    explicit NoopTransport(uint64_t node_id) : node_id_(node_id) {}
+
+    Result<void> Start() override {
+        running_ = true;
+        RAFTPP_LOG_INFO("NoopTransport started for single-node raftor {}", node_id_);
+        return {};
+    }
+
+    void Stop() override {
+        if (running_.exchange(false)) {
+            RAFTPP_LOG_INFO("NoopTransport stopped for single-node raftor {}", node_id_);
+        }
+    }
+
+    void AddPeer(uint64_t, const std::string&) override {}
+    void RemovePeer(uint64_t) override {}
+    void Send(nonstd::span<const Message>) override {}
+
+    void SetMessageCallback(rpc::MessageCallback cb) override { on_message_ = std::move(cb); }
+    void SetErrorCallback(rpc::ErrorCallback cb) override { on_error_ = std::move(cb); }
+
+    void Poll(std::chrono::milliseconds timeout) override {
+        if (timeout.count() > 0) {
+            std::this_thread::sleep_for(timeout);
+        }
+    }
+
+    void Run() override {
+        while (running_) {
+            Poll(std::chrono::milliseconds(100));
+        }
+    }
+
+  private:
+    uint64_t node_id_ = 0;
+    std::atomic<bool> running_{false};
+    rpc::MessageCallback on_message_;
+    rpc::ErrorCallback on_error_;
+};
+
+bool IsSingleNodeCluster(wal::WALStorage& storage, uint64_t node_id) {
+    auto state = storage.InitialState();
+    if (!state) {
+        RAFTPP_LOG_WARN(
+            "Failed to inspect conf state for transport selection: {}", state.error().ToString()
+        );
+        return false;
+    }
+
+    auto conf = capnp_util::reader<msg::ConfState>(state->conf_state);
+    auto voters = conf.getVoters();
+    return voters.size() == 1 && voters[0] == node_id && conf.getLearners().size() == 0 &&
+           conf.getVotersOutgoing().size() == 0 && conf.getLearnersNext().size() == 0;
+}
 }  // namespace
 
 // === RaftorConfig implementation ===
@@ -940,13 +997,17 @@ Result<std::unique_ptr<Raftor>> Raftor::Create(
         RAFTPP_LOG_INFO("WAL already initialized, ignoring initial_peers");
     }
 
-    // Create RPC transport
-    rpc::TransportConfig transport_config;
-    transport_config.listen_addr = config.listen_addr;
-    transport_config.node_id = config.node_id;
-    transport_config.connect_timeout = config.connect_timeout;
-    transport_config.max_message_size = config.max_size_per_message;
-    auto transport = std::make_unique<rpc::CapnpTransport>(transport_config);
+    std::unique_ptr<rpc::Transport> transport;
+    if (IsSingleNodeCluster(*storage, config.node_id)) {
+        transport = std::make_unique<NoopTransport>(config.node_id);
+    } else {
+        rpc::TransportConfig transport_config;
+        transport_config.listen_addr = config.listen_addr;
+        transport_config.node_id = config.node_id;
+        transport_config.connect_timeout = config.connect_timeout;
+        transport_config.max_message_size = config.max_size_per_message;
+        transport = std::make_unique<rpc::CapnpTransport>(transport_config);
+    }
 
     return Create(config, std::move(state_machine), std::move(storage), std::move(transport));
 }
