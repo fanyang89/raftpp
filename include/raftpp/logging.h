@@ -40,7 +40,6 @@ enum class LogLevel {
 
 spdlog::level::level_enum ToSpdlogLevel(LogLevel level);
 std::shared_ptr<spdlog::logger> GetLogger(std::string_view logger_name = "raftpp");
-spdlog::logger* GetLoggerRaw(std::string_view logger_name = "raftpp");
 void SetLogger(std::string logger_name, std::shared_ptr<spdlog::logger> logger);
 void SetLogLevel(LogLevel level);
 void SetLoggerLevel(std::string_view logger_name, LogLevel level);
@@ -55,32 +54,37 @@ inline void LogWithLocation(
     std::string_view logger_name, LogLevel level, const char* file, int line, const char* function,
     spdlog::format_string_t<Args...> format, Args&&... args
 ) {
-    GetLoggerRaw(logger_name)
-        ->log(
-            spdlog::source_loc{TrimSourceRoot(file), line, function}, ToSpdlogLevel(level), format,
-            std::forward<Args>(args)...
-        );
+    auto logger = GetLogger(logger_name);
+    logger->log(
+        spdlog::source_loc{TrimSourceRoot(file), line, function}, ToSpdlogLevel(level), format,
+        std::forward<Args>(args)...
+    );
 }
 
 inline void Log(
     std::string_view logger_name, LogLevel level, const char* file, int line, const char* function,
     spdlog::string_view_t message
 ) {
-    GetLoggerRaw(logger_name)
-        ->log(
-            spdlog::source_loc{TrimSourceRoot(file), line, function}, ToSpdlogLevel(level), message
-        );
+    auto logger = GetLogger(logger_name);
+    logger->log(
+        spdlog::source_loc{TrimSourceRoot(file), line, function}, ToSpdlogLevel(level), message
+    );
 }
 
 }  // namespace raftpp::logging
 
-#define RAFTPP_LOGGER_CALL(logger_name, level, ...)                           \
-    do {                                                                      \
-        if (::raftpp::logging::ShouldLog(logger_name, level)) {               \
-            ::raftpp::logging::LogWithLocation(                               \
-                logger_name, level, __FILE__, __LINE__, __func__, __VA_ARGS__ \
-            );                                                                \
-        }                                                                     \
+#define RAFTPP_LOGGER_CALL(logger_name, level, ...)                                 \
+    do {                                                                            \
+        const auto raftpp_logger = ::raftpp::logging::GetLogger(logger_name);       \
+        const auto raftpp_level = ::raftpp::logging::ToSpdlogLevel(level);          \
+        if (raftpp_logger->should_log(raftpp_level)) {                              \
+            raftpp_logger->log(                                                     \
+                spdlog::source_loc{                                                 \
+                    ::raftpp::logging::TrimSourceRoot(__FILE__), __LINE__, __func__ \
+                },                                                                  \
+                raftpp_level, __VA_ARGS__                                           \
+            );                                                                      \
+        }                                                                           \
     } while (0)
 
 #define RAFTPP_LOG_TRACE(...) \

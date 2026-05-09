@@ -6,6 +6,7 @@
 #include <doctest/doctest.h>
 #include <spdlog/details/log_msg.h>
 #include <spdlog/logger.h>
+#include <spdlog/sinks/null_sink.h>
 #include <spdlog/sinks/sink.h>
 #include <spdlog/spdlog.h>
 
@@ -105,6 +106,31 @@ TEST_CASE("logging: level filtering is delegated to spdlog logger") {
     raftpp::logging::SetLoggerLevel("test", raftpp::logging::LogLevel::kError);
     CHECK_FALSE(raftpp::logging::ShouldLog("test", raftpp::logging::LogLevel::kInfo));
     CHECK(raftpp::logging::ShouldLog("test", raftpp::logging::LogLevel::kError));
+}
+
+TEST_CASE("logging: created loggers default to warn level") {
+    constexpr const char* kLoggerName = "test-default-level";
+    spdlog::drop(kLoggerName);
+
+    CHECK_FALSE(raftpp::logging::ShouldLog(kLoggerName, raftpp::logging::LogLevel::kInfo));
+    CHECK(raftpp::logging::ShouldLog(kLoggerName, raftpp::logging::LogLevel::kWarn));
+
+    spdlog::drop(kLoggerName);
+}
+
+TEST_CASE("logging: SetLogger preserves caller configured level") {
+    constexpr const char* kLoggerName = "test-preserve-level";
+    auto logger = std::make_shared<spdlog::logger>(
+        kLoggerName, std::make_shared<spdlog::sinks::null_sink_mt>()
+    );
+    logger->set_level(spdlog::level::err);
+
+    raftpp::logging::SetLogger(kLoggerName, logger);
+
+    CHECK_FALSE(raftpp::logging::ShouldLog(kLoggerName, raftpp::logging::LogLevel::kWarn));
+    CHECK(raftpp::logging::ShouldLog(kLoggerName, raftpp::logging::LogLevel::kError));
+
+    spdlog::drop(kLoggerName);
 }
 
 TEST_SUITE_END();

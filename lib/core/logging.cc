@@ -83,13 +83,9 @@ std::shared_ptr<spdlog::logger> GetLogger(std::string_view logger_name) {
     }
 
     auto logger = spdlog::default_logger()->clone(name);
-    logger->set_level(spdlog::level::trace);
+    logger->set_level(spdlog::level::warn);
     spdlog::register_logger(logger);
     return logger;
-}
-
-spdlog::logger* GetLoggerRaw(std::string_view logger_name) {
-    return GetLogger(logger_name).get();
 }
 
 void SetLogger(std::string logger_name, std::shared_ptr<spdlog::logger> logger) {
@@ -98,7 +94,6 @@ void SetLogger(std::string logger_name, std::shared_ptr<spdlog::logger> logger) 
     }
 
     std::lock_guard lock(g_logger_mutex);
-    logger->set_level(spdlog::level::trace);
     if (spdlog::get(logger_name) != nullptr) {
         spdlog::drop(logger_name);
     }
