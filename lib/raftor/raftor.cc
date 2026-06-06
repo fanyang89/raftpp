@@ -417,11 +417,6 @@ uint64_t RaftorImpl::GetWalDirSizeBytes() const {
 }
 
 void RaftorImpl::ProcessRaftWork() {
-    if (auto error = GetTerminalError(); error.has_value()) {
-        RefreshStatus();
-        return;
-    }
-
     telemetry::ScopedSpan span("raftor.process_work", config_.node_id);
     span.span()->SetAttribute(
         "raft.pending_proposals", static_cast<int64_t>(proposal_tracker_.PendingCount())
