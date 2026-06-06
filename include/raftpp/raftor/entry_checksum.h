@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cstdint>
-#include <type_traits>
 
 #include "raftpp.capnp.h"
 #include "raftpp/core/types.h"
@@ -16,8 +15,7 @@ inline bool IsChecksumExemptEntry(msg::Entry::Reader entry_reader) {
 
 inline uint32_t ComputeEntryChecksum(msg::Entry::Reader entry_reader) {
     wal::CRC32C crc;
-    const auto entry_type =
-        static_cast<std::underlying_type_t<msg::EntryType>>(entry_reader.getEntryType());
+    const uint32_t entry_type = static_cast<uint32_t>(entry_reader.getEntryType());
     crc.Update(&entry_type, sizeof(entry_type));
 
     auto context = entry_reader.getContext();
