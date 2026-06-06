@@ -2,6 +2,8 @@
 
 #include <atomic>
 #include <filesystem>
+#include <fstream>
+#include <limits>
 #include <random>
 #include <string>
 #include <thread>
@@ -72,6 +74,15 @@ Snapshot MakeWalSnapshot(
         voters_builder.set(i, voters[i]);
     }
     return snapshot;
+}
+
+void WriteBytes(const std::filesystem::path& path, const std::vector<uint8_t>& data) {
+    std::ofstream out(path, std::ios::binary | std::ios::trunc);
+    REQUIRE(out.is_open());
+    out.write(
+        reinterpret_cast<const char*>(data.data()), static_cast<std::streamsize>(data.size())
+    );
+    REQUIRE(out.good());
 }
 
 }  // namespace
@@ -1275,6 +1286,132 @@ TEST_SUITE("wal") {
         auto data = snap_reader.getData();
         std::string payload(reinterpret_cast<const char*>(data.begin()), data.size());
         CHECK(payload == "snapshot-payload");
+
+        auto unavailable = (*storage)->GetSnapshot(8, 0);
+        CHECK(!unavailable.has_value());
+        CHECK(unavailable.error() == StorageErrorCode::SnapshotTemporarilyUnavailable);
+    }
+
+    TEST_CASE("wal: load snapshot without snapshot returns unavailable") {
+        TempDir temp_dir;
+
+        WALConfig config;
+        config.dir = temp_dir.path();
+
+        auto wal = WAL::Open(config);
+        REQUIRE(wal.has_value());
+
+        auto snap = (*wal)->LoadSnapshot();
+        CHECK(!snap.has_value());
+        CHECK(snap.error() == StorageErrorCode::SnapshotTemporarilyUnavailable);
+    }
+
+    TEST_CASE("wal_storage: reopen fails when snapshot file is missing") {
+        TempDir temp_dir;
+
+        WALConfig config;
+        config.dir = temp_dir.path();
+        config.sync_on_write = true;
+
+        {
+            auto storage = WALStorage::Open(config);
+            REQUIRE(storage.has_value());
+            auto snap = MakeWalSnapshot(7, 3, {1}, "snapshot-payload");
+            REQUIRE((*storage)->ApplySnapshot(snap));
+        }
+
+        std::filesystem::remove(temp_dir.path() / "snapshot");
+        auto reopened = WALStorage::Open(config);
+        CHECK(!reopened.has_value());
+    }
+
+    TEST_CASE("wal_storage: reopen fails when snapshot file is corrupt") {
+        TempDir temp_dir;
+
+        WALConfig config;
+        config.dir = temp_dir.path();
+        config.sync_on_write = true;
+
+        {
+            auto storage = WALStorage::Open(config);
+            REQUIRE(storage.has_value());
+            auto snap = MakeWalSnapshot(7, 3, {1}, "snapshot-payload");
+            REQUIRE((*storage)->ApplySnapshot(snap));
+        }
+
+        WriteBytes(temp_dir.path() / "snapshot", std::vector<uint8_t>{'b', 'a', 'd'});
+        auto reopened = WALStorage::Open(config);
+        CHECK(!reopened.has_value());
+    }
+
+    TEST_CASE("wal_storage: reopen fails when snapshot file metadata mismatches") {
+        TempDir temp_dir;
+
+        WALConfig config;
+        config.dir = temp_dir.path();
+        config.sync_on_write = true;
+
+        {
+            auto storage = WALStorage::Open(config);
+            REQUIRE(storage.has_value());
+            auto snap = MakeWalSnapshot(7, 3, {1}, "snapshot-payload");
+            REQUIRE((*storage)->ApplySnapshot(snap));
+        }
+
+        auto mismatched = MakeWalSnapshot(8, 3, {1}, "snapshot-payload");
+        WriteBytes(temp_dir.path() / "snapshot", capnp_util::toBytes(mismatched));
+        auto reopened = WALStorage::Open(config);
+        CHECK(!reopened.has_value());
+    }
+
+    TEST_CASE("wal_storage: reopen fails when snapshot file is too large") {
+        TempDir temp_dir;
+
+        WALConfig config;
+        config.dir = temp_dir.path();
+        config.sync_on_write = true;
+
+        {
+            auto storage = WALStorage::Open(config);
+            REQUIRE(storage.has_value());
+            auto snap = MakeWalSnapshot(7, 3, {1}, "snapshot-payload");
+            REQUIRE((*storage)->ApplySnapshot(snap));
+        }
+
+        std::filesystem::resize_file(
+            temp_dir.path() / "snapshot",
+            static_cast<uintmax_t>(std::numeric_limits<uint32_t>::max()) + 1
+        );
+        auto reopened = WALStorage::Open(config);
+        CHECK(!reopened.has_value());
+    }
+
+    TEST_CASE("wal_storage: apply snapshot failure keeps previous snapshot cached") {
+        TempDir temp_dir;
+
+        WALConfig config;
+        config.dir = temp_dir.path();
+        config.sync_on_write = true;
+
+        auto storage = WALStorage::Open(config);
+        REQUIRE(storage.has_value());
+
+        auto first_snap = MakeWalSnapshot(7, 3, {1}, "old-snapshot");
+        REQUIRE((*storage)->ApplySnapshot(first_snap));
+
+        std::filesystem::create_directory(temp_dir.path() / "snapshot.tmp");
+        auto next_snap = MakeWalSnapshot(8, 4, {1}, "new-snapshot");
+        auto result = (*storage)->ApplySnapshot(next_snap);
+        CHECK(!result.has_value());
+
+        CHECK((*storage)->SnapshotIndex() == 7);
+        auto cached = (*storage)->GetSnapshot(0, 0);
+        REQUIRE(cached.has_value());
+        auto cached_reader = capnp_util::reader<msg::Snapshot>(*cached);
+        CHECK(cached_reader.getMetadata().getIndex() == 7);
+        auto data = cached_reader.getData();
+        std::string payload(reinterpret_cast<const char*>(data.begin()), data.size());
+        CHECK(payload == "old-snapshot");
     }
 
     TEST_CASE("wal_storage: all entries") {

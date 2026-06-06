@@ -91,6 +91,10 @@ class MockStateMachine : public StateMachine {
     Result<void> RestoreSnapshot(const SnapshotMetadata& metadata, SnapshotReader& reader)
         override {
         std::lock_guard lock(mutex_);
+        if (fail_restore_) {
+            return nonstd::make_unexpected(RaftError(StorageErrorCode::Unavailable));
+        }
+
         auto meta_reader = capnp_util::reader<msg::SnapshotMetadata>(metadata);
         last_restored_index_ = meta_reader.getIndex();
         last_restored_term_ = meta_reader.getTerm();
@@ -151,10 +155,16 @@ class MockStateMachine : public StateMachine {
         return leadership_changes_;
     }
 
+    void SetFailRestore(bool fail) {
+        std::lock_guard lock(mutex_);
+        fail_restore_ = fail;
+    }
+
   private:
     mutable std::mutex mutex_;
     size_t apply_count_ = 0;
     size_t restore_count_ = 0;
+    bool fail_restore_ = false;
     uint64_t last_restored_index_ = 0;
     uint64_t last_restored_term_ = 0;
     std::vector<std::vector<uint8_t>> applied_entries_;
@@ -440,6 +450,11 @@ TEST_CASE("local_snapshot_restored_on_restart") {
 
     raftor->Stop();
     raftor.reset();
+
+    auto failing_state_machine = std::make_unique<MockStateMachine>();
+    failing_state_machine->SetFailRestore(true);
+    auto failed_restart = Raftor::Create(node.config, std::move(failing_state_machine));
+    CHECK(!failed_restart.has_value());
 
     auto restarted_state_machine = std::make_unique<MockStateMachine>();
     auto* restored_state_machine = restarted_state_machine.get();
