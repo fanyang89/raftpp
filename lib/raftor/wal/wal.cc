@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cstring>
 #include <filesystem>
+#include <limits>
 #include <map>
 #include <mutex>
 #include <utility>
@@ -56,6 +57,9 @@ Result<void> WriteAll(int fd, nonstd::span<const uint8_t> data) {
     while (written < data.size()) {
         const ssize_t n = ::write(fd, data.data() + written, data.size() - written);
         if (n < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
             return RaftError(
                 StorageErrorOther{fmt::format("failed to write snapshot: {}", std::strerror(errno))}
             );
@@ -84,6 +88,12 @@ Result<std::vector<uint8_t>> ReadFile(const std::filesystem::path& path) {
             StorageErrorOther{fmt::format("failed to get snapshot size: {}", std::strerror(err))}
         );
     }
+    if (size > static_cast<off_t>(std::numeric_limits<uint32_t>::max())) {
+        ::close(fd);
+        return RaftError(
+            StorageErrorOther{"failed to read snapshot: file size exceeds maximum limit"}
+        );
+    }
     if (::lseek(fd, 0, SEEK_SET) < 0) {
         const int err = errno;
         ::close(fd);
@@ -97,6 +107,9 @@ Result<std::vector<uint8_t>> ReadFile(const std::filesystem::path& path) {
     while (read_bytes < data.size()) {
         const ssize_t n = ::read(fd, data.data() + read_bytes, data.size() - read_bytes);
         if (n < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
             const int err = errno;
             ::close(fd);
             return RaftError(

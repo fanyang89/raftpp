@@ -1,11 +1,8 @@
 #include "ready_processor.h"
 
-#include <algorithm>
-#include <cstring>
 #include <optional>
 #include <utility>
 
-#include <capnp/blob.h>
 #include <nonstd/expected.hpp>
 #include <nonstd/span.hpp>
 #include <opentelemetry/trace/span.h>
@@ -58,62 +55,6 @@ Result<void> VerifyEntryChecksum(
     }
 
     return RaftError(RaftErrorCode::ChecksumMismatch);
-}
-
-class SnapshotDataReader final : public SnapshotReader {
-  public:
-    explicit SnapshotDataReader(::capnp::Data::Reader data) : data_(data) {}
-
-    Result<size_t> Read(nonstd::span<uint8_t> out) override {
-        if (offset_ >= data_.size()) {
-            return 0;
-        }
-        if (out.empty()) {
-            return 0;
-        }
-
-        const size_t remaining = data_.size() - offset_;
-        const size_t bytes_to_copy = std::min(out.size(), remaining);
-        std::memcpy(out.data(), data_.begin() + offset_, bytes_to_copy);
-        offset_ += bytes_to_copy;
-        return bytes_to_copy;
-    }
-
-  private:
-    ::capnp::Data::Reader data_;
-    size_t offset_ = 0;
-};
-
-template <typename ListReader, typename ListBuilder>
-void CopyUint64List(ListReader src, ListBuilder dst) {
-    for (size_t i = 0; i < src.size(); ++i) {
-        dst.set(i, src[i]);
-    }
-}
-
-SnapshotMetadata CloneSnapshotMetadata(msg::SnapshotMetadata::Reader snap_meta) {
-    auto metadata = capnp_util::make<msg::SnapshotMetadata>();
-    auto meta_builder = capnp_util::builder<msg::SnapshotMetadata>(metadata);
-    meta_builder.setIndex(snap_meta.getIndex());
-    meta_builder.setTerm(snap_meta.getTerm());
-
-    auto conf_src = snap_meta.getConfState();
-    auto conf_dst = meta_builder.initConfState();
-
-    auto voters_src = conf_src.getVoters();
-    CopyUint64List(voters_src, conf_dst.initVoters(voters_src.size()));
-
-    auto learners_src = conf_src.getLearners();
-    CopyUint64List(learners_src, conf_dst.initLearners(learners_src.size()));
-
-    auto voters_out_src = conf_src.getVotersOutgoing();
-    CopyUint64List(voters_out_src, conf_dst.initVotersOutgoing(voters_out_src.size()));
-
-    auto learners_next_src = conf_src.getLearnersNext();
-    CopyUint64List(learners_next_src, conf_dst.initLearnersNext(learners_next_src.size()));
-
-    conf_dst.setAutoLeave(conf_src.getAutoLeave());
-    return metadata;
 }
 
 }  // namespace

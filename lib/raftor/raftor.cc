@@ -15,7 +15,6 @@
 #include <utility>
 #include <vector>
 
-#include <capnp/blob.h>
 #include <kj/common.h>
 #include <nonstd/expected.hpp>
 #include <nonstd/span.hpp>
@@ -66,27 +65,6 @@ class TempFileSnapshotWriter final : public SnapshotWriter {
   private:
     std::FILE* file_;
     uint64_t total_bytes_written_ = 0;
-};
-
-class SnapshotDataReader final : public SnapshotReader {
-  public:
-    explicit SnapshotDataReader(::capnp::Data::Reader data) : data_(data) {}
-
-    Result<size_t> Read(nonstd::span<uint8_t> out) override {
-        if (offset_ >= data_.size() || out.empty()) {
-            return 0;
-        }
-
-        const size_t remaining = data_.size() - offset_;
-        const size_t bytes_to_copy = std::min(out.size(), remaining);
-        std::memcpy(out.data(), data_.begin() + offset_, bytes_to_copy);
-        offset_ += bytes_to_copy;
-        return bytes_to_copy;
-    }
-
-  private:
-    ::capnp::Data::Reader data_;
-    size_t offset_ = 0;
 };
 
 Result<void> LoadSnapshotDataFromFile(
