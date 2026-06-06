@@ -2,10 +2,12 @@
 
 #include <stdint.h>
 
-#include <cstring>
 #include <optional>
 #include <string>
 #include <string_view>
+
+#include "raftpp/core/capnp_util.h"
+#include "raftpp/core/types.h"
 
 namespace raftpp::raftor {
 
@@ -27,48 +29,41 @@ inline bool IsMetadataProposalContext(std::string_view ctx) {
 }
 
 inline std::string SerializeMetadataChange(const MetadataChange& change) {
-    std::string data;
-    data.reserve(32 + change.addr.size());
-    data.append("RAFTOR_META_V1\n");
-    data.push_back(static_cast<char>(change.type));
-    data.append(reinterpret_cast<const char*>(&change.node_id), sizeof(change.node_id));
-    uint32_t addr_size = static_cast<uint32_t>(change.addr.size());
-    data.append(reinterpret_cast<const char*>(&addr_size), sizeof(addr_size));
-    data.append(change.addr);
-    return data;
+    auto msg = capnp_util::make<msg::RaftorMetadataChange>();
+    auto builder = capnp_util::builder<msg::RaftorMetadataChange>(msg);
+
+    switch (change.type) {
+        case MetadataChangeType::UpsertPeerAddress: {
+            auto peer = builder.initUpsertPeerAddress();
+            peer.setNodeId(change.node_id);
+            peer.setAddr(change.addr);
+            break;
+        }
+    }
+
+    return capnp_util::toString(msg);
 }
 
 inline std::optional<MetadataChange> ParseMetadataChange(std::string_view data) {
-    constexpr std::string_view kMagic = "RAFTOR_META_V1\n";
-    if (data.size() < kMagic.size() + 1 + sizeof(uint64_t) + sizeof(uint32_t) ||
-        data.substr(0, kMagic.size()) != kMagic) {
+    try {
+        auto msg = capnp_util::fromString<msg::RaftorMetadataChange>(data);
+        auto reader = capnp_util::reader<msg::RaftorMetadataChange>(msg);
+
+        switch (reader.which()) {
+            case msg::RaftorMetadataChange::UPSERT_PEER_ADDRESS: {
+                auto peer = reader.getUpsertPeerAddress();
+                auto addr = peer.getAddr();
+                MetadataChange change;
+                change.type = MetadataChangeType::UpsertPeerAddress;
+                change.node_id = peer.getNodeId();
+                change.addr.assign(addr.cStr(), addr.size());
+                return change;
+            }
+        }
+    } catch (...) {
         return std::nullopt;
     }
-
-    size_t offset = kMagic.size();
-    auto type = static_cast<MetadataChangeType>(static_cast<uint8_t>(data[offset]));
-    ++offset;
-
-    uint64_t node_id = 0;
-    std::memcpy(&node_id, data.data() + offset, sizeof(node_id));
-    offset += sizeof(node_id);
-
-    uint32_t addr_size = 0;
-    std::memcpy(&addr_size, data.data() + offset, sizeof(addr_size));
-    offset += sizeof(addr_size);
-    if (offset + addr_size != data.size()) {
-        return std::nullopt;
-    }
-
-    if (type != MetadataChangeType::UpsertPeerAddress) {
-        return std::nullopt;
-    }
-
-    MetadataChange change;
-    change.type = type;
-    change.node_id = node_id;
-    change.addr.assign(data.data() + offset, addr_size);
-    return change;
+    return std::nullopt;
 }
 
 }  // namespace raftpp::raftor
