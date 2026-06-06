@@ -19,6 +19,7 @@
 #include "raftpp/core/capnp_util.h"
 #include "raftpp/fmt.h"
 #include "raftpp/logging.h"
+#include "raftpp/raftor/wal/env.h"
 #include "raftpp/raftor/wal/record.h"
 #include "raftpp/raftor/wal/segment_manager.h"
 
@@ -34,28 +35,28 @@ std::filesystem::path SnapshotTmpPath(const std::filesystem::path& dir) {
     return dir / "snapshot.tmp";
 }
 
-Result<void> SyncDirectory(const std::filesystem::path& dir) {
-    int dir_fd = ::open(dir.c_str(), O_RDONLY | O_DIRECTORY);
+Result<void> SyncDirectory(WALEnv& env, const std::filesystem::path& dir) {
+    int dir_fd = env.Open(dir, O_RDONLY | O_DIRECTORY, 0);
     if (dir_fd < 0) {
         return RaftError(StorageErrorOther{
             fmt::format("failed to open snapshot directory for sync: {}", std::strerror(errno))
         });
     }
-    if (::fsync(dir_fd) < 0) {
+    if (env.Sync(dir_fd) < 0) {
         const int err = errno;
-        ::close(dir_fd);
+        env.Close(dir_fd);
         return RaftError(StorageErrorOther{
             fmt::format("failed to sync snapshot directory: {}", std::strerror(err))
         });
     }
-    ::close(dir_fd);
+    env.Close(dir_fd);
     return {};
 }
 
-Result<void> WriteAll(int fd, nonstd::span<const uint8_t> data) {
+Result<void> WriteAll(WALEnv& env, int fd, nonstd::span<const uint8_t> data) {
     size_t written = 0;
     while (written < data.size()) {
-        const ssize_t n = ::write(fd, data.data() + written, data.size() - written);
+        const ssize_t n = env.Write(fd, data.data() + written, data.size() - written);
         if (n < 0) {
             if (errno == EINTR) {
                 continue;
@@ -72,31 +73,31 @@ Result<void> WriteAll(int fd, nonstd::span<const uint8_t> data) {
     return {};
 }
 
-Result<std::vector<uint8_t>> ReadFile(const std::filesystem::path& path) {
-    int fd = ::open(path.c_str(), O_RDONLY);
+Result<std::vector<uint8_t>> ReadFile(WALEnv& env, const std::filesystem::path& path) {
+    int fd = env.Open(path, O_RDONLY, 0);
     if (fd < 0) {
         return RaftError(
             StorageErrorOther{fmt::format("failed to open snapshot: {}", std::strerror(errno))}
         );
     }
 
-    off_t size = ::lseek(fd, 0, SEEK_END);
+    off_t size = env.Seek(fd, 0, SEEK_END);
     if (size < 0) {
         const int err = errno;
-        ::close(fd);
+        env.Close(fd);
         return RaftError(
             StorageErrorOther{fmt::format("failed to get snapshot size: {}", std::strerror(err))}
         );
     }
     if (size > static_cast<off_t>(std::numeric_limits<uint32_t>::max())) {
-        ::close(fd);
+        env.Close(fd);
         return RaftError(
             StorageErrorOther{"failed to read snapshot: file size exceeds maximum limit"}
         );
     }
-    if (::lseek(fd, 0, SEEK_SET) < 0) {
+    if (env.Seek(fd, 0, SEEK_SET) < 0) {
         const int err = errno;
-        ::close(fd);
+        env.Close(fd);
         return RaftError(
             StorageErrorOther{fmt::format("failed to rewind snapshot: {}", std::strerror(err))}
         );
@@ -105,31 +106,32 @@ Result<std::vector<uint8_t>> ReadFile(const std::filesystem::path& path) {
     std::vector<uint8_t> data(static_cast<size_t>(size));
     size_t read_bytes = 0;
     while (read_bytes < data.size()) {
-        const ssize_t n = ::read(fd, data.data() + read_bytes, data.size() - read_bytes);
+        const ssize_t n = env.Read(fd, data.data() + read_bytes, data.size() - read_bytes);
         if (n < 0) {
             if (errno == EINTR) {
                 continue;
             }
             const int err = errno;
-            ::close(fd);
+            env.Close(fd);
             return RaftError(
                 StorageErrorOther{fmt::format("failed to read snapshot: {}", std::strerror(err))}
             );
         }
         if (n == 0) {
-            ::close(fd);
+            env.Close(fd);
             return RaftError(StorageErrorOther{"failed to read snapshot: unexpected EOF"});
         }
         read_bytes += static_cast<size_t>(n);
     }
 
-    ::close(fd);
+    env.Close(fd);
     return data;
 }
 
-Result<void> PersistSnapshotFile(const std::filesystem::path& dir, const Snapshot& snapshot) {
-    std::error_code ec;
-    std::filesystem::create_directories(dir, ec);
+Result<void> PersistSnapshotFile(
+    WALEnv& env, const std::filesystem::path& dir, const Snapshot& snapshot
+) {
+    std::error_code ec = env.CreateDirectories(dir);
     if (ec) {
         return RaftError(
             StorageErrorOther{fmt::format("failed to create snapshot directory: {}", ec.message())}
@@ -140,33 +142,33 @@ Result<void> PersistSnapshotFile(const std::filesystem::path& dir, const Snapsho
     const auto tmp_path = SnapshotTmpPath(dir);
     const auto path = SnapshotPath(dir);
 
-    int fd = ::open(tmp_path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    int fd = env.Open(tmp_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (fd < 0) {
         return RaftError(StorageErrorOther{
             fmt::format("failed to create snapshot temp file: {}", std::strerror(errno))
         });
     }
 
-    auto cleanup_tmp = [&tmp_path] {
-        ::unlink(tmp_path.c_str());
+    auto cleanup_tmp = [&env, &tmp_path] {
+        env.Unlink(tmp_path);
     };
-    if (auto result = WriteAll(fd, nonstd::span<const uint8_t>(bytes.data(), bytes.size()));
+    if (auto result = WriteAll(env, fd, nonstd::span<const uint8_t>(bytes.data(), bytes.size()));
         !result) {
-        ::close(fd);
+        env.Close(fd);
         cleanup_tmp();
         return result.error();
     }
 
-    if (::fsync(fd) < 0) {
+    if (env.Sync(fd) < 0) {
         const int err = errno;
-        ::close(fd);
+        env.Close(fd);
         cleanup_tmp();
         return RaftError(StorageErrorOther{
             fmt::format("failed to sync snapshot temp file: {}", std::strerror(err))
         });
     }
 
-    if (::close(fd) < 0) {
+    if (env.Close(fd) < 0) {
         const int err = errno;
         cleanup_tmp();
         return RaftError(StorageErrorOther{
@@ -174,7 +176,7 @@ Result<void> PersistSnapshotFile(const std::filesystem::path& dir, const Snapsho
         });
     }
 
-    if (::rename(tmp_path.c_str(), path.c_str()) < 0) {
+    if (env.Rename(tmp_path, path) < 0) {
         const int err = errno;
         cleanup_tmp();
         return RaftError(StorageErrorOther{
@@ -182,7 +184,7 @@ Result<void> PersistSnapshotFile(const std::filesystem::path& dir, const Snapsho
         });
     }
 
-    return SyncDirectory(dir);
+    return SyncDirectory(env, dir);
 }
 
 }  // namespace
@@ -205,6 +207,7 @@ Result<std::unique_ptr<WAL>> WAL::Open(const WALConfig& config) {
 
 Result<void> WAL::Initialize(const WALConfig& config) {
     config_ = config;
+    env_ = config_.env ? config_.env : DefaultWALEnv();
 
     auto selection = SelectSegmentIoBackend(config_);
     if (!selection) {
@@ -807,7 +810,7 @@ Result<Snapshot> WAL::LoadSnapshot() const {
         return RaftError(StorageErrorCode::SnapshotTemporarilyUnavailable);
     }
 
-    auto data = ReadFile(SnapshotPath(config_.dir));
+    auto data = ReadFile(*env_, SnapshotPath(config_.dir));
     if (!data) {
         return data.error();
     }
@@ -924,7 +927,7 @@ Result<void> WAL::ApplySnapshot(const Snapshot& snapshot) {
         return RaftError(StorageErrorCode::SnapshotOutOfDate);
     }
 
-    auto snapshot_result = PersistSnapshotFile(config_.dir, snapshot);
+    auto snapshot_result = PersistSnapshotFile(*env_, config_.dir, snapshot);
     if (!snapshot_result) {
         return snapshot_result.error();
     }

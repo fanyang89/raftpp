@@ -22,6 +22,7 @@
 namespace raftpp::raftor::wal {
 
 class SegmentManager;
+class WALEnv;
 enum class RecordType : uint8_t;
 
 // Core Write-Ahead Log implementation
@@ -137,6 +138,7 @@ class WAL {
     WALConfig config_;
     std::unique_ptr<SegmentManager> segment_manager_;
     std::unique_ptr<MetadataStore> metadata_store_;
+    std::shared_ptr<WALEnv> env_;
     WALIndex index_;
 
     WALIoBackend effective_io_backend_ = WALIoBackend::Auto;

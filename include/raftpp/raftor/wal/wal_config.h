@@ -3,8 +3,11 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <memory>
 
 namespace raftpp::raftor::wal {
+
+class WALEnv;
 
 enum class WALIoBackend {
     Auto,
@@ -34,6 +37,9 @@ struct WALConfig {
 
     // Whether to preallocate segment files (default: true)
     bool preallocate = true;
+
+    // Optional environment for snapshot file I/O. Defaults to POSIX syscalls.
+    std::shared_ptr<WALEnv> env;
 };
 
 }  // namespace raftpp::raftor::wal
