@@ -167,6 +167,15 @@ Result<bool> ReadyProcessor::Process() {
     // Check for leadership changes before processing
     CheckLeadershipChange(rd);
 
+    // Validate new entries before they are persisted or replicated.
+    if (auto result = ValidateReadyEntries(rd.entries); !result) {
+        if (IsFatalApplyError(result.error())) {
+            EnterFatalState(result.error());
+        }
+        telemetry::RecordErrorIf(span.span(), result);
+        return result.error();
+    }
+
     // 1. Persist entries to WAL
     if (auto result = PersistEntries(rd); !result) {
         telemetry::RecordErrorIf(span.span(), result);
@@ -232,6 +241,25 @@ Result<void> ReadyProcessor::PersistEntries(const Ready& rd) {
         RAFTPP_LOG_ERROR("Failed to persist entries: {}", result.error().ToString());
         telemetry::RecordErrorIf(span.span(), result);
         return nonstd::make_unexpected(RaftError(RaftErrorCode::ProposalDropped));
+    }
+
+    return {};
+}
+
+Result<void> ReadyProcessor::ValidateReadyEntries(const std::vector<Entry>& entries) {
+    if (!checksum_enabled_ || entries.empty()) {
+        return {};
+    }
+
+    telemetry::ScopedSpan span("raftor.ready.validate_entries");
+    span.span()->SetAttribute("raft.entry.count", static_cast<int64_t>(entries.size()));
+
+    for (const auto& entry : entries) {
+        auto entry_reader = capnp_util::reader<msg::Entry>(entry);
+        if (auto result = VerifyEntryChecksum(entry_reader, proposal_tracker_); !result) {
+            telemetry::RecordErrorIf(span.span(), result);
+            return result.error();
+        }
     }
 
     return {};

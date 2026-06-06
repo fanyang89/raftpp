@@ -67,6 +67,9 @@ class ReadyProcessor {
     /// Persist entries from Ready to WAL
     [[nodiscard]] Result<void> PersistEntries(const Ready& rd);
 
+    /// Validate new entries before persisting or forwarding them.
+    [[nodiscard]] Result<void> ValidateReadyEntries(const std::vector<Entry>& entries);
+
     /// Persist hard state from Ready
     [[nodiscard]] Result<void> PersistHardState(const Ready& rd);
 

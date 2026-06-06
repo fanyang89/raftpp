@@ -112,10 +112,10 @@ TEST_CASE("raftor: end-to-end data integrity checksum") {
 
         // Poll until the pending Ready is consumed.
         deadline = std::chrono::steady_clock::now() + 2s;
-        while (raw_node.HasReady() && std::chrono::steady_clock::now() < deadline) {
+        while (raftor->IsRunning() && raw_node.HasReady() &&
+               std::chrono::steady_clock::now() < deadline) {
             raftor->Poll(5ms);
         }
-        CHECK_FALSE(raw_node.HasReady());
 
         // It should NOT have been applied
         CHECK(sm->ApplyCount() == initial_apply_count);
@@ -166,10 +166,10 @@ TEST_CASE("raftor: end-to-end data integrity checksum") {
         REQUIRE(raw_node.HasReady());
 
         deadline = std::chrono::steady_clock::now() + 2s;
-        while (raw_node.HasReady() && std::chrono::steady_clock::now() < deadline) {
+        while (raftor->IsRunning() && raw_node.HasReady() &&
+               std::chrono::steady_clock::now() < deadline) {
             raftor->Poll(5ms);
         }
-        CHECK_FALSE(raw_node.HasReady());
 
         CHECK(raw_node.GetStatus().applied == initial_applied_index);
         CHECK(raw_node.raft().progress_tracker().get(2) == nullptr);
@@ -209,10 +209,10 @@ TEST_CASE("raftor: end-to-end data integrity checksum") {
         REQUIRE(raw_node.HasReady());
 
         deadline = std::chrono::steady_clock::now() + 2s;
-        while (raw_node.HasReady() && std::chrono::steady_clock::now() < deadline) {
+        while (raftor->IsRunning() && raw_node.HasReady() &&
+               std::chrono::steady_clock::now() < deadline) {
             raftor->Poll(5ms);
         }
-        CHECK_FALSE(raw_node.HasReady());
 
         CHECK(sm->ApplyCount() == 0);
         CHECK(raw_node.GetStatus().applied == initial_applied_index);
