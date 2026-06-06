@@ -241,9 +241,16 @@ void MemoryStorage::SetRaftState(const RaftState& raft_state) {
     core_.raft_state_ = raft_state.clone();
 }
 
-void MemoryStorage::SetConfState(const ConfState& conf_state) {
+Result<void> MemoryStorage::SetConfState(const ConfState& conf_state) {
     std::lock_guard lock(mutex_);
     core_.raft_state_.conf_state = CloneConfState(conf_state);
+    return {};
+}
+
+Result<void> MemoryStorage::SetHardState(HardState&& hs) {
+    std::lock_guard lock(mutex_);
+    core_.SetHardState(std::move(hs));
+    return {};
 }
 
 void MemoryStorage::TriggerSnapshotUnavailable() {
@@ -279,6 +286,10 @@ std::vector<Entry> MemoryStorage::AllEntries() {
 Result<void> MemoryStorage::MayAppend(const std::vector<Entry>& entries) {
     std::lock_guard lock(mutex_);
     return core_.MayAppend(entries);
+}
+
+Result<void> MemoryStorage::Sync() {
+    return {};
 }
 
 Result<uint64_t> MemoryStorage::Term(const uint64_t idx) {

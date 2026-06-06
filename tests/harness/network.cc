@@ -2,6 +2,7 @@
 
 #include <cassert>
 #include <iterator>
+#include <tuple>
 #include <utility>
 
 #include "harness/test_util.h"
@@ -57,7 +58,7 @@ Network Network::CreateWithConfig(
             for (size_t j = 0; j < peer_ids.size(); ++j) {
                 voters.set(j, peer_ids[j]);
             }
-            storage->SetConfState(conf_state);
+            std::ignore = storage->SetConfState(conf_state);
 
             Config node_config = config;
             node_config.id = id;

@@ -28,6 +28,7 @@ class WALStorage;
 
 namespace raftpp {
 class RawNode;
+class WritableStorage;
 struct LightReady;
 struct ReadState;
 struct Ready;
@@ -38,7 +39,7 @@ namespace raftpp::raftor {
 /// Handles Ready processing in the correct order
 ///
 /// The Ready processing order is critical for correctness:
-/// 1. Persist entries to stable storage (WAL)
+/// 1. Persist entries to stable storage
 /// 2. Persist hard state (term, vote, commit)
 /// 3. Apply snapshot (if present)
 /// 4. Send messages to peers
@@ -47,7 +48,8 @@ namespace raftpp::raftor {
 class ReadyProcessor {
   public:
     ReadyProcessor(
-        RawNode& raw_node, std::shared_ptr<wal::WALStorage> storage, StateMachine& state_machine,
+        RawNode& raw_node, std::shared_ptr<WritableStorage> storage,
+        std::shared_ptr<wal::WALStorage> wal_storage, StateMachine& state_machine,
         rpc::Transport& transport, ProposalTracker& proposal_tracker, uint64_t node_id,
         bool checksum_enabled, uint64_t initial_applied_index = 0
     );
@@ -65,7 +67,7 @@ class ReadyProcessor {
     [[nodiscard]] uint64_t GetAppliedIndex() const { return applied_index_; }
 
   private:
-    /// Persist entries from Ready to WAL
+    /// Persist entries from Ready
     [[nodiscard]] Result<void> PersistEntries(const Ready& rd);
 
     /// Validate new entries before persisting or forwarding them.
@@ -101,7 +103,8 @@ class ReadyProcessor {
     void CheckLeadershipChange(const Ready& rd);
 
     RawNode& raw_node_;
-    std::shared_ptr<wal::WALStorage> storage_;
+    std::shared_ptr<WritableStorage> storage_;
+    std::shared_ptr<wal::WALStorage> wal_storage_;
     StateMachine& state_machine_;
     rpc::Transport& transport_;
     ProposalTracker& proposal_tracker_;

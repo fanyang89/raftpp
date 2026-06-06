@@ -24,7 +24,7 @@ class Transport;
 }  // namespace raftpp::raftor
 
 namespace raftpp {
-class Storage;
+class WritableStorage;
 }  // namespace raftpp
 
 namespace raftpp::raftor {
@@ -98,18 +98,18 @@ class Raftor {
         const RaftorConfig& config, std::unique_ptr<StateMachine> state_machine
     );
 
-    /// Create a Raftor instance with custom storage and transport
+    /// Create a Raftor instance with custom writable storage and transport
     ///
     /// This is primarily for testing, allowing injection of mock components.
     ///
     /// @param config The Raftor configuration
     /// @param state_machine The user's state machine implementation
-    /// @param storage Custom storage implementation
+    /// @param storage Custom storage implementation. It must support Raftor's persistence writes.
     /// @param transport Custom transport implementation
     /// @return Raftor instance or error
     [[nodiscard]] static Result<std::unique_ptr<Raftor>> Create(
         const RaftorConfig& config, std::unique_ptr<StateMachine> state_machine,
-        std::shared_ptr<Storage> storage, std::unique_ptr<rpc::Transport> transport
+        std::shared_ptr<WritableStorage> storage, std::unique_ptr<rpc::Transport> transport
     );
 
     // === Lifecycle ===

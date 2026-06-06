@@ -22,9 +22,11 @@
 
 #include "../lib/raftor/metadata_change.h"
 #include "raftpp/core/capnp_util.h"
+#include "raftpp/core/memory_storage.h"
 #include "raftpp/core/types.h"
 #include "raftpp/logging.h"
 #include "raftpp/raftor/raftor_config.h"
+#include "raftpp/raftor/rpc/noop_transport.h"
 #include "raftpp/raftor/rpc/transport.h"
 #include "raftpp/raftor/state_machine.h"
 #include "raftpp/raftor/wal/wal_config.h"
@@ -531,7 +533,7 @@ TEST_CASE("update_node_address_validates_request") {
     auto conf_builder = capnp_util::builder<msg::ConfState>(conf_state);
     auto voters = conf_builder.initVoters(1);
     voters.set(0, 1);
-    storage->SetConfState(conf_state);
+    REQUIRE(storage->SetConfState(conf_state));
     REQUIRE(storage->SetPeerAddresses({wal::PeerAddress{1, "127.0.0.1:19401"}}).has_value());
 
     RaftorConfig config;
@@ -571,7 +573,7 @@ TEST_CASE("raftor_restores_transport_peers_from_wal_address_book") {
     auto voters = conf_builder.initVoters(2);
     voters.set(0, 1);
     voters.set(1, 2);
-    storage->SetConfState(conf_state);
+    REQUIRE(storage->SetConfState(conf_state));
     REQUIRE(storage
                 ->SetPeerAddresses({
                     wal::PeerAddress{1, "127.0.0.1:19201"},
@@ -621,7 +623,7 @@ TEST_CASE("update_node_address_commits_to_wal_metadata") {
     auto conf_builder = capnp_util::builder<msg::ConfState>(conf_state);
     auto voters = conf_builder.initVoters(1);
     voters.set(0, 1);
-    storage->SetConfState(conf_state);
+    REQUIRE(storage->SetConfState(conf_state));
     REQUIRE(storage->SetPeerAddresses({wal::PeerAddress{1, "127.0.0.1:19301"}}).has_value());
 
     RaftorConfig config;
@@ -690,7 +692,7 @@ TEST_CASE("add_node_commits_peer_address_to_wal_metadata") {
     auto conf_builder = capnp_util::builder<msg::ConfState>(conf_state);
     auto voters = conf_builder.initVoters(1);
     voters.set(0, 1);
-    storage->SetConfState(conf_state);
+    REQUIRE(storage->SetConfState(conf_state));
     REQUIRE(storage->SetPeerAddresses({wal::PeerAddress{1, "127.0.0.1:19501"}}).has_value());
 
     RaftorConfig config;
@@ -737,6 +739,89 @@ TEST_CASE("add_node_commits_peer_address_to_wal_metadata") {
     REQUIRE(transport_peers.size() == 1);
     CHECK(transport_peers[0].id == 2);
     CHECK(transport_peers[0].addr == "127.0.0.1:19502");
+}
+
+TEST_CASE("custom_writable_storage_create_accepts_memory_storage") {
+    TestNode node;
+    const auto pid = static_cast<uint64_t>(::getpid());
+    node.temp_dir = std::filesystem::temp_directory_path() /
+        ("raftpp_custom_storage_test_" + std::to_string(pid));
+    std::error_code ec;
+    std::filesystem::remove_all(node.temp_dir, ec);
+    std::filesystem::create_directories(node.temp_dir);
+    node.temp_dir_cleanup = std::make_unique<TempDirCleanup>(node.temp_dir);
+
+    node.config.node_id = 1;
+    node.config.transport_kind = TransportKind::Noop;
+    node.config.data_dir = node.temp_dir;
+    node.config.election_tick = 5;
+    node.config.heartbeat_tick = 1;
+
+    auto storage = std::make_shared<MemoryStorage>();
+    rpc::TransportConfig transport_config;
+    transport_config.node_id = node.config.node_id;
+    auto transport = std::make_unique<rpc::NoopTransport>(transport_config);
+
+    auto state_machine = std::make_unique<MockStateMachine>();
+    auto raftor_result =
+        Raftor::Create(node.config, std::move(state_machine), storage, std::move(transport));
+    REQUIRE(raftor_result.has_value());
+
+    auto state = storage->InitialState();
+    REQUIRE(state.has_value());
+    auto conf_reader = capnp_util::reader<msg::ConfState>(state->conf_state);
+    REQUIRE(conf_reader.getVoters().size() == 1);
+    CHECK(conf_reader.getVoters()[0] == 1);
+}
+
+TEST_CASE("custom_writable_storage_create_does_not_restore_synthetic_snapshot") {
+    TestNode node;
+    const auto pid = static_cast<uint64_t>(::getpid());
+    node.temp_dir = std::filesystem::temp_directory_path() /
+        ("raftpp_custom_storage_restart_test_" + std::to_string(pid));
+    std::error_code ec;
+    std::filesystem::remove_all(node.temp_dir, ec);
+    std::filesystem::create_directories(node.temp_dir);
+    node.temp_dir_cleanup = std::make_unique<TempDirCleanup>(node.temp_dir);
+
+    node.config.node_id = 1;
+    node.config.transport_kind = TransportKind::Noop;
+    node.config.data_dir = node.temp_dir;
+    node.config.election_tick = 5;
+    node.config.heartbeat_tick = 1;
+
+    auto storage = std::make_shared<MemoryStorage>();
+
+    ConfState conf_state = capnp_util::make<msg::ConfState>();
+    auto conf_builder = capnp_util::builder<msg::ConfState>(conf_state);
+    auto voters = conf_builder.initVoters(1);
+    voters.set(0, 1);
+    REQUIRE(storage->SetConfState(conf_state));
+
+    Entry entry = capnp_util::make<msg::Entry>();
+    auto entry_builder = capnp_util::builder<msg::Entry>(entry);
+    entry_builder.setIndex(1);
+    entry_builder.setTerm(1);
+    std::vector<Entry> entries;
+    entries.push_back(std::move(entry));
+    REQUIRE(storage->Append(entries));
+
+    HardState hard_state = capnp_util::make<msg::HardState>();
+    auto hs_builder = capnp_util::builder<msg::HardState>(hard_state);
+    hs_builder.setTerm(1);
+    hs_builder.setCommit(1);
+    REQUIRE(storage->SetHardState(std::move(hard_state)));
+
+    rpc::TransportConfig transport_config;
+    transport_config.node_id = node.config.node_id;
+    auto transport = std::make_unique<rpc::NoopTransport>(transport_config);
+
+    auto state_machine = std::make_unique<MockStateMachine>();
+    auto* state_machine_ptr = state_machine.get();
+    auto raftor_result =
+        Raftor::Create(node.config, std::move(state_machine), storage, std::move(transport));
+    REQUIRE(raftor_result.has_value());
+    CHECK(state_machine_ptr->RestoreCount() == 0);
 }
 
 TEST_CASE("local_snapshot_restored_on_restart") {

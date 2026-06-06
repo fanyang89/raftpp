@@ -822,7 +822,7 @@ TEST_CASE("raw_node: read index dropped when no leader") {
     auto cs_builder = capnp_util::builder<msg::ConfState>(cs);
     auto voters = cs_builder.initVoters(1);
     voters.set(0, 1);
-    storage->SetConfState(cs);
+    REQUIRE(storage->SetConfState(cs));
 
     Config config = Network::DefaultConfig();
     config.id = 1;

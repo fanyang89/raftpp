@@ -658,7 +658,7 @@ TEST_CASE("raft paper: voter") {
         auto voters = conf_builder.initVoters(2);
         voters.set(0, 1);
         voters.set(1, 2);
-        storage->SetConfState(conf_state);
+        REQUIRE(storage->SetConfState(conf_state));
         std::ignore = storage->Append(ents);
 
         auto r = NewTestRaftWithConfig(NewTestConfig(1, 10, 1), storage);
@@ -711,7 +711,7 @@ TEST_CASE("raft paper: leader only commits log from current term") {
         auto voters = conf_builder.initVoters(2);
         voters.set(0, 1);
         voters.set(1, 2);
-        storage->SetConfState(conf_state);
+        REQUIRE(storage->SetConfState(conf_state));
         std::ignore = storage->Append(ents);
 
         auto r = NewTestRaftWithConfig(NewTestConfig(1, 10, 1), storage);

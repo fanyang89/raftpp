@@ -20,7 +20,7 @@ class WAL;
 
 // WALStorage implements the Storage interface using a Write-Ahead Log
 // This provides durable storage for Raft log entries
-class WALStorage final : public Storage {
+class WALStorage final : public WritableStorage {
   public:
     ~WALStorage() override;
 
@@ -45,19 +45,19 @@ class WALStorage final : public Storage {
     // Mutation methods (following MemoryStorage pattern)
 
     // Set the hard state
-    void SetHardState(HardState&& hs);
+    [[nodiscard]] Result<void> SetHardState(HardState&& hs) override;
 
     // Append entries to the log
-    [[nodiscard]] Result<void> Append(const std::vector<Entry>& entries);
+    [[nodiscard]] Result<void> Append(const std::vector<Entry>& entries) override;
 
     // Compact the log by removing entries before compact_index
     [[nodiscard]] Result<void> Compact(uint64_t compact_index);
 
     // Apply a snapshot
-    [[nodiscard]] Result<void> ApplySnapshot(const Snapshot& snapshot);
+    [[nodiscard]] Result<void> ApplySnapshot(const Snapshot& snapshot) override;
 
     // Set the conf state
-    void SetConfState(const ConfState& conf_state);
+    [[nodiscard]] Result<void> SetConfState(const ConfState& conf_state) override;
 
     // Get persisted peer addresses used by Raftor transport discovery.
     [[nodiscard]] std::vector<PeerAddress> GetPeerAddresses() const;
@@ -72,10 +72,13 @@ class WALStorage final : public Storage {
     [[nodiscard]] Result<void> RemovePeerAddress(uint64_t id);
 
     // Sync all pending writes to disk
-    [[nodiscard]] Result<void> Sync();
+    [[nodiscard]] Result<void> Sync() override;
+
+    // Get the latest locally persisted application snapshot, if one exists.
+    [[nodiscard]] Result<std::optional<Snapshot>> LocalSnapshot() override;
 
     // Get approximate WAL size in bytes
-    [[nodiscard]] uint64_t LogSizeBytes() const;
+    [[nodiscard]] uint64_t LogSizeBytes() const override;
 
     // Get all entries (for testing)
     [[nodiscard]] std::vector<Entry> AllEntries();

@@ -780,7 +780,7 @@ TEST_SUITE("wal") {
         hs_builder.setVote(1);
         hs_builder.setCommit(5);
 
-        (*storage)->SetHardState(std::move(hs));
+        REQUIRE((*storage)->SetHardState(std::move(hs)));
 
         auto state = (*storage)->InitialState();
         REQUIRE(state.has_value());
@@ -1859,7 +1859,7 @@ TEST_SUITE("wal") {
         auto voters = cs_builder.initVoters(1);
         voters.set(0, 1);
 
-        (*storage)->SetConfState(cs);
+        REQUIRE((*storage)->SetConfState(cs));
 
         // Now should be initialized
         CHECK((*storage)->IsInitialized());
