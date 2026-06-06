@@ -126,6 +126,8 @@ enum class RaftErrorCode {
     ProposalDropped,
     /// The request snapshot is dropped.
     RequestSnapshotDropped,
+    /// Data integrity check failed.
+    ChecksumMismatch,
     /// Raftor already started.
     AlreadyStarted,
     /// Raftor shutting down.
@@ -148,6 +150,8 @@ constexpr std::string_view format_as(RaftErrorCode ec) {
             return "ProposalDropped";
         case RaftErrorCode::RequestSnapshotDropped:
             return "RequestSnapshotDropped";
+        case RaftErrorCode::ChecksumMismatch:
+            return "ChecksumMismatch";
         case RaftErrorCode::AlreadyStarted:
             return "AlreadyStarted";
         case RaftErrorCode::ShuttingDown:

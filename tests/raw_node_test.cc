@@ -18,6 +18,7 @@
 #include "raftpp/core/status.h"
 #include "raftpp/core/storage.h"
 #include "raftpp/core/types.h"
+#include "raftpp/raftor/entry_checksum.h"
 
 using namespace raftpp;
 
@@ -271,6 +272,64 @@ TEST_CASE("raw_node: async entry fetching") {
     CHECK_EQ(msg_reader.getMsgType(), MessageType::MSG_APPEND);
     CHECK(msg_reader.getEntries().size() > 0);
     std::ignore = raw_node.AdvanceAppend(rd);
+}
+
+TEST_CASE("raw_node: batched append preserves entry checksums") {
+    auto storage = std::make_shared<MemoryStorage>();
+
+    Config config = DefaultConfig();
+    config.id = 1;
+    config.election_tick = 10;
+    config.heartbeat_tick = 1;
+    config.max_size_per_message = 1024;
+    config.batch_append = true;
+
+    ConfState conf_state = capnp_util::make<msg::ConfState>();
+    auto conf_builder = capnp_util::builder<msg::ConfState>(conf_state);
+    auto voters_builder = conf_builder.initVoters(2);
+    voters_builder.set(0, 1);
+    voters_builder.set(1, 2);
+    HardState hard_state = capnp_util::make<msg::HardState>();
+    capnp_util::builder<msg::HardState>(hard_state).setCommit(0);
+    storage->SetRaftState(MakeRaftState(hard_state, conf_state));
+
+    RawNode raw_node(config, storage);
+    raw_node.raft().BecomeCandidate();
+    raw_node.raft().BecomeLeader();
+
+    auto rd = raw_node.GetReady();
+    std::ignore = storage->Append(rd.entries);
+    std::ignore = raw_node.Advance(rd);
+
+    for (int i = 0; i < 4; ++i) {
+        raw_node.Propose("", std::string(900, static_cast<char>('a' + i))).value();
+    }
+
+    rd = raw_node.GetReady();
+    REQUIRE(rd.entries.size() == 4);
+    std::ignore = storage->Append(rd.entries);
+    std::ignore = raw_node.AdvanceAppend(rd);
+
+    Message append_response = capnp_util::make<msg::Message>();
+    auto ar_builder = capnp_util::builder<msg::Message>(append_response);
+    ar_builder.setFrom(2);
+    ar_builder.setTo(1);
+    ar_builder.setMsgType(MessageType::MSG_APPEND_RESPONSE);
+    ar_builder.setTerm(1);
+    ar_builder.setIndex(1);
+    raw_node.Step(std::move(append_response)).value();
+
+    rd = raw_node.GetReady();
+    const auto& msgs = rd.Messages();
+    REQUIRE(msgs.size() == 1);
+    auto msg_reader = capnp_util::reader<msg::Message>(msgs[0]);
+    REQUIRE(msg_reader.getMsgType() == MessageType::MSG_APPEND);
+    auto entries = msg_reader.getEntries();
+    REQUIRE(entries.size() > 1);
+
+    for (const auto& entry : entries) {
+        CHECK(entry.getChecksum() == raftor::ComputeEntryChecksum(entry));
+    }
 }
 
 // Test if async fetch entries works well when there is a remove node conf-change.

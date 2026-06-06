@@ -32,6 +32,7 @@
 #include "raftpp/core/unstable_log.h"
 #include "raftpp/fmt.h"
 #include "raftpp/logging.h"
+#include "raftpp/raftor/entry_checksum.h"
 
 namespace raftpp {
 
@@ -469,6 +470,7 @@ void Raft::CommitApplyInternal(uint64_t applied, bool skip_check) {
         ent_builder.setData(
             kj::arrayPtr(reinterpret_cast<const kj::byte*>(serialized.data()), serialized.size())
         );
+        raftor::SetEntryChecksum(ent_builder);
         if (!AppendEntry(ent)) {
             PANIC("appending an empty EntryConfChangeV2 should never be dropped");
         }
@@ -1124,6 +1126,7 @@ Result<void> Raft::StepLeader(const Message& m) {
                     entry_builder.setIndex(e.getIndex());
                     entry_builder.setData(e.getData());
                     entry_builder.setContext(e.getContext());
+                    entry_builder.setChecksum(e.getChecksum());
                     entries_vec.push_back(std::move(entry));
                 }
                 if (!AppendEntry(std::move(entries_vec))) {
@@ -1396,6 +1399,7 @@ void Raft::HandleAppendEntries(const Message& m) {
         entry_builder.setIndex(e.getIndex());
         entry_builder.setData(e.getData());
         entry_builder.setContext(e.getContext());
+        entry_builder.setChecksum(e.getChecksum());
         entries_vec.push_back(std::move(entry));
     }
 

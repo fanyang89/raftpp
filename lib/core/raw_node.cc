@@ -17,6 +17,7 @@
 #include "raftpp/core/types.h"
 #include "raftpp/core/unstable_log.h"
 #include "raftpp/logging.h"
+#include "raftpp/raftor/entry_checksum.h"
 
 namespace raftpp {
 
@@ -385,6 +386,7 @@ Result<void> RawNode::Propose(const std::string& ctx, const std::string& data) {
     );
     entry_builder.setContext(kj::arrayPtr(reinterpret_cast<const kj::byte*>(ctx.data()), ctx.size())
     );
+    raftor::SetEntryChecksum(entry_builder);
 
     return raft_.Step(m);
 }
@@ -409,6 +411,7 @@ Result<void> RawNode::ProposeConfChange(const std::string& ctx, const ConfChange
     );
     entry_builder.setContext(kj::arrayPtr(reinterpret_cast<const kj::byte*>(ctx.data()), ctx.size())
     );
+    raftor::SetEntryChecksum(entry_builder);
 
     return raft_.Step(m);
 }
