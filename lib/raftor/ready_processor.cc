@@ -380,8 +380,7 @@ Result<void> ReadyProcessor::ApplyEntry(const Entry& entry) {
         for (const auto& change : changes) {
             if (change.getChangeType() == ConfChangeType::ADD_NODE ||
                 change.getChangeType() == ConfChangeType::ADD_LEARNER_NODE) {
-                // Note: address needs to be provided via context or external mechanism
-                // For now, we skip adding - the user should call AddNode explicitly
+                // Raftor AddNode stores the peer address in the conf change context.
                 auto ctx = cc_reader.getContext();
                 std::string addr;
                 if (ctx.size() > 0) {

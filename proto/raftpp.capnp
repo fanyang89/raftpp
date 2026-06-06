@@ -200,6 +200,7 @@ struct PeerAddressBook {
 struct RaftorMetadataChange {
     union {
         upsertPeerAddress @0 :PeerAddress;
+        # Reserved to keep this union extensible; not produced by current code.
         removePeerAddress @1 :UInt64;
     }
 }

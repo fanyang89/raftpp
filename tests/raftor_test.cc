@@ -20,6 +20,7 @@
 #include <nonstd/expected.hpp>
 #include <nonstd/span.hpp>
 
+#include "../lib/raftor/metadata_change.h"
 #include "raftpp/core/capnp_util.h"
 #include "raftpp/core/types.h"
 #include "raftpp/logging.h"
@@ -476,6 +477,21 @@ TEST_CASE("wal_peer_addresses_persist_across_reopen") {
     CHECK(peers[0].addr == "127.0.0.1:19101");
     CHECK(peers[1].id == 2);
     CHECK(peers[1].addr == "127.0.0.1:19102");
+}
+
+TEST_CASE("raftor_metadata_change_round_trip") {
+    MetadataChange change;
+    change.type = MetadataChangeType::UpsertPeerAddress;
+    change.node_id = 42;
+    change.addr = "127.0.0.1:19420";
+
+    auto data = SerializeMetadataChange(change);
+    auto parsed = ParseMetadataChange(data);
+
+    REQUIRE(parsed.has_value());
+    CHECK(parsed->type == MetadataChangeType::UpsertPeerAddress);
+    CHECK(parsed->node_id == 42);
+    CHECK(parsed->addr == "127.0.0.1:19420");
 }
 
 TEST_CASE("raftor_restores_transport_peers_from_wal_address_book") {

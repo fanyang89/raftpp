@@ -365,7 +365,7 @@ Result<WALMetadata> MetadataStore::Deserialize(const std::vector<uint8_t>& data)
                 offset += peer_address_book_len;
             }
         } catch (...) {
-            return RaftError(StorageErrorOther{"failed to parse peer address book"});
+            return RaftError(StorageErrorCode::PeerAddressBookParseError);
         }
 
         if (offset != data.size()) {
