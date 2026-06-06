@@ -1,5 +1,6 @@
 add_library(raftor-wal
   crc32c.cc
+  env.cc
   metadata_store.cc
   record.cc
   segment.cc

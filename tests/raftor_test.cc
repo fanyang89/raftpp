@@ -91,7 +91,15 @@ class MockStateMachine : public StateMachine {
     Result<void> RestoreSnapshot(const SnapshotMetadata& metadata, SnapshotReader& reader)
         override {
         std::lock_guard lock(mutex_);
-        (void)metadata;
+        if (fail_restore_) {
+            return nonstd::make_unexpected(RaftError(StorageErrorCode::Unavailable));
+        }
+
+        auto meta_reader = capnp_util::reader<msg::SnapshotMetadata>(metadata);
+        last_restored_index_ = meta_reader.getIndex();
+        last_restored_term_ = meta_reader.getTerm();
+        last_restored_data_.clear();
+
         std::array<uint8_t, 1024> buffer{};
         while (true) {
             auto read_result = reader.Read(buffer);
@@ -101,6 +109,9 @@ class MockStateMachine : public StateMachine {
             if (*read_result == 0) {
                 break;
             }
+            last_restored_data_.insert(
+                last_restored_data_.end(), buffer.begin(), buffer.begin() + *read_result
+            );
         }
         restore_count_++;
         return {};
@@ -124,16 +135,40 @@ class MockStateMachine : public StateMachine {
         return applied_entries_;
     }
 
+    size_t RestoreCount() const {
+        std::lock_guard lock(mutex_);
+        return restore_count_;
+    }
+
+    uint64_t LastRestoredIndex() const {
+        std::lock_guard lock(mutex_);
+        return last_restored_index_;
+    }
+
+    std::vector<uint8_t> LastRestoredData() const {
+        std::lock_guard lock(mutex_);
+        return last_restored_data_;
+    }
+
     std::vector<std::tuple<bool, uint64_t, uint64_t>> GetLeadershipChanges() const {
         std::lock_guard lock(mutex_);
         return leadership_changes_;
+    }
+
+    void SetFailRestore(bool fail) {
+        std::lock_guard lock(mutex_);
+        fail_restore_ = fail;
     }
 
   private:
     mutable std::mutex mutex_;
     size_t apply_count_ = 0;
     size_t restore_count_ = 0;
+    bool fail_restore_ = false;
+    uint64_t last_restored_index_ = 0;
+    uint64_t last_restored_term_ = 0;
     std::vector<std::vector<uint8_t>> applied_entries_;
+    std::vector<uint8_t> last_restored_data_;
     std::vector<std::tuple<bool, uint64_t, uint64_t>> leadership_changes_;
 };
 
@@ -360,6 +395,76 @@ TEST_CASE("noop_transport_allows_empty_listen_address") {
     auto state_machine = std::make_unique<MockStateMachine>();
     auto raftor_result = Raftor::Create(node.config, std::move(state_machine));
     REQUIRE(raftor_result.has_value());
+}
+
+TEST_CASE("local_snapshot_restored_on_restart") {
+    TestNode node;
+    const auto pid = static_cast<uint64_t>(::getpid());
+    node.temp_dir = std::filesystem::temp_directory_path() /
+        ("raftpp_snapshot_restart_test_" + std::to_string(pid));
+    std::error_code ec;
+    std::filesystem::remove_all(node.temp_dir, ec);
+    std::filesystem::create_directories(node.temp_dir);
+    node.temp_dir_cleanup = std::make_unique<TempDirCleanup>(node.temp_dir);
+
+    node.config.node_id = 1;
+    node.config.transport_kind = TransportKind::Noop;
+    node.config.data_dir = node.temp_dir;
+    node.config.election_tick = 5;
+    node.config.heartbeat_tick = 1;
+    node.config.tick_interval = 1ms;
+
+    auto state_machine = std::make_unique<MockStateMachine>();
+    auto* first_state_machine = state_machine.get();
+    auto raftor_result = Raftor::Create(node.config, std::move(state_machine));
+    REQUIRE(raftor_result.has_value());
+
+    auto raftor = std::move(*raftor_result);
+    REQUIRE(raftor->Start());
+    REQUIRE(raftor->Campaign());
+
+    auto deadline = std::chrono::steady_clock::now() + 1s;
+    while (!raftor->IsLeader() && std::chrono::steady_clock::now() < deadline) {
+        raftor->Poll(1ms);
+    }
+    REQUIRE(raftor->IsLeader());
+
+    std::atomic<bool> proposal_done{false};
+    std::atomic<bool> proposal_ok{false};
+    raftor->Propose("value", [&](Result<std::string> result) {
+        proposal_ok = result.has_value();
+        proposal_done = true;
+    });
+
+    deadline = std::chrono::steady_clock::now() + 1s;
+    while (!proposal_done && std::chrono::steady_clock::now() < deadline) {
+        raftor->Poll(1ms);
+    }
+    REQUIRE(proposal_done.load());
+    REQUIRE(proposal_ok.load());
+    REQUIRE(first_state_machine->ApplyCount() > 0);
+
+    REQUIRE(raftor->TakeSnapshot());
+    const uint64_t snapshot_index = raftor->GetStatus().applied_index;
+    REQUIRE(snapshot_index > 0);
+
+    raftor->Stop();
+    raftor.reset();
+
+    auto failing_state_machine = std::make_unique<MockStateMachine>();
+    failing_state_machine->SetFailRestore(true);
+    auto failed_restart = Raftor::Create(node.config, std::move(failing_state_machine));
+    CHECK(!failed_restart.has_value());
+
+    auto restarted_state_machine = std::make_unique<MockStateMachine>();
+    auto* restored_state_machine = restarted_state_machine.get();
+    auto restarted = Raftor::Create(node.config, std::move(restarted_state_machine));
+    REQUIRE(restarted.has_value());
+
+    CHECK(restored_state_machine->RestoreCount() == 1);
+    CHECK(restored_state_machine->LastRestoredIndex() == snapshot_index);
+    CHECK(restored_state_machine->LastRestoredData() == std::vector<uint8_t>({'s', 'n', 'a', 'p'}));
+    CHECK((*restarted)->GetStatus().applied_index == snapshot_index);
 }
 
 TEST_CASE("three_node_proposal_after_bootstrap") {

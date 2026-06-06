@@ -67,6 +67,9 @@ class WALStorage final : public Storage {
     // Get all entries (for testing)
     [[nodiscard]] std::vector<Entry> AllEntries();
 
+    // Get the index of the latest persisted snapshot, or 0 if none exists.
+    [[nodiscard]] uint64_t SnapshotIndex() const;
+
     // Check if storage has been initialized with a cluster configuration.
     // @return true if ConfState contains at least one voter.
     [[nodiscard]] bool IsInitialized() const;

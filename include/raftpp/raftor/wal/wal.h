@@ -22,6 +22,7 @@
 namespace raftpp::raftor::wal {
 
 class SegmentManager;
+class WALEnv;
 enum class RecordType : uint8_t;
 
 // Core Write-Ahead Log implementation
@@ -67,6 +68,12 @@ class WAL {
 
     // Get the current conf state
     [[nodiscard]] const ConfState& GetConfState() const;
+
+    // Get the index of the latest applied snapshot, or 0 if none exists.
+    [[nodiscard]] uint64_t SnapshotIndex() const;
+
+    // Load the latest persisted snapshot payload and metadata.
+    [[nodiscard]] Result<Snapshot> LoadSnapshot() const;
 
     // Get approximate WAL size in bytes
     [[nodiscard]] uint64_t LogSizeBytes() const;
@@ -131,6 +138,7 @@ class WAL {
     WALConfig config_;
     std::unique_ptr<SegmentManager> segment_manager_;
     std::unique_ptr<MetadataStore> metadata_store_;
+    std::shared_ptr<WALEnv> env_;
     WALIndex index_;
 
     WALIoBackend effective_io_backend_ = WALIoBackend::Auto;

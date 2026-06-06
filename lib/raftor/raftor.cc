@@ -104,6 +104,34 @@ Result<void> LoadSnapshotDataFromFile(
     return {};
 }
 
+Result<uint64_t> RestoreLocalSnapshot(
+    wal::WALStorage& storage, StateMachine& state_machine, uint64_t node_id
+) {
+    const uint64_t snapshot_index = storage.SnapshotIndex();
+    if (snapshot_index == 0) {
+        return 0;
+    }
+
+    auto snapshot = storage.GetSnapshot(0, node_id);
+    if (!snapshot) {
+        return snapshot.error();
+    }
+
+    auto snap_reader = capnp_util::reader<msg::Snapshot>(*snapshot);
+    auto snap_meta = snap_reader.getMetadata();
+    auto metadata = CloneSnapshotMetadata(snap_meta);
+    SnapshotDataReader reader(snap_reader.getData());
+    if (auto result = state_machine.RestoreSnapshot(metadata, reader); !result) {
+        return result.error();
+    }
+
+    RAFTPP_LOG_INFO(
+        "Restored local snapshot for node {} at index {} term {}", node_id, snap_meta.getIndex(),
+        snap_meta.getTerm()
+    );
+    return snap_meta.getIndex();
+}
+
 }  // namespace
 
 // === RaftorConfig implementation ===
@@ -134,6 +162,7 @@ raftpp::Config RaftorConfig::ToRaftConfig() const {
     cfg.pre_vote = pre_vote;
     cfg.check_quorum = check_quorum;
     cfg.read_only_option = read_only_option;
+    cfg.load_state_on_startup = true;
     return cfg;
 }
 
@@ -143,7 +172,8 @@ class RaftorImpl : public Raftor {
   public:
     RaftorImpl(
         const RaftorConfig& config, std::unique_ptr<StateMachine> state_machine,
-        std::shared_ptr<wal::WALStorage> storage, std::unique_ptr<rpc::Transport> transport
+        std::shared_ptr<wal::WALStorage> storage, std::unique_ptr<rpc::Transport> transport,
+        uint64_t initial_applied_index
     );
 
     ~RaftorImpl() override;
@@ -241,7 +271,8 @@ class RaftorImpl : public Raftor {
 
 RaftorImpl::RaftorImpl(
     const RaftorConfig& config, std::unique_ptr<StateMachine> state_machine,
-    std::shared_ptr<wal::WALStorage> storage, std::unique_ptr<rpc::Transport> transport
+    std::shared_ptr<wal::WALStorage> storage, std::unique_ptr<rpc::Transport> transport,
+    uint64_t initial_applied_index
 )
     : config_(config),
       state_machine_(std::move(state_machine)),
@@ -249,12 +280,13 @@ RaftorImpl::RaftorImpl(
       transport_(std::move(transport)) {
     // Create RawNode
     auto raft_config = config_.ToRaftConfig();
+    raft_config.applied = initial_applied_index;
     raw_node_ = std::make_unique<RawNode>(raft_config, storage_);
 
     // Create ReadyProcessor
     ready_processor_ = std::make_unique<ReadyProcessor>(
         *raw_node_, storage_, *state_machine_, *transport_, proposal_tracker_,
-        config_.enable_entry_checksum
+        config_.enable_entry_checksum, initial_applied_index
     );
 
     RefreshStatus();
@@ -1069,8 +1101,15 @@ Result<std::unique_ptr<Raftor>> Raftor::Create(
         return nonstd::make_unexpected(RaftError(RaftErrorCode::IncompatibleStorage));
     }
 
+    auto restored_applied_index =
+        RestoreLocalSnapshot(*wal_storage, *state_machine, config.node_id);
+    if (!restored_applied_index) {
+        return restored_applied_index.error();
+    }
+
     return std::make_unique<RaftorImpl>(
-        config, std::move(state_machine), std::move(wal_storage), std::move(transport)
+        config, std::move(state_machine), std::move(wal_storage), std::move(transport),
+        *restored_applied_index
     );
 }
 

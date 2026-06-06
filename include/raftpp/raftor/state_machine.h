@@ -1,10 +1,13 @@
 #pragma once
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <optional>
 #include <string>
 
+#include <capnp/blob.h>
 #include <nonstd/span.hpp>
 
 #include "raftpp/core/error.h"
@@ -31,6 +34,28 @@ class SnapshotReader {
     virtual ~SnapshotReader() = default;
     /// Read up to out.size() bytes. Returns 0 on EOF.
     [[nodiscard]] virtual Result<size_t> Read(nonstd::span<uint8_t> out) = 0;
+};
+
+/// SnapshotReader implementation backed by an in-memory Cap'n Proto Data field.
+class SnapshotDataReader final : public SnapshotReader {
+  public:
+    explicit SnapshotDataReader(::capnp::Data::Reader data) : data_(data) {}
+
+    Result<size_t> Read(nonstd::span<uint8_t> out) override {
+        if (offset_ >= data_.size() || out.empty()) {
+            return 0;
+        }
+
+        const size_t remaining = data_.size() - offset_;
+        const size_t bytes_to_copy = std::min(out.size(), remaining);
+        std::memcpy(out.data(), data_.begin() + offset_, bytes_to_copy);
+        offset_ += bytes_to_copy;
+        return bytes_to_copy;
+    }
+
+  private:
+    ::capnp::Data::Reader data_;
+    size_t offset_ = 0;
 };
 
 /// The StateMachine interface that users must implement

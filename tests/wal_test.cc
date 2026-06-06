@@ -1,14 +1,23 @@
 #include "raftpp/raftor/wal/wal.h"
 
+#include <fcntl.h>
+
 #include <atomic>
+#include <cerrno>
 #include <filesystem>
+#include <fstream>
+#include <limits>
 #include <random>
+#include <string>
 #include <thread>
+#include <unordered_map>
+#include <vector>
 
 #include <doctest/doctest.h>
 #include <kj/array.h>
 
 #include "raftpp/raftor/wal/crc32c.h"
+#include "raftpp/raftor/wal/env.h"
 #include "raftpp/raftor/wal/metadata_store.h"
 #include "raftpp/raftor/wal/record.h"
 #include "raftpp/raftor/wal/segment.h"
@@ -52,6 +61,245 @@ Entry MakeWalEntry(uint64_t index, uint64_t term, const std::string& data = "") 
     builder.setData(kj::arrayPtr(reinterpret_cast<const kj::byte*>(data.data()), data.size()));
     builder.setEntryType(EntryType::ENTRY_NORMAL);
     return entry;
+}
+
+Snapshot MakeWalSnapshot(
+    uint64_t index, uint64_t term, std::vector<uint64_t> voters, const std::string& data
+) {
+    Snapshot snapshot = capnp_util::make<msg::Snapshot>();
+    auto builder = capnp_util::builder<msg::Snapshot>(snapshot);
+    builder.setData(kj::arrayPtr(reinterpret_cast<const kj::byte*>(data.data()), data.size()));
+
+    auto meta_builder = builder.initMetadata();
+    meta_builder.setIndex(index);
+    meta_builder.setTerm(term);
+    auto conf_builder = meta_builder.initConfState();
+    auto voters_builder = conf_builder.initVoters(voters.size());
+    for (size_t i = 0; i < voters.size(); ++i) {
+        voters_builder.set(i, voters[i]);
+    }
+    return snapshot;
+}
+
+void WriteBytes(const std::filesystem::path& path, const std::vector<uint8_t>& data) {
+    std::ofstream out(path, std::ios::binary | std::ios::trunc);
+    REQUIRE(out.is_open());
+    out.write(
+        reinterpret_cast<const char*>(data.data()), static_cast<std::streamsize>(data.size())
+    );
+    REQUIRE(out.good());
+}
+
+class FailingSnapshotEnv : public WALEnv {
+  public:
+    std::error_code CreateDirectories(const std::filesystem::path& path) override {
+        if (fail_create_directories) {
+            return std::make_error_code(std::errc::permission_denied);
+        }
+        return delegate_->CreateDirectories(path);
+    }
+
+    int Open(const std::filesystem::path& path, int flags, mode_t mode) override {
+        if (IsSnapshotPath(path) && fail_open_snapshot) {
+            errno = EACCES;
+            return -1;
+        }
+        if (IsSnapshotTmpPath(path) && fail_open_snapshot_tmp) {
+            errno = EACCES;
+            return -1;
+        }
+        if ((flags & O_DIRECTORY) != 0 && fail_open_directory) {
+            errno = EACCES;
+            return -1;
+        }
+
+        const int fd = delegate_->Open(path, flags, mode);
+        if (fd >= 0) {
+            fd_kind_[fd] = KindFor(path, flags);
+        }
+        return fd;
+    }
+
+    ssize_t Write(int fd, const void* data, size_t size) override {
+        if (fd_kind_[fd] == FdKind::SnapshotTmp) {
+            if (write_eintr_once) {
+                write_eintr_once = false;
+                errno = EINTR;
+                return -1;
+            }
+            if (fail_write_once) {
+                fail_write_once = false;
+                errno = EIO;
+                return -1;
+            }
+            if (zero_write_once) {
+                zero_write_once = false;
+                return 0;
+            }
+        }
+        return delegate_->Write(fd, data, size);
+    }
+
+    ssize_t Read(int fd, void* data, size_t size) override {
+        if (fd_kind_[fd] == FdKind::Snapshot) {
+            if (read_eintr_once) {
+                read_eintr_once = false;
+                errno = EINTR;
+                return -1;
+            }
+            if (fail_read_once) {
+                fail_read_once = false;
+                errno = EIO;
+                return -1;
+            }
+            if (eof_read_once) {
+                eof_read_once = false;
+                return 0;
+            }
+        }
+        return delegate_->Read(fd, data, size);
+    }
+
+    off_t Seek(int fd, off_t offset, int whence) override {
+        if (fd_kind_[fd] == FdKind::Snapshot) {
+            if (whence == SEEK_END && fail_seek_end) {
+                errno = EIO;
+                return -1;
+            }
+            if (whence == SEEK_SET && fail_seek_set) {
+                errno = EIO;
+                return -1;
+            }
+        }
+        return delegate_->Seek(fd, offset, whence);
+    }
+
+    int Sync(int fd) override {
+        if (fd_kind_[fd] == FdKind::SnapshotTmp && fail_sync_snapshot_tmp) {
+            errno = EIO;
+            return -1;
+        }
+        if (fd_kind_[fd] == FdKind::Directory && fail_sync_directory) {
+            errno = EIO;
+            return -1;
+        }
+        return delegate_->Sync(fd);
+    }
+
+    int Close(int fd) override {
+        const auto it = fd_kind_.find(fd);
+        const FdKind kind = it == fd_kind_.end() ? FdKind::Other : it->second;
+        if (it != fd_kind_.end()) {
+            fd_kind_.erase(it);
+        }
+        const int close_result = delegate_->Close(fd);
+        if (kind == FdKind::SnapshotTmp && fail_close_snapshot_tmp) {
+            errno = EIO;
+            return -1;
+        }
+        return close_result;
+    }
+
+    int Rename(const std::filesystem::path& from, const std::filesystem::path& to) override {
+        if (IsSnapshotTmpPath(from) && IsSnapshotPath(to) && fail_rename_snapshot) {
+            errno = EIO;
+            return -1;
+        }
+        return delegate_->Rename(from, to);
+    }
+
+    int Unlink(const std::filesystem::path& path) override { return delegate_->Unlink(path); }
+
+    bool fail_create_directories = false;
+    bool fail_open_snapshot = false;
+    bool fail_open_snapshot_tmp = false;
+    bool fail_open_directory = false;
+    bool fail_seek_end = false;
+    bool fail_seek_set = false;
+    bool fail_write_once = false;
+    bool write_eintr_once = false;
+    bool zero_write_once = false;
+    bool fail_read_once = false;
+    bool read_eintr_once = false;
+    bool eof_read_once = false;
+    bool fail_sync_snapshot_tmp = false;
+    bool fail_close_snapshot_tmp = false;
+    bool fail_rename_snapshot = false;
+    bool fail_sync_directory = false;
+
+  private:
+    enum class FdKind {
+        Other,
+        Snapshot,
+        SnapshotTmp,
+        Directory,
+    };
+
+    static bool IsSnapshotPath(const std::filesystem::path& path) {
+        return path.filename() == "snapshot";
+    }
+
+    static bool IsSnapshotTmpPath(const std::filesystem::path& path) {
+        return path.filename() == "snapshot.tmp";
+    }
+
+    static FdKind KindFor(const std::filesystem::path& path, int flags) {
+        if ((flags & O_DIRECTORY) != 0) {
+            return FdKind::Directory;
+        }
+        if (IsSnapshotPath(path)) {
+            return FdKind::Snapshot;
+        }
+        if (IsSnapshotTmpPath(path)) {
+            return FdKind::SnapshotTmp;
+        }
+        return FdKind::Other;
+    }
+
+    std::shared_ptr<WALEnv> delegate_ = DefaultWALEnv();
+    std::unordered_map<int, FdKind> fd_kind_;
+};
+
+void PersistSnapshotForLoad(const std::filesystem::path& dir) {
+    WALConfig config;
+    config.dir = dir;
+    config.sync_on_write = true;
+
+    auto wal = WAL::Open(config);
+    REQUIRE(wal.has_value());
+    auto snap = MakeWalSnapshot(7, 3, {1}, "snapshot-payload");
+    REQUIRE((*wal)->ApplySnapshot(snap));
+}
+
+Result<void> ApplySnapshotWithEnv(
+    const std::filesystem::path& dir, const std::shared_ptr<FailingSnapshotEnv>& env
+) {
+    WALConfig config;
+    config.dir = dir;
+    config.sync_on_write = true;
+    config.env = env;
+
+    auto wal = WAL::Open(config);
+    if (!wal) {
+        return wal.error();
+    }
+    auto snap = MakeWalSnapshot(7, 3, {1}, "snapshot-payload");
+    return (*wal)->ApplySnapshot(snap);
+}
+
+Result<Snapshot> LoadSnapshotWithEnv(
+    const std::filesystem::path& dir, const std::shared_ptr<FailingSnapshotEnv>& env
+) {
+    WALConfig config;
+    config.dir = dir;
+    config.sync_on_write = true;
+    config.env = env;
+
+    auto wal = WAL::Open(config);
+    if (!wal) {
+        return wal.error();
+    }
+    return (*wal)->LoadSnapshot();
 }
 
 }  // namespace
@@ -1209,6 +1457,338 @@ TEST_SUITE("wal") {
         auto first = (*storage)->FirstIndex();
         REQUIRE(first.has_value());
         CHECK(*first == 6);
+    }
+
+    TEST_CASE("wal_storage: snapshot payload survives reopen") {
+        TempDir temp_dir;
+
+        WALConfig config;
+        config.dir = temp_dir.path();
+        config.sync_on_write = true;
+
+        {
+            auto storage = WALStorage::Open(config);
+            REQUIRE(storage.has_value());
+
+            auto snap = MakeWalSnapshot(7, 3, {1, 2}, "snapshot-payload");
+            CHECK((*storage)->ApplySnapshot(snap));
+        }
+
+        auto storage = WALStorage::Open(config);
+        REQUIRE(storage.has_value());
+
+        CHECK((*storage)->SnapshotIndex() == 7);
+
+        auto first = (*storage)->FirstIndex();
+        REQUIRE(first.has_value());
+        CHECK(*first == 8);
+
+        auto term = (*storage)->Term(7);
+        REQUIRE(term.has_value());
+        CHECK(*term == 3);
+
+        auto snap = (*storage)->GetSnapshot(0, 0);
+        REQUIRE(snap.has_value());
+
+        auto snap_reader = capnp_util::reader<msg::Snapshot>(*snap);
+        auto snap_meta = snap_reader.getMetadata();
+        CHECK(snap_meta.getIndex() == 7);
+        CHECK(snap_meta.getTerm() == 3);
+
+        auto voters = snap_meta.getConfState().getVoters();
+        REQUIRE(voters.size() == 2);
+        CHECK(voters[0] == 1);
+        CHECK(voters[1] == 2);
+
+        auto data = snap_reader.getData();
+        std::string payload(reinterpret_cast<const char*>(data.begin()), data.size());
+        CHECK(payload == "snapshot-payload");
+
+        auto unavailable = (*storage)->GetSnapshot(8, 0);
+        CHECK(!unavailable.has_value());
+        CHECK(unavailable.error() == StorageErrorCode::SnapshotTemporarilyUnavailable);
+    }
+
+    TEST_CASE("wal: load snapshot without snapshot returns unavailable") {
+        TempDir temp_dir;
+
+        WALConfig config;
+        config.dir = temp_dir.path();
+
+        auto wal = WAL::Open(config);
+        REQUIRE(wal.has_value());
+
+        auto snap = (*wal)->LoadSnapshot();
+        CHECK(!snap.has_value());
+        CHECK(snap.error() == StorageErrorCode::SnapshotTemporarilyUnavailable);
+    }
+
+    TEST_CASE("wal_storage: reopen fails when snapshot file is missing") {
+        TempDir temp_dir;
+
+        WALConfig config;
+        config.dir = temp_dir.path();
+        config.sync_on_write = true;
+
+        {
+            auto storage = WALStorage::Open(config);
+            REQUIRE(storage.has_value());
+            auto snap = MakeWalSnapshot(7, 3, {1}, "snapshot-payload");
+            REQUIRE((*storage)->ApplySnapshot(snap));
+        }
+
+        std::filesystem::remove(temp_dir.path() / "snapshot");
+        auto reopened = WALStorage::Open(config);
+        CHECK(!reopened.has_value());
+    }
+
+    TEST_CASE("wal_storage: reopen fails when snapshot file is corrupt") {
+        TempDir temp_dir;
+
+        WALConfig config;
+        config.dir = temp_dir.path();
+        config.sync_on_write = true;
+
+        {
+            auto storage = WALStorage::Open(config);
+            REQUIRE(storage.has_value());
+            auto snap = MakeWalSnapshot(7, 3, {1}, "snapshot-payload");
+            REQUIRE((*storage)->ApplySnapshot(snap));
+        }
+
+        WriteBytes(temp_dir.path() / "snapshot", std::vector<uint8_t>{'b', 'a', 'd'});
+        auto reopened = WALStorage::Open(config);
+        CHECK(!reopened.has_value());
+    }
+
+    TEST_CASE("wal_storage: reopen fails when snapshot file metadata mismatches") {
+        TempDir temp_dir;
+
+        WALConfig config;
+        config.dir = temp_dir.path();
+        config.sync_on_write = true;
+
+        {
+            auto storage = WALStorage::Open(config);
+            REQUIRE(storage.has_value());
+            auto snap = MakeWalSnapshot(7, 3, {1}, "snapshot-payload");
+            REQUIRE((*storage)->ApplySnapshot(snap));
+        }
+
+        auto mismatched = MakeWalSnapshot(8, 3, {1}, "snapshot-payload");
+        WriteBytes(temp_dir.path() / "snapshot", capnp_util::toBytes(mismatched));
+        auto reopened = WALStorage::Open(config);
+        CHECK(!reopened.has_value());
+    }
+
+    TEST_CASE("wal_storage: reopen fails when snapshot file is too large") {
+        TempDir temp_dir;
+
+        WALConfig config;
+        config.dir = temp_dir.path();
+        config.sync_on_write = true;
+
+        {
+            auto storage = WALStorage::Open(config);
+            REQUIRE(storage.has_value());
+            auto snap = MakeWalSnapshot(7, 3, {1}, "snapshot-payload");
+            REQUIRE((*storage)->ApplySnapshot(snap));
+        }
+
+        std::filesystem::resize_file(
+            temp_dir.path() / "snapshot",
+            static_cast<uintmax_t>(std::numeric_limits<uint32_t>::max()) + 1
+        );
+        auto reopened = WALStorage::Open(config);
+        CHECK(!reopened.has_value());
+    }
+
+    TEST_CASE("wal_storage: apply snapshot failure keeps previous snapshot cached") {
+        TempDir temp_dir;
+
+        WALConfig config;
+        config.dir = temp_dir.path();
+        config.sync_on_write = true;
+
+        auto storage = WALStorage::Open(config);
+        REQUIRE(storage.has_value());
+
+        auto first_snap = MakeWalSnapshot(7, 3, {1}, "old-snapshot");
+        REQUIRE((*storage)->ApplySnapshot(first_snap));
+
+        std::filesystem::create_directory(temp_dir.path() / "snapshot.tmp");
+        auto next_snap = MakeWalSnapshot(8, 4, {1}, "new-snapshot");
+        auto result = (*storage)->ApplySnapshot(next_snap);
+        CHECK(!result.has_value());
+
+        CHECK((*storage)->SnapshotIndex() == 7);
+        auto cached = (*storage)->GetSnapshot(0, 0);
+        REQUIRE(cached.has_value());
+        auto cached_reader = capnp_util::reader<msg::Snapshot>(*cached);
+        CHECK(cached_reader.getMetadata().getIndex() == 7);
+        auto data = cached_reader.getData();
+        std::string payload(reinterpret_cast<const char*>(data.begin()), data.size());
+        CHECK(payload == "old-snapshot");
+    }
+
+    TEST_CASE("wal: snapshot write retries after EINTR") {
+        TempDir temp_dir;
+        auto env = std::make_shared<FailingSnapshotEnv>();
+        env->write_eintr_once = true;
+
+        auto result = ApplySnapshotWithEnv(temp_dir.path(), env);
+        CHECK(result.has_value());
+        CHECK(!env->write_eintr_once);
+    }
+
+    TEST_CASE("wal: apply snapshot fails on write error") {
+        TempDir temp_dir;
+        auto env = std::make_shared<FailingSnapshotEnv>();
+        env->fail_write_once = true;
+
+        auto result = ApplySnapshotWithEnv(temp_dir.path(), env);
+        CHECK(!result.has_value());
+        CHECK(!env->fail_write_once);
+    }
+
+    TEST_CASE("wal: apply snapshot fails on zero-byte write") {
+        TempDir temp_dir;
+        auto env = std::make_shared<FailingSnapshotEnv>();
+        env->zero_write_once = true;
+
+        auto result = ApplySnapshotWithEnv(temp_dir.path(), env);
+        CHECK(!result.has_value());
+        CHECK(!env->zero_write_once);
+    }
+
+    TEST_CASE("wal: apply snapshot fails on snapshot file sync") {
+        TempDir temp_dir;
+        auto env = std::make_shared<FailingSnapshotEnv>();
+        env->fail_sync_snapshot_tmp = true;
+
+        auto result = ApplySnapshotWithEnv(temp_dir.path(), env);
+        CHECK(!result.has_value());
+    }
+
+    TEST_CASE("wal: apply snapshot fails on snapshot file close") {
+        TempDir temp_dir;
+        auto env = std::make_shared<FailingSnapshotEnv>();
+        env->fail_close_snapshot_tmp = true;
+
+        auto result = ApplySnapshotWithEnv(temp_dir.path(), env);
+        CHECK(!result.has_value());
+    }
+
+    TEST_CASE("wal: apply snapshot fails on snapshot file rename") {
+        TempDir temp_dir;
+        auto env = std::make_shared<FailingSnapshotEnv>();
+        env->fail_rename_snapshot = true;
+
+        auto result = ApplySnapshotWithEnv(temp_dir.path(), env);
+        CHECK(!result.has_value());
+    }
+
+    TEST_CASE("wal: apply snapshot fails on snapshot directory operations") {
+        SUBCASE("create directories") {
+            TempDir temp_dir;
+            auto env = std::make_shared<FailingSnapshotEnv>();
+            env->fail_create_directories = true;
+
+            auto result = ApplySnapshotWithEnv(temp_dir.path(), env);
+            CHECK(!result.has_value());
+        }
+
+        SUBCASE("open directory") {
+            TempDir temp_dir;
+            auto env = std::make_shared<FailingSnapshotEnv>();
+            env->fail_open_directory = true;
+
+            auto result = ApplySnapshotWithEnv(temp_dir.path(), env);
+            CHECK(!result.has_value());
+        }
+
+        SUBCASE("sync directory") {
+            TempDir temp_dir;
+            auto env = std::make_shared<FailingSnapshotEnv>();
+            env->fail_sync_directory = true;
+
+            auto result = ApplySnapshotWithEnv(temp_dir.path(), env);
+            CHECK(!result.has_value());
+        }
+    }
+
+    TEST_CASE("wal: apply snapshot fails on temp file open") {
+        TempDir temp_dir;
+        auto env = std::make_shared<FailingSnapshotEnv>();
+        env->fail_open_snapshot_tmp = true;
+
+        auto result = ApplySnapshotWithEnv(temp_dir.path(), env);
+        CHECK(!result.has_value());
+    }
+
+    TEST_CASE("wal: snapshot read retries after EINTR") {
+        TempDir temp_dir;
+        PersistSnapshotForLoad(temp_dir.path());
+        auto env = std::make_shared<FailingSnapshotEnv>();
+        env->read_eintr_once = true;
+
+        auto result = LoadSnapshotWithEnv(temp_dir.path(), env);
+        CHECK(result.has_value());
+        CHECK(!env->read_eintr_once);
+    }
+
+    TEST_CASE("wal: load snapshot fails on open error") {
+        TempDir temp_dir;
+        PersistSnapshotForLoad(temp_dir.path());
+        auto env = std::make_shared<FailingSnapshotEnv>();
+        env->fail_open_snapshot = true;
+
+        auto result = LoadSnapshotWithEnv(temp_dir.path(), env);
+        CHECK(!result.has_value());
+    }
+
+    TEST_CASE("wal: load snapshot fails on seek errors") {
+        SUBCASE("seek end") {
+            TempDir temp_dir;
+            PersistSnapshotForLoad(temp_dir.path());
+            auto env = std::make_shared<FailingSnapshotEnv>();
+            env->fail_seek_end = true;
+
+            auto result = LoadSnapshotWithEnv(temp_dir.path(), env);
+            CHECK(!result.has_value());
+        }
+
+        SUBCASE("seek set") {
+            TempDir temp_dir;
+            PersistSnapshotForLoad(temp_dir.path());
+            auto env = std::make_shared<FailingSnapshotEnv>();
+            env->fail_seek_set = true;
+
+            auto result = LoadSnapshotWithEnv(temp_dir.path(), env);
+            CHECK(!result.has_value());
+        }
+    }
+
+    TEST_CASE("wal: load snapshot fails on read error") {
+        TempDir temp_dir;
+        PersistSnapshotForLoad(temp_dir.path());
+        auto env = std::make_shared<FailingSnapshotEnv>();
+        env->fail_read_once = true;
+
+        auto result = LoadSnapshotWithEnv(temp_dir.path(), env);
+        CHECK(!result.has_value());
+        CHECK(!env->fail_read_once);
+    }
+
+    TEST_CASE("wal: load snapshot fails on unexpected EOF") {
+        TempDir temp_dir;
+        PersistSnapshotForLoad(temp_dir.path());
+        auto env = std::make_shared<FailingSnapshotEnv>();
+        env->eof_read_once = true;
+
+        auto result = LoadSnapshotWithEnv(temp_dir.path(), env);
+        CHECK(!result.has_value());
+        CHECK(!env->eof_read_once);
     }
 
     TEST_CASE("wal_storage: all entries") {
