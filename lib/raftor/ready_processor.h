@@ -48,7 +48,8 @@ class ReadyProcessor {
   public:
     ReadyProcessor(
         RawNode& raw_node, std::shared_ptr<wal::WALStorage> storage, StateMachine& state_machine,
-        rpc::Transport& transport, ProposalTracker& proposal_tracker, bool checksum_enabled
+        rpc::Transport& transport, ProposalTracker& proposal_tracker, bool checksum_enabled,
+        uint64_t initial_applied_index = 0
     );
 
     /// Process one Ready cycle

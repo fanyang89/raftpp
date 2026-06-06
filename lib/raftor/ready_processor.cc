@@ -120,13 +120,15 @@ SnapshotMetadata CloneSnapshotMetadata(msg::SnapshotMetadata::Reader snap_meta) 
 
 ReadyProcessor::ReadyProcessor(
     RawNode& raw_node, std::shared_ptr<wal::WALStorage> storage, StateMachine& state_machine,
-    rpc::Transport& transport, ProposalTracker& proposal_tracker, bool checksum_enabled
+    rpc::Transport& transport, ProposalTracker& proposal_tracker, bool checksum_enabled,
+    uint64_t initial_applied_index
 )
     : raw_node_(raw_node),
       storage_(std::move(storage)),
       state_machine_(state_machine),
       transport_(transport),
       proposal_tracker_(proposal_tracker),
+      applied_index_(initial_applied_index),
       checksum_enabled_(checksum_enabled) {}
 
 Result<bool> ReadyProcessor::Process() {

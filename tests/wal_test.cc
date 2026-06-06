@@ -3,7 +3,9 @@
 #include <atomic>
 #include <filesystem>
 #include <random>
+#include <string>
 #include <thread>
+#include <vector>
 
 #include <doctest/doctest.h>
 #include <kj/array.h>
@@ -52,6 +54,24 @@ Entry MakeWalEntry(uint64_t index, uint64_t term, const std::string& data = "") 
     builder.setData(kj::arrayPtr(reinterpret_cast<const kj::byte*>(data.data()), data.size()));
     builder.setEntryType(EntryType::ENTRY_NORMAL);
     return entry;
+}
+
+Snapshot MakeWalSnapshot(
+    uint64_t index, uint64_t term, std::vector<uint64_t> voters, const std::string& data
+) {
+    Snapshot snapshot = capnp_util::make<msg::Snapshot>();
+    auto builder = capnp_util::builder<msg::Snapshot>(snapshot);
+    builder.setData(kj::arrayPtr(reinterpret_cast<const kj::byte*>(data.data()), data.size()));
+
+    auto meta_builder = builder.initMetadata();
+    meta_builder.setIndex(index);
+    meta_builder.setTerm(term);
+    auto conf_builder = meta_builder.initConfState();
+    auto voters_builder = conf_builder.initVoters(voters.size());
+    for (size_t i = 0; i < voters.size(); ++i) {
+        voters_builder.set(i, voters[i]);
+    }
+    return snapshot;
 }
 
 }  // namespace
@@ -1209,6 +1229,52 @@ TEST_SUITE("wal") {
         auto first = (*storage)->FirstIndex();
         REQUIRE(first.has_value());
         CHECK(*first == 6);
+    }
+
+    TEST_CASE("wal_storage: snapshot payload survives reopen") {
+        TempDir temp_dir;
+
+        WALConfig config;
+        config.dir = temp_dir.path();
+        config.sync_on_write = true;
+
+        {
+            auto storage = WALStorage::Open(config);
+            REQUIRE(storage.has_value());
+
+            auto snap = MakeWalSnapshot(7, 3, {1, 2}, "snapshot-payload");
+            CHECK((*storage)->ApplySnapshot(snap));
+        }
+
+        auto storage = WALStorage::Open(config);
+        REQUIRE(storage.has_value());
+
+        CHECK((*storage)->SnapshotIndex() == 7);
+
+        auto first = (*storage)->FirstIndex();
+        REQUIRE(first.has_value());
+        CHECK(*first == 8);
+
+        auto term = (*storage)->Term(7);
+        REQUIRE(term.has_value());
+        CHECK(*term == 3);
+
+        auto snap = (*storage)->GetSnapshot(0, 0);
+        REQUIRE(snap.has_value());
+
+        auto snap_reader = capnp_util::reader<msg::Snapshot>(*snap);
+        auto snap_meta = snap_reader.getMetadata();
+        CHECK(snap_meta.getIndex() == 7);
+        CHECK(snap_meta.getTerm() == 3);
+
+        auto voters = snap_meta.getConfState().getVoters();
+        REQUIRE(voters.size() == 2);
+        CHECK(voters[0] == 1);
+        CHECK(voters[1] == 2);
+
+        auto data = snap_reader.getData();
+        std::string payload(reinterpret_cast<const char*>(data.begin()), data.size());
+        CHECK(payload == "snapshot-payload");
     }
 
     TEST_CASE("wal_storage: all entries") {
