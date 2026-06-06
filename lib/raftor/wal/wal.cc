@@ -1,5 +1,11 @@
 #include "raftpp/raftor/wal/wal.h"
 
+#include <errno.h>
+#include <fcntl.h>
+#include <sys/types.h>
+#include <unistd.h>
+
+#include <algorithm>
 #include <cstring>
 #include <filesystem>
 #include <map>
@@ -16,6 +22,157 @@
 #include "raftpp/raftor/wal/segment_manager.h"
 
 namespace raftpp::raftor::wal {
+
+namespace {
+
+std::filesystem::path SnapshotPath(const std::filesystem::path& dir) {
+    return dir / "snapshot";
+}
+
+std::filesystem::path SnapshotTmpPath(const std::filesystem::path& dir) {
+    return dir / "snapshot.tmp";
+}
+
+Result<void> SyncDirectory(const std::filesystem::path& dir) {
+    int dir_fd = ::open(dir.c_str(), O_RDONLY | O_DIRECTORY);
+    if (dir_fd < 0) {
+        return RaftError(StorageErrorOther{
+            fmt::format("failed to open snapshot directory for sync: {}", std::strerror(errno))
+        });
+    }
+    if (::fsync(dir_fd) < 0) {
+        const int err = errno;
+        ::close(dir_fd);
+        return RaftError(StorageErrorOther{
+            fmt::format("failed to sync snapshot directory: {}", std::strerror(err))
+        });
+    }
+    ::close(dir_fd);
+    return {};
+}
+
+Result<void> WriteAll(int fd, nonstd::span<const uint8_t> data) {
+    size_t written = 0;
+    while (written < data.size()) {
+        const ssize_t n = ::write(fd, data.data() + written, data.size() - written);
+        if (n < 0) {
+            return RaftError(
+                StorageErrorOther{fmt::format("failed to write snapshot: {}", std::strerror(errno))}
+            );
+        }
+        if (n == 0) {
+            return RaftError(StorageErrorOther{"failed to write snapshot: zero-byte write"});
+        }
+        written += static_cast<size_t>(n);
+    }
+    return {};
+}
+
+Result<std::vector<uint8_t>> ReadFile(const std::filesystem::path& path) {
+    int fd = ::open(path.c_str(), O_RDONLY);
+    if (fd < 0) {
+        return RaftError(
+            StorageErrorOther{fmt::format("failed to open snapshot: {}", std::strerror(errno))}
+        );
+    }
+
+    off_t size = ::lseek(fd, 0, SEEK_END);
+    if (size < 0) {
+        const int err = errno;
+        ::close(fd);
+        return RaftError(
+            StorageErrorOther{fmt::format("failed to get snapshot size: {}", std::strerror(err))}
+        );
+    }
+    if (::lseek(fd, 0, SEEK_SET) < 0) {
+        const int err = errno;
+        ::close(fd);
+        return RaftError(
+            StorageErrorOther{fmt::format("failed to rewind snapshot: {}", std::strerror(err))}
+        );
+    }
+
+    std::vector<uint8_t> data(static_cast<size_t>(size));
+    size_t read_bytes = 0;
+    while (read_bytes < data.size()) {
+        const ssize_t n = ::read(fd, data.data() + read_bytes, data.size() - read_bytes);
+        if (n < 0) {
+            const int err = errno;
+            ::close(fd);
+            return RaftError(
+                StorageErrorOther{fmt::format("failed to read snapshot: {}", std::strerror(err))}
+            );
+        }
+        if (n == 0) {
+            ::close(fd);
+            return RaftError(StorageErrorOther{"failed to read snapshot: unexpected EOF"});
+        }
+        read_bytes += static_cast<size_t>(n);
+    }
+
+    ::close(fd);
+    return data;
+}
+
+Result<void> PersistSnapshotFile(const std::filesystem::path& dir, const Snapshot& snapshot) {
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    if (ec) {
+        return RaftError(
+            StorageErrorOther{fmt::format("failed to create snapshot directory: {}", ec.message())}
+        );
+    }
+
+    auto bytes = capnp_util::toBytes(snapshot);
+    const auto tmp_path = SnapshotTmpPath(dir);
+    const auto path = SnapshotPath(dir);
+
+    int fd = ::open(tmp_path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (fd < 0) {
+        return RaftError(StorageErrorOther{
+            fmt::format("failed to create snapshot temp file: {}", std::strerror(errno))
+        });
+    }
+
+    auto cleanup_tmp = [&tmp_path] {
+        ::unlink(tmp_path.c_str());
+    };
+    if (auto result = WriteAll(fd, nonstd::span<const uint8_t>(bytes.data(), bytes.size()));
+        !result) {
+        ::close(fd);
+        cleanup_tmp();
+        return result.error();
+    }
+
+    if (::fsync(fd) < 0) {
+        const int err = errno;
+        ::close(fd);
+        cleanup_tmp();
+        return RaftError(StorageErrorOther{
+            fmt::format("failed to sync snapshot temp file: {}", std::strerror(err))
+        });
+    }
+
+    if (::close(fd) < 0) {
+        const int err = errno;
+        cleanup_tmp();
+        return RaftError(StorageErrorOther{
+            fmt::format("failed to close snapshot temp file: {}", std::strerror(err))
+        });
+    }
+
+    if (::rename(tmp_path.c_str(), path.c_str()) < 0) {
+        const int err = errno;
+        cleanup_tmp();
+        return RaftError(StorageErrorOther{
+            fmt::format("failed to install snapshot file: {}", std::strerror(err))
+        });
+    }
+
+    return SyncDirectory(dir);
+}
+
+}  // namespace
 
 WAL::~WAL() {
     auto result = Close();
@@ -91,6 +248,14 @@ Result<void> WAL::Recover() {
     first_index_ = meta->first_index;
     snapshot_index_ = meta->snapshot_index;
     snapshot_term_ = meta->snapshot_term;
+
+    if (snapshot_index_ > 0) {
+        auto hs_builder = capnp_util::builder<msg::HardState>(hard_state_);
+        hs_builder.setTerm(std::max(hs_builder.getTerm(), snapshot_term_));
+        if (hs_builder.getCommit() < snapshot_index_) {
+            hs_builder.setCommit(snapshot_index_);
+        }
+    }
 
     index_.SetFirstIndex(first_index_);
 
@@ -618,6 +783,43 @@ const ConfState& WAL::GetConfState() const {
     return conf_state_;
 }
 
+uint64_t WAL::SnapshotIndex() const {
+    std::shared_lock lock(mutex_);
+    return snapshot_index_;
+}
+
+Result<Snapshot> WAL::LoadSnapshot() const {
+    std::shared_lock lock(mutex_);
+    if (snapshot_index_ == 0) {
+        return RaftError(StorageErrorCode::SnapshotTemporarilyUnavailable);
+    }
+
+    auto data = ReadFile(SnapshotPath(config_.dir));
+    if (!data) {
+        return data.error();
+    }
+
+    Snapshot snapshot;
+    try {
+        snapshot = capnp_util::fromBytes<msg::Snapshot>(
+            nonstd::span<const uint8_t>(data->data(), data->size())
+        );
+    } catch (...) {
+        return RaftError(StorageErrorOther{"failed to parse snapshot file"});
+    }
+
+    auto snap_reader = capnp_util::reader<msg::Snapshot>(snapshot);
+    auto meta = snap_reader.getMetadata();
+    if (meta.getIndex() != snapshot_index_ || meta.getTerm() != snapshot_term_) {
+        return RaftError(StorageErrorOther{fmt::format(
+            "snapshot file metadata mismatch: file=({},{}) wal=({},{})", meta.getIndex(),
+            meta.getTerm(), snapshot_index_, snapshot_term_
+        )});
+    }
+
+    return snapshot;
+}
+
 uint64_t WAL::LogSizeBytes() const {
     std::shared_lock lock(mutex_);
     if (!segment_manager_ || !metadata_store_) {
@@ -709,51 +911,40 @@ Result<void> WAL::ApplySnapshot(const Snapshot& snapshot) {
         return RaftError(StorageErrorCode::SnapshotOutOfDate);
     }
 
-    // Update state
-    snapshot_index_ = meta.getIndex();
-    snapshot_term_ = meta.getTerm();
-
-    // Copy ConfState from snapshot metadata
-    auto conf_src = meta.getConfState();
-    auto conf_builder = capnp_util::builder<msg::ConfState>(conf_state_);
-
-    auto voters_src = conf_src.getVoters();
-    auto voters_dst = conf_builder.initVoters(voters_src.size());
-    for (size_t i = 0; i < voters_src.size(); ++i) {
-        voters_dst.set(i, voters_src[i]);
+    auto snapshot_result = PersistSnapshotFile(config_.dir, snapshot);
+    if (!snapshot_result) {
+        return snapshot_result.error();
     }
 
-    auto learners_src = conf_src.getLearners();
-    auto learners_dst = conf_builder.initLearners(learners_src.size());
-    for (size_t i = 0; i < learners_src.size(); ++i) {
-        learners_dst.set(i, learners_src[i]);
+    const uint64_t new_snapshot_index = meta.getIndex();
+    const uint64_t new_snapshot_term = meta.getTerm();
+    auto new_conf_state = CloneConfState(meta.getConfState());
+    auto new_hard_state = CloneHardState(hard_state_);
+    auto hs_builder = capnp_util::builder<msg::HardState>(new_hard_state);
+    hs_builder.setTerm(std::max(hs_builder.getTerm(), new_snapshot_term));
+    if (hs_builder.getCommit() < new_snapshot_index) {
+        hs_builder.setCommit(new_snapshot_index);
     }
 
-    auto voters_out_src = conf_src.getVotersOutgoing();
-    auto voters_out_dst = conf_builder.initVotersOutgoing(voters_out_src.size());
-    for (size_t i = 0; i < voters_out_src.size(); ++i) {
-        voters_out_dst.set(i, voters_out_src[i]);
+    WALMetadata wal_meta;
+    wal_meta.hard_state = CloneHardState(new_hard_state);
+    wal_meta.conf_state = CloneConfState(new_conf_state);
+    wal_meta.first_index = new_snapshot_index + 1;
+    wal_meta.snapshot_index = new_snapshot_index;
+    wal_meta.snapshot_term = new_snapshot_term;
+    auto save_result = metadata_store_->Save(wal_meta);
+    if (!save_result) {
+        return save_result.error();
     }
 
-    auto learners_next_src = conf_src.getLearnersNext();
-    auto learners_next_dst = conf_builder.initLearnersNext(learners_next_src.size());
-    for (size_t i = 0; i < learners_next_src.size(); ++i) {
-        learners_next_dst.set(i, learners_next_src[i]);
-    }
-
-    conf_builder.setAutoLeave(conf_src.getAutoLeave());
-
-    // Clear entries and reset first_index
+    // Update memory only after the snapshot file and metadata are durable.
+    snapshot_index_ = new_snapshot_index;
+    snapshot_term_ = new_snapshot_term;
+    hard_state_ = std::move(new_hard_state);
+    conf_state_ = std::move(new_conf_state);
     index_.Clear();
     first_index_ = snapshot_index_ + 1;
     index_.SetFirstIndex(first_index_);
-
-    // Save metadata
-    auto wal_meta = CreateMetadata();
-    auto save_result = metadata_store_->Save(wal_meta);
-    if (!save_result) {
-        return save_result;
-    }
 
     // Remove all segments (they're all before the snapshot)
     auto remove_result = segment_manager_->RemoveAllSegments();

@@ -30,6 +30,14 @@ Result<std::shared_ptr<WALStorage>> WALStorage::Open(const WALConfig& config) {
 
     storage->wal_ = std::move(*wal);
 
+    if (storage->wal_->SnapshotIndex() > 0) {
+        auto snapshot = storage->wal_->LoadSnapshot();
+        if (!snapshot) {
+            return snapshot.error();
+        }
+        storage->snapshot_ = std::move(*snapshot);
+    }
+
     {
         std::lock_guard lock(storage->mutex_);
         storage->effective_io_backend_ = storage->wal_->EffectiveIoBackend();
@@ -97,11 +105,11 @@ Result<uint64_t> WALStorage::LastIndex() {
     return wal_->LastIndex();
 }
 
-Result<Snapshot> WALStorage::GetSnapshot(uint64_t /*request_index*/, uint64_t /*to*/) {
+Result<Snapshot> WALStorage::GetSnapshot(uint64_t request_index, uint64_t /*to*/) {
     std::lock_guard lock(mutex_);
 
     auto snap_meta = capnp_util::reader<msg::Snapshot>(snapshot_).getMetadata();
-    if (snap_meta.getIndex() == 0) {
+    if (snap_meta.getIndex() == 0 || snap_meta.getIndex() < request_index) {
         return RaftError(StorageErrorCode::SnapshotTemporarilyUnavailable);
     }
 
@@ -143,11 +151,11 @@ Result<void> WALStorage::ApplySnapshot(const Snapshot& snapshot) {
     span.span()->SetAttribute("raft.snapshot.index", static_cast<int64_t>(snap_meta.getIndex()));
     span.span()->SetAttribute("raft.snapshot.term", static_cast<int64_t>(snap_meta.getTerm()));
 
-    // Store snapshot in memory
-    snapshot_ = CloneSnapshot(snapshot);
-
-    // Apply to WAL
+    // Apply to WAL first so the in-memory cache only advances after durable persistence succeeds.
     auto result = wal_->ApplySnapshot(snapshot);
+    if (result) {
+        snapshot_ = CloneSnapshot(snapshot);
+    }
     telemetry::RecordErrorIf(span.span(), result);
     return result;
 }
@@ -195,6 +203,14 @@ std::vector<Entry> WALStorage::AllEntries() {
     }
 
     return std::move(*result);
+}
+
+uint64_t WALStorage::SnapshotIndex() const {
+    std::lock_guard lock(mutex_);
+    if (!wal_) {
+        return 0;
+    }
+    return wal_->SnapshotIndex();
 }
 
 bool WALStorage::IsInitialized() const {
