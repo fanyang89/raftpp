@@ -24,7 +24,10 @@
 #include "raftpp/core/types.h"
 #include "raftpp/logging.h"
 #include "raftpp/raftor/raftor_config.h"
+#include "raftpp/raftor/rpc/transport.h"
 #include "raftpp/raftor/state_machine.h"
+#include "raftpp/raftor/wal/wal_config.h"
+#include "raftpp/raftor/wal/wal_storage.h"
 
 using namespace raftpp;
 using namespace raftpp::raftor;
@@ -170,6 +173,49 @@ class MockStateMachine : public StateMachine {
     std::vector<std::vector<uint8_t>> applied_entries_;
     std::vector<uint8_t> last_restored_data_;
     std::vector<std::tuple<bool, uint64_t, uint64_t>> leadership_changes_;
+};
+
+class RecordingTransport final : public rpc::Transport {
+  public:
+    Result<void> Start() override {
+        running_ = true;
+        return {};
+    }
+
+    void Stop() override { running_ = false; }
+
+    void AddPeer(uint64_t id, const std::string& addr) override {
+        std::lock_guard lock(mutex_);
+        peers_.push_back({id, addr});
+    }
+
+    void RemovePeer(uint64_t id) override {
+        std::lock_guard lock(mutex_);
+        removed_peers_.push_back(id);
+    }
+
+    void Send(nonstd::span<const Message> /*messages*/) override {}
+
+    void SetMessageCallback(rpc::MessageCallback cb) override { message_callback_ = std::move(cb); }
+
+    void SetErrorCallback(rpc::ErrorCallback cb) override { error_callback_ = std::move(cb); }
+
+    void Poll(std::chrono::milliseconds /*timeout*/) override {}
+
+    void Run() override { running_ = true; }
+
+    std::vector<PeerConfig> Peers() const {
+        std::lock_guard lock(mutex_);
+        return peers_;
+    }
+
+  private:
+    mutable std::mutex mutex_;
+    bool running_ = false;
+    std::vector<PeerConfig> peers_;
+    std::vector<uint64_t> removed_peers_;
+    rpc::MessageCallback message_callback_;
+    rpc::ErrorCallback error_callback_;
 };
 
 struct TestNode {
@@ -395,6 +441,156 @@ TEST_CASE("noop_transport_allows_empty_listen_address") {
     auto state_machine = std::make_unique<MockStateMachine>();
     auto raftor_result = Raftor::Create(node.config, std::move(state_machine));
     REQUIRE(raftor_result.has_value());
+}
+
+TEST_CASE("wal_peer_addresses_persist_across_reopen") {
+    const auto pid = static_cast<uint64_t>(::getpid());
+    auto temp_dir =
+        std::filesystem::temp_directory_path() / ("raftpp_peer_address_wal_" + std::to_string(pid));
+    std::error_code ec;
+    std::filesystem::remove_all(temp_dir, ec);
+    std::filesystem::create_directories(temp_dir);
+    TempDirCleanup cleanup(temp_dir);
+
+    wal::WALConfig wal_config;
+    wal_config.dir = temp_dir / "wal";
+    wal_config.sync_on_write = true;
+
+    auto storage_result = wal::WALStorage::Open(wal_config);
+    REQUIRE(storage_result.has_value());
+    auto storage = std::move(*storage_result);
+
+    auto save_result = storage->SetPeerAddresses({
+        wal::PeerAddress{1, "127.0.0.1:19101"},
+        wal::PeerAddress{2, "127.0.0.1:19102"},
+    });
+    REQUIRE(save_result.has_value());
+    storage.reset();
+
+    auto reopened_result = wal::WALStorage::Open(wal_config);
+    REQUIRE(reopened_result.has_value());
+    auto peers = (*reopened_result)->GetPeerAddresses();
+
+    REQUIRE(peers.size() == 2);
+    CHECK(peers[0].id == 1);
+    CHECK(peers[0].addr == "127.0.0.1:19101");
+    CHECK(peers[1].id == 2);
+    CHECK(peers[1].addr == "127.0.0.1:19102");
+}
+
+TEST_CASE("raftor_restores_transport_peers_from_wal_address_book") {
+    const auto pid = static_cast<uint64_t>(::getpid());
+    auto temp_dir = std::filesystem::temp_directory_path() /
+        ("raftpp_peer_address_transport_" + std::to_string(pid));
+    std::error_code ec;
+    std::filesystem::remove_all(temp_dir, ec);
+    std::filesystem::create_directories(temp_dir);
+    TempDirCleanup cleanup(temp_dir);
+
+    wal::WALConfig wal_config;
+    wal_config.dir = temp_dir / "wal";
+    auto storage_result = wal::WALStorage::Open(wal_config);
+    REQUIRE(storage_result.has_value());
+    auto storage = std::move(*storage_result);
+
+    ConfState conf_state = capnp_util::make<msg::ConfState>();
+    auto conf_builder = capnp_util::builder<msg::ConfState>(conf_state);
+    auto voters = conf_builder.initVoters(2);
+    voters.set(0, 1);
+    voters.set(1, 2);
+    storage->SetConfState(conf_state);
+    REQUIRE(storage
+                ->SetPeerAddresses({
+                    wal::PeerAddress{1, "127.0.0.1:19201"},
+                    wal::PeerAddress{2, "127.0.0.1:19202"},
+                })
+                .has_value());
+
+    RaftorConfig config;
+    config.node_id = 1;
+    config.listen_addr = "127.0.0.1:19201";
+    config.data_dir = temp_dir;
+    config.initial_peers = {
+        PeerConfig{1, "ignored-self"},
+        PeerConfig{2, "ignored-peer"},
+    };
+
+    auto transport = std::make_unique<RecordingTransport>();
+    auto* recording_transport = transport.get();
+    auto state_machine = std::make_unique<MockStateMachine>();
+
+    auto raftor_result =
+        Raftor::Create(config, std::move(state_machine), std::move(storage), std::move(transport));
+    REQUIRE(raftor_result.has_value());
+
+    auto peers = recording_transport->Peers();
+    REQUIRE(peers.size() == 1);
+    CHECK(peers[0].id == 2);
+    CHECK(peers[0].addr == "127.0.0.1:19202");
+}
+
+TEST_CASE("update_node_address_commits_to_wal_metadata") {
+    const auto pid = static_cast<uint64_t>(::getpid());
+    auto temp_dir = std::filesystem::temp_directory_path() /
+        ("raftpp_peer_address_update_" + std::to_string(pid));
+    std::error_code ec;
+    std::filesystem::remove_all(temp_dir, ec);
+    std::filesystem::create_directories(temp_dir);
+    TempDirCleanup cleanup(temp_dir);
+
+    wal::WALConfig wal_config;
+    wal_config.dir = temp_dir / "wal";
+    auto storage_result = wal::WALStorage::Open(wal_config);
+    REQUIRE(storage_result.has_value());
+    auto storage = std::move(*storage_result);
+
+    ConfState conf_state = capnp_util::make<msg::ConfState>();
+    auto conf_builder = capnp_util::builder<msg::ConfState>(conf_state);
+    auto voters = conf_builder.initVoters(1);
+    voters.set(0, 1);
+    storage->SetConfState(conf_state);
+    REQUIRE(storage->SetPeerAddresses({wal::PeerAddress{1, "127.0.0.1:19301"}}).has_value());
+
+    RaftorConfig config;
+    config.node_id = 1;
+    config.listen_addr = "127.0.0.1:19301";
+    config.data_dir = temp_dir;
+    config.election_tick = 5;
+    config.heartbeat_tick = 1;
+    config.tick_interval = 1ms;
+
+    auto transport = std::make_unique<RecordingTransport>();
+    auto state_machine = std::make_unique<MockStateMachine>();
+    auto* mock_state_machine = state_machine.get();
+
+    auto raftor_result =
+        Raftor::Create(config, std::move(state_machine), storage, std::move(transport));
+    REQUIRE(raftor_result.has_value());
+    auto raftor = std::move(*raftor_result);
+    REQUIRE(raftor->Start());
+    REQUIRE(raftor->Campaign());
+
+    auto deadline = std::chrono::steady_clock::now() + 1s;
+    while (!raftor->IsLeader() && std::chrono::steady_clock::now() < deadline) {
+        raftor->Poll(1ms);
+    }
+    REQUIRE(raftor->IsLeader());
+
+    REQUIRE(raftor->UpdateNodeAddress(1, "127.0.0.1:19302"));
+    deadline = std::chrono::steady_clock::now() + 1s;
+    while (std::chrono::steady_clock::now() < deadline) {
+        raftor->Poll(1ms);
+        auto peers = storage->GetPeerAddresses();
+        if (!peers.empty() && peers[0].addr == "127.0.0.1:19302") {
+            break;
+        }
+    }
+
+    auto peers = storage->GetPeerAddresses();
+    REQUIRE(peers.size() == 1);
+    CHECK(peers[0].id == 1);
+    CHECK(peers[0].addr == "127.0.0.1:19302");
+    CHECK(mock_state_machine->GetAppliedEntries().empty());
 }
 
 TEST_CASE("local_snapshot_restored_on_restart") {

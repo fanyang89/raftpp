@@ -1,12 +1,14 @@
 #include "ready_processor.h"
 
 #include <optional>
+#include <string_view>
 #include <utility>
 
 #include <nonstd/expected.hpp>
 #include <nonstd/span.hpp>
 #include <opentelemetry/trace/span.h>
 
+#include "metadata_change.h"
 #include "raftpp.capnp.h"
 #include "raftpp/core/capnp_util.h"
 #include "raftpp/core/raw_node.h"
@@ -36,6 +38,12 @@ Result<void> VerifyEntryChecksum(
         return {};
     }
 
+    auto context = entry_reader.getContext();
+    std::string_view context_view(reinterpret_cast<const char*>(context.begin()), context.size());
+    if (IsMetadataProposalContext(context_view)) {
+        return {};
+    }
+
     const uint32_t expected_checksum = entry_reader.getChecksum();
     const uint32_t actual_checksum = ComputeEntryChecksum(entry_reader);
     if (actual_checksum == expected_checksum) {
@@ -48,7 +56,6 @@ Result<void> VerifyEntryChecksum(
         entry_reader.getIndex(), expected_checksum, actual_checksum
     );
 
-    auto context = entry_reader.getContext();
     if (context.size() > 0) {
         std::string ctx_str(reinterpret_cast<const char*>(context.begin()), context.size());
         proposal_tracker.Fail(ctx_str, RaftError(RaftErrorCode::ChecksumMismatch));
@@ -61,14 +68,15 @@ Result<void> VerifyEntryChecksum(
 
 ReadyProcessor::ReadyProcessor(
     RawNode& raw_node, std::shared_ptr<wal::WALStorage> storage, StateMachine& state_machine,
-    rpc::Transport& transport, ProposalTracker& proposal_tracker, bool checksum_enabled,
-    uint64_t initial_applied_index
+    rpc::Transport& transport, ProposalTracker& proposal_tracker, uint64_t node_id,
+    bool checksum_enabled, uint64_t initial_applied_index
 )
     : raw_node_(raw_node),
       storage_(std::move(storage)),
       state_machine_(state_machine),
       transport_(transport),
       proposal_tracker_(proposal_tracker),
+      node_id_(node_id),
       applied_index_(initial_applied_index),
       checksum_enabled_(checksum_enabled) {}
 
@@ -364,6 +372,7 @@ Result<void> ReadyProcessor::ApplyEntry(const Entry& entry) {
         if (!result) {
             return result.error();
         }
+        storage_->SetConfState(*result);
 
         // Update transport peers based on conf change
         auto cc_reader = capnp_util::reader<msg::ConfChangeV2>(cc);
@@ -381,11 +390,22 @@ Result<void> ReadyProcessor::ApplyEntry(const Entry& entry) {
                 if (addr.empty()) {
                     RAFTPP_LOG_INFO("Node {} added to configuration", change.getNodeId());
                 } else {
+                    if (auto peer_result = storage_->UpsertPeerAddress(change.getNodeId(), addr);
+                        !peer_result) {
+                        return peer_result.error();
+                    }
+                    if (change.getNodeId() != node_id_) {
+                        transport_.AddPeer(change.getNodeId(), addr);
+                    }
                     RAFTPP_LOG_INFO(
                         "Node {} added to configuration (address: {})", change.getNodeId(), addr
                     );
                 }
             } else if (change.getChangeType() == ConfChangeType::REMOVE_NODE) {
+                if (auto peer_result = storage_->RemovePeerAddress(change.getNodeId());
+                    !peer_result) {
+                    return peer_result.error();
+                }
                 transport_.RemovePeer(change.getNodeId());
                 RAFTPP_LOG_INFO("Node {} removed from configuration", change.getNodeId());
             }
@@ -404,6 +424,38 @@ Result<void> ReadyProcessor::ApplyEntry(const Entry& entry) {
     // Handle normal entries
     auto data = entry_reader.getData();
     auto context = entry_reader.getContext();
+    std::string_view context_view(reinterpret_cast<const char*>(context.begin()), context.size());
+    if (IsMetadataProposalContext(context_view)) {
+        std::string_view data_view(reinterpret_cast<const char*>(data.begin()), data.size());
+        auto change = ParseMetadataChange(data_view);
+        if (!change) {
+            if (context.size() > 0) {
+                std::string ctx_str(reinterpret_cast<const char*>(context.begin()), context.size());
+                proposal_tracker_.Fail(ctx_str, RaftError(RaftErrorCode::ConfChangeParseError));
+            }
+            return nonstd::make_unexpected(RaftError(RaftErrorCode::ConfChangeParseError));
+        }
+
+        if (change->type == MetadataChangeType::UpsertPeerAddress) {
+            if (auto peer_result = storage_->UpsertPeerAddress(change->node_id, change->addr);
+                !peer_result) {
+                return peer_result.error();
+            }
+            if (change->node_id == node_id_ || change->addr.empty()) {
+                transport_.RemovePeer(change->node_id);
+            } else {
+                transport_.AddPeer(change->node_id, change->addr);
+            }
+            RAFTPP_LOG_INFO("Node {} address updated (address: {})", change->node_id, change->addr);
+        }
+
+        if (context.size() > 0) {
+            std::string ctx_str(reinterpret_cast<const char*>(context.begin()), context.size());
+            proposal_tracker_.Complete(ctx_str, "metadata change applied");
+        }
+        return {};
+    }
+
     if (data.size() == 0 && context.size() == 0) {
         // Empty entry after leader election - no callback to complete
         return {};

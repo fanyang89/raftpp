@@ -169,6 +169,26 @@ void WALStorage::SetConfState(const ConfState& conf_state) {
     }
 }
 
+std::vector<PeerAddress> WALStorage::GetPeerAddresses() const {
+    std::lock_guard lock(mutex_);
+    return wal_->GetPeerAddresses();
+}
+
+Result<void> WALStorage::SetPeerAddresses(std::vector<PeerAddress> peer_addresses) {
+    std::lock_guard lock(mutex_);
+    return wal_->SavePeerAddresses(std::move(peer_addresses));
+}
+
+Result<void> WALStorage::UpsertPeerAddress(uint64_t id, std::string addr) {
+    std::lock_guard lock(mutex_);
+    return wal_->UpsertPeerAddress(id, std::move(addr));
+}
+
+Result<void> WALStorage::RemovePeerAddress(uint64_t id) {
+    std::lock_guard lock(mutex_);
+    return wal_->RemovePeerAddress(id);
+}
+
 Result<void> WALStorage::Sync() {
     std::lock_guard lock(mutex_);
 

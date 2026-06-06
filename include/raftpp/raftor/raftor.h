@@ -214,6 +214,15 @@ class Raftor {
     /// @return void on proposal submission, or error
     [[nodiscard]] virtual Result<void> RemoveNode(uint64_t id) = 0;
 
+    /// Propose updating a node's transport address.
+    ///
+    /// The update is committed through Raft and applied after the entry is committed.
+    ///
+    /// @param id The node ID whose address should be updated
+    /// @param addr The new network address
+    /// @return void on proposal submission, or error
+    [[nodiscard]] virtual Result<void> UpdateNodeAddress(uint64_t id, const std::string& addr) = 0;
+
     /// Transfer leadership to another node
     ///
     /// This is a best-effort operation. Leadership transfer may fail

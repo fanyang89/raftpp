@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <string>
 #include <vector>
 
 #include "raftpp/core/error.h"
@@ -9,10 +10,16 @@
 
 namespace raftpp::raftor::wal {
 
+struct PeerAddress {
+    uint64_t id = 0;
+    std::string addr;
+};
+
 // Metadata stored in the metadata file
 struct WALMetadata {
     HardState hard_state;
     ConfState conf_state;
+    std::vector<PeerAddress> peer_addresses;
     uint64_t first_index = 1;
     uint64_t snapshot_index = 0;
     uint64_t snapshot_term = 0;

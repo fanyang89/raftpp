@@ -69,6 +69,18 @@ class WAL {
     // Get the current conf state
     [[nodiscard]] const ConfState& GetConfState() const;
 
+    // Get persisted peer addresses used by Raftor transport discovery.
+    [[nodiscard]] std::vector<PeerAddress> GetPeerAddresses() const;
+
+    // Save the full peer address book.
+    [[nodiscard]] Result<void> SavePeerAddresses(std::vector<PeerAddress> peer_addresses);
+
+    // Upsert one peer address in the persisted address book.
+    [[nodiscard]] Result<void> UpsertPeerAddress(uint64_t id, std::string addr);
+
+    // Remove one peer address from the persisted address book.
+    [[nodiscard]] Result<void> RemovePeerAddress(uint64_t id);
+
     // Get the index of the latest applied snapshot, or 0 if none exists.
     [[nodiscard]] uint64_t SnapshotIndex() const;
 
@@ -113,6 +125,7 @@ class WAL {
         WALMetadata meta;
         meta.hard_state = CloneHardState(hard_state_);
         meta.conf_state = CloneConfState(conf_state_);
+        meta.peer_addresses = peer_addresses_;
         meta.first_index = first_index_;
         meta.snapshot_index = snapshot_index_;
         meta.snapshot_term = snapshot_term_;
@@ -147,6 +160,7 @@ class WAL {
     // Current state
     HardState hard_state_;
     ConfState conf_state_;
+    std::vector<PeerAddress> peer_addresses_;
     uint64_t first_index_ = 1;
     uint64_t snapshot_index_ = 0;
     uint64_t snapshot_term_ = 0;

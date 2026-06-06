@@ -11,6 +11,7 @@
 #include "raftpp/core/error.h"
 #include "raftpp/core/storage.h"
 #include "raftpp/core/types.h"
+#include "raftpp/raftor/wal/metadata_store.h"
 #include "raftpp/raftor/wal/wal_config.h"
 
 namespace raftpp::raftor::wal {
@@ -57,6 +58,18 @@ class WALStorage final : public Storage {
 
     // Set the conf state
     void SetConfState(const ConfState& conf_state);
+
+    // Get persisted peer addresses used by Raftor transport discovery.
+    [[nodiscard]] std::vector<PeerAddress> GetPeerAddresses() const;
+
+    // Save the full peer address book.
+    [[nodiscard]] Result<void> SetPeerAddresses(std::vector<PeerAddress> peer_addresses);
+
+    // Upsert one peer address in the persisted address book.
+    [[nodiscard]] Result<void> UpsertPeerAddress(uint64_t id, std::string addr);
+
+    // Remove one peer address from the persisted address book.
+    [[nodiscard]] Result<void> RemovePeerAddress(uint64_t id);
 
     // Sync all pending writes to disk
     [[nodiscard]] Result<void> Sync();

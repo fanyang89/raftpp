@@ -177,10 +177,16 @@ std::vector<uint8_t> MetadataStore::Serialize(const WALMetadata& meta) const {
         conf_state_bytes = capnp_util::toBytes(meta.conf_state);
     }
 
+    size_t peer_addresses_size = sizeof(uint32_t);
+    for (const auto& peer : meta.peer_addresses) {
+        peer_addresses_size += sizeof(uint64_t) + sizeof(uint32_t) + peer.addr.size();
+    }
+
     // Calculate total size:
-    // MetadataHeader (16) + MetadataContent (24) + hard_state_len (4) + hard_state + conf_state_len (4) + conf_state
+    // MetadataHeader (16) + MetadataContent (24) + hard_state_len (4) + hard_state +
+    // conf_state_len (4) + conf_state + peer_count (4) + repeated peer address records.
     size_t total_size = sizeof(MetadataHeader) + sizeof(MetadataContent) + 4 +
-        hard_state_bytes.size() + 4 + conf_state_bytes.size();
+        hard_state_bytes.size() + 4 + conf_state_bytes.size() + peer_addresses_size;
 
     std::vector<uint8_t> data(total_size, 0);
     size_t offset = 0;
@@ -213,6 +219,22 @@ std::vector<uint8_t> MetadataStore::Serialize(const WALMetadata& meta) const {
     if (cs_len > 0) {
         std::memcpy(data.data() + offset, conf_state_bytes.data(), cs_len);
         offset += cs_len;
+    }
+
+    uint32_t peer_count = static_cast<uint32_t>(meta.peer_addresses.size());
+    std::memcpy(data.data() + offset, &peer_count, sizeof(peer_count));
+    offset += sizeof(peer_count);
+    for (const auto& peer : meta.peer_addresses) {
+        uint64_t peer_id = peer.id;
+        uint32_t addr_len = static_cast<uint32_t>(peer.addr.size());
+        std::memcpy(data.data() + offset, &peer_id, sizeof(peer_id));
+        offset += sizeof(peer_id);
+        std::memcpy(data.data() + offset, &addr_len, sizeof(addr_len));
+        offset += sizeof(addr_len);
+        if (addr_len > 0) {
+            std::memcpy(data.data() + offset, peer.addr.data(), addr_len);
+            offset += addr_len;
+        }
     }
 
     // Compute CRC over everything after the CRC field
@@ -313,6 +335,37 @@ Result<WALMetadata> MetadataStore::Deserialize(const std::vector<uint8_t>& data)
         }
     } catch (...) {
         return RaftError(StorageErrorCode::ConfStateParseError);
+    }
+
+    if (offset < data.size()) {
+        uint32_t peer_count;
+        if (offset + sizeof(peer_count) > data.size()) {
+            return RaftError(StorageErrorCode::MetadataFileTooSmall);
+        }
+        std::memcpy(&peer_count, data.data() + offset, sizeof(peer_count));
+        offset += sizeof(peer_count);
+
+        meta.peer_addresses.reserve(peer_count);
+        for (uint32_t i = 0; i < peer_count; ++i) {
+            uint64_t peer_id;
+            uint32_t addr_len;
+            if (offset + sizeof(peer_id) + sizeof(addr_len) > data.size()) {
+                return RaftError(StorageErrorCode::MetadataFileTooSmall);
+            }
+            std::memcpy(&peer_id, data.data() + offset, sizeof(peer_id));
+            offset += sizeof(peer_id);
+            std::memcpy(&addr_len, data.data() + offset, sizeof(addr_len));
+            offset += sizeof(addr_len);
+            if (offset + addr_len > data.size()) {
+                return RaftError(StorageErrorCode::MetadataFileTooSmall);
+            }
+            std::string addr;
+            if (addr_len > 0) {
+                addr.assign(reinterpret_cast<const char*>(data.data() + offset), addr_len);
+                offset += addr_len;
+            }
+            meta.peer_addresses.push_back(PeerAddress{peer_id, std::move(addr)});
+        }
     }
 
     if (!meta.hard_state) {

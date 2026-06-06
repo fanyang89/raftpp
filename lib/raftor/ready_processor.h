@@ -48,8 +48,8 @@ class ReadyProcessor {
   public:
     ReadyProcessor(
         RawNode& raw_node, std::shared_ptr<wal::WALStorage> storage, StateMachine& state_machine,
-        rpc::Transport& transport, ProposalTracker& proposal_tracker, bool checksum_enabled,
-        uint64_t initial_applied_index = 0
+        rpc::Transport& transport, ProposalTracker& proposal_tracker, uint64_t node_id,
+        bool checksum_enabled, uint64_t initial_applied_index = 0
     );
 
     /// Process one Ready cycle
@@ -105,6 +105,7 @@ class ReadyProcessor {
     StateMachine& state_machine_;
     rpc::Transport& transport_;
     ProposalTracker& proposal_tracker_;
+    uint64_t node_id_ = 0;
 
     // Track leadership changes
     StateRole prev_role_ = StateRole::Follower;
