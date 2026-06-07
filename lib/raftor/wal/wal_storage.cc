@@ -119,7 +119,7 @@ Result<Snapshot> WALStorage::GetSnapshot(uint64_t request_index, uint64_t /*to*/
 Result<void> WALStorage::SetHardState(HardState&& hs) {
     std::lock_guard lock(mutex_);
 
-    auto result = wal_->SaveHardState(hs);
+    auto result = wal_->SaveHardState(std::move(hs));
     if (!result) {
         RAFTPP_LOG_ERROR("failed to save hard state: {}", result.error().ToString());
         return result.error();

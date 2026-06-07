@@ -58,7 +58,8 @@ Network Network::CreateWithConfig(
             for (size_t j = 0; j < peer_ids.size(); ++j) {
                 voters.set(j, peer_ids[j]);
             }
-            std::ignore = storage->SetConfState(conf_state);
+            const auto result = storage->SetConfState(conf_state);
+            assert(result);
 
             Config node_config = config;
             node_config.id = id;
