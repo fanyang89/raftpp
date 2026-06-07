@@ -4,8 +4,11 @@
 
 #include <atomic>
 #include <cerrno>
+#include <cstddef>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <limits>
 #include <random>
 #include <string>
@@ -88,6 +91,25 @@ void WriteBytes(const std::filesystem::path& path, const std::vector<uint8_t>& d
         reinterpret_cast<const char*>(data.data()), static_cast<std::streamsize>(data.size())
     );
     REQUIRE(out.good());
+}
+
+std::vector<uint8_t> ReadBytes(const std::filesystem::path& path) {
+    std::ifstream in(path, std::ios::binary);
+    REQUIRE(in.is_open());
+    return std::vector<uint8_t>(
+        std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()
+    );
+}
+
+void RefreshMetadataCrc(std::vector<uint8_t>& data) {
+    REQUIRE(data.size() >= sizeof(MetadataHeader));
+    MetadataHeader header;
+    std::memcpy(&header, data.data(), sizeof(header));
+    const size_t crc_offset = offsetof(MetadataHeader, crc) + sizeof(header.crc);
+    CRC32C crc;
+    crc.Update(data.data() + crc_offset, data.size() - crc_offset);
+    header.crc = crc.Finalize();
+    std::memcpy(data.data(), &header, sizeof(header));
 }
 
 class FailingSnapshotEnv : public WALEnv {
@@ -2164,6 +2186,31 @@ TEST_SUITE("wal") {
         CHECK(load_result->snapshot_term == 5);
     }
 
+    TEST_CASE("metadata_store: save and load peer address book") {
+        TempDir temp_dir;
+
+        MetadataStore store(temp_dir.path());
+        CHECK(store.Initialize());
+
+        WALMetadata meta;
+        meta.hard_state = capnp_util::make<msg::HardState>();
+        meta.conf_state = capnp_util::make<msg::ConfState>();
+        meta.peer_addresses = {
+            PeerAddress{1, "127.0.0.1:19101"},
+            PeerAddress{2, "127.0.0.1:19102"},
+        };
+
+        CHECK(store.Save(meta));
+
+        auto load_result = store.Load();
+        REQUIRE(load_result.has_value());
+        REQUIRE(load_result->peer_addresses.size() == 2);
+        CHECK(load_result->peer_addresses[0].id == 1);
+        CHECK(load_result->peer_addresses[0].addr == "127.0.0.1:19101");
+        CHECK(load_result->peer_addresses[1].id == 2);
+        CHECK(load_result->peer_addresses[1].addr == "127.0.0.1:19102");
+    }
+
     TEST_CASE("metadata_store: load after initialize returns default") {
         TempDir temp_dir;
 
@@ -2179,6 +2226,47 @@ TEST_SUITE("wal") {
         REQUIRE(load_result.has_value());
         CHECK(load_result->first_index == 1);
         CHECK(load_result->snapshot_index == 0);
+    }
+
+    TEST_CASE("metadata_store: corrupt peer address book returns parse error") {
+        TempDir temp_dir;
+
+        MetadataStore store(temp_dir.path());
+        CHECK(store.Initialize());
+
+        WALMetadata meta;
+        meta.hard_state = capnp_util::make<msg::HardState>();
+        meta.conf_state = capnp_util::make<msg::ConfState>();
+        meta.peer_addresses = {PeerAddress{1, "127.0.0.1:19101"}};
+        REQUIRE(store.Save(meta));
+
+        auto data = ReadBytes(temp_dir.path() / "metadata");
+        size_t offset = sizeof(MetadataHeader) + sizeof(MetadataContent);
+
+        uint32_t len = 0;
+        REQUIRE(data.size() - offset >= sizeof(len));
+        std::memcpy(&len, data.data() + offset, sizeof(len));
+        offset += sizeof(len) + len;
+
+        REQUIRE(data.size() - offset >= sizeof(len));
+        std::memcpy(&len, data.data() + offset, sizeof(len));
+        offset += sizeof(len) + len;
+
+        REQUIRE(data.size() - offset >= sizeof(len));
+        uint32_t invalid_book_len = 1;
+        std::memcpy(data.data() + offset, &invalid_book_len, sizeof(invalid_book_len));
+        offset += sizeof(invalid_book_len);
+        data.resize(offset + invalid_book_len);
+        data[offset] = 0xff;
+        RefreshMetadataCrc(data);
+        WriteBytes(temp_dir.path() / "metadata", data);
+
+        auto load_result = store.Load();
+        REQUIRE(!load_result.has_value());
+        CHECK(load_result.error().Is(StorageErrorCode::PeerAddressBookParseError));
+        CHECK(
+            load_result.error().ToString().find("PeerAddressBookParseError") != std::string::npos
+        );
     }
 
     TEST_CASE("metadata_store: size bytes after save") {
@@ -2213,6 +2301,95 @@ TEST_SUITE("wal") {
 
         uint64_t final_size = store.SizeBytes();
         CHECK(final_size > 0);
+    }
+
+    TEST_CASE("wal: upsert updates existing peer address without duplicate") {
+        TempDir temp_dir;
+
+        WALConfig config;
+        config.dir = temp_dir.path();
+        auto wal_result = WAL::Open(config);
+        REQUIRE(wal_result.has_value());
+        auto wal = std::move(*wal_result);
+
+        REQUIRE(wal->UpsertPeerAddress(1, "127.0.0.1:19101"));
+        REQUIRE(wal->UpsertPeerAddress(1, "127.0.0.1:19102"));
+
+        auto peers = wal->GetPeerAddresses();
+        REQUIRE(peers.size() == 1);
+        CHECK(peers[0].id == 1);
+        CHECK(peers[0].addr == "127.0.0.1:19102");
+    }
+
+    TEST_CASE("wal: remove peer address persists across reopen") {
+        TempDir temp_dir;
+
+        WALConfig config;
+        config.dir = temp_dir.path();
+        {
+            auto wal_result = WAL::Open(config);
+            REQUIRE(wal_result.has_value());
+            auto wal = std::move(*wal_result);
+
+            REQUIRE(wal->SavePeerAddresses({
+                PeerAddress{1, "127.0.0.1:19101"},
+                PeerAddress{2, "127.0.0.1:19102"},
+            }));
+            REQUIRE(wal->RemovePeerAddress(1));
+        }
+
+        auto reopened_result = WAL::Open(config);
+        REQUIRE(reopened_result.has_value());
+        auto peers = (*reopened_result)->GetPeerAddresses();
+        REQUIRE(peers.size() == 1);
+        CHECK(peers[0].id == 2);
+        CHECK(peers[0].addr == "127.0.0.1:19102");
+    }
+
+    TEST_CASE("wal: apply snapshot preserves peer address book") {
+        TempDir temp_dir;
+
+        WALConfig config;
+        config.dir = temp_dir.path();
+        {
+            auto wal_result = WAL::Open(config);
+            REQUIRE(wal_result.has_value());
+            auto wal = std::move(*wal_result);
+
+            REQUIRE(wal->SavePeerAddresses({
+                PeerAddress{1, "127.0.0.1:19101"},
+                PeerAddress{2, "127.0.0.1:19102"},
+            }));
+            REQUIRE(wal->ApplySnapshot(MakeWalSnapshot(7, 3, {1, 2}, "snapshot")));
+        }
+
+        auto reopened_result = WAL::Open(config);
+        REQUIRE(reopened_result.has_value());
+        auto peers = (*reopened_result)->GetPeerAddresses();
+        REQUIRE(peers.size() == 2);
+        CHECK(peers[0].id == 1);
+        CHECK(peers[0].addr == "127.0.0.1:19101");
+        CHECK(peers[1].id == 2);
+        CHECK(peers[1].addr == "127.0.0.1:19102");
+    }
+
+    TEST_CASE("wal_storage: upsert and remove peer addresses") {
+        TempDir temp_dir;
+
+        WALConfig config;
+        config.dir = temp_dir.path();
+        auto storage_result = WALStorage::Open(config);
+        REQUIRE(storage_result.has_value());
+        auto storage = std::move(*storage_result);
+
+        REQUIRE(storage->UpsertPeerAddress(1, "127.0.0.1:19101"));
+        REQUIRE(storage->UpsertPeerAddress(2, "127.0.0.1:19102"));
+        REQUIRE(storage->RemovePeerAddress(1));
+
+        auto peers = storage->GetPeerAddresses();
+        REQUIRE(peers.size() == 1);
+        CHECK(peers[0].id == 2);
+        CHECK(peers[0].addr == "127.0.0.1:19102");
     }
 
 }  // TEST_SUITE

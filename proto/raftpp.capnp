@@ -188,6 +188,23 @@ struct ConfChangeV2 {
     context @2 :Data;
 }
 
+struct PeerAddress {
+    nodeId @0 :UInt64;
+    addr @1 :Text;
+}
+
+struct PeerAddressBook {
+    peers @0 :List(PeerAddress);
+}
+
+struct RaftorMetadataChange {
+    union {
+        upsertPeerAddress @0 :PeerAddress;
+        # Reserved to keep this union extensible; not produced by current code.
+        removePeerAddress @1 :UInt64;
+    }
+}
+
 enum CompressionType {
     compressionNone @0;
     compressionLz4 @1;

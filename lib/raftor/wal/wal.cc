@@ -261,6 +261,7 @@ Result<void> WAL::Recover() {
 
     hard_state_ = std::move(meta->hard_state);
     conf_state_ = std::move(meta->conf_state);
+    peer_addresses_ = std::move(meta->peer_addresses);
     first_index_ = meta->first_index;
     snapshot_index_ = meta->snapshot_index;
     snapshot_term_ = meta->snapshot_term;
@@ -799,6 +800,48 @@ const ConfState& WAL::GetConfState() const {
     return conf_state_;
 }
 
+std::vector<PeerAddress> WAL::GetPeerAddresses() const {
+    std::shared_lock lock(mutex_);
+    return peer_addresses_;
+}
+
+Result<void> WAL::SavePeerAddresses(std::vector<PeerAddress> peer_addresses) {
+    std::unique_lock lock(mutex_);
+
+    peer_addresses_ = std::move(peer_addresses);
+    auto meta = CreateMetadata();
+    return metadata_store_->Save(meta);
+}
+
+Result<void> WAL::UpsertPeerAddress(uint64_t id, std::string addr) {
+    std::unique_lock lock(mutex_);
+
+    for (auto& peer : peer_addresses_) {
+        if (peer.id == id) {
+            peer.addr = std::move(addr);
+            auto meta = CreateMetadata();
+            return metadata_store_->Save(meta);
+        }
+    }
+    peer_addresses_.push_back(PeerAddress{id, std::move(addr)});
+    auto meta = CreateMetadata();
+    return metadata_store_->Save(meta);
+}
+
+Result<void> WAL::RemovePeerAddress(uint64_t id) {
+    std::unique_lock lock(mutex_);
+
+    peer_addresses_.erase(
+        std::remove_if(
+            peer_addresses_.begin(), peer_addresses_.end(),
+            [id](const PeerAddress& peer) { return peer.id == id; }
+        ),
+        peer_addresses_.end()
+    );
+    auto meta = CreateMetadata();
+    return metadata_store_->Save(meta);
+}
+
 uint64_t WAL::SnapshotIndex() const {
     std::shared_lock lock(mutex_);
     return snapshot_index_;
@@ -945,6 +988,7 @@ Result<void> WAL::ApplySnapshot(const Snapshot& snapshot) {
     WALMetadata wal_meta;
     wal_meta.hard_state = CloneHardState(new_hard_state);
     wal_meta.conf_state = CloneConfState(new_conf_state);
+    wal_meta.peer_addresses = peer_addresses_;
     wal_meta.first_index = new_snapshot_index + 1;
     wal_meta.snapshot_index = new_snapshot_index;
     wal_meta.snapshot_term = new_snapshot_term;

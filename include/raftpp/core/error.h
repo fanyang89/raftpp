@@ -36,6 +36,8 @@ enum class StorageErrorCode {
     HardStateParseError,
     /// Failed to parse ConfState from metadata
     ConfStateParseError,
+    /// Failed to parse PeerAddressBook from metadata
+    PeerAddressBookParseError,
 
     // Segment errors
     /// Current active segment not found in segment manager
@@ -88,6 +90,8 @@ constexpr std::string_view format_as(StorageErrorCode ec) {
             return "HardStateParseError";
         case StorageErrorCode::ConfStateParseError:
             return "ConfStateParseError";
+        case StorageErrorCode::PeerAddressBookParseError:
+            return "PeerAddressBookParseError";
         case StorageErrorCode::CurrentSegmentNotFound:
             return "CurrentSegmentNotFound";
         case StorageErrorCode::SegmentNotOpen:

@@ -177,10 +177,23 @@ std::vector<uint8_t> MetadataStore::Serialize(const WALMetadata& meta) const {
         conf_state_bytes = capnp_util::toBytes(meta.conf_state);
     }
 
+    std::vector<uint8_t> peer_address_book_bytes;
+    if (!meta.peer_addresses.empty()) {
+        auto peer_address_book = capnp_util::make<msg::PeerAddressBook>();
+        auto book_builder = capnp_util::builder<msg::PeerAddressBook>(peer_address_book);
+        auto peers = book_builder.initPeers(meta.peer_addresses.size());
+        for (size_t i = 0; i < meta.peer_addresses.size(); ++i) {
+            peers[i].setNodeId(meta.peer_addresses[i].id);
+            peers[i].setAddr(meta.peer_addresses[i].addr);
+        }
+        peer_address_book_bytes = capnp_util::toBytes(peer_address_book);
+    }
+
     // Calculate total size:
-    // MetadataHeader (16) + MetadataContent (24) + hard_state_len (4) + hard_state + conf_state_len (4) + conf_state
+    // MetadataHeader (16) + MetadataContent (24) + hard_state_len (4) + hard_state +
+    // conf_state_len (4) + conf_state + peer_address_book_len (4) + peer address book.
     size_t total_size = sizeof(MetadataHeader) + sizeof(MetadataContent) + 4 +
-        hard_state_bytes.size() + 4 + conf_state_bytes.size();
+        hard_state_bytes.size() + 4 + conf_state_bytes.size() + 4 + peer_address_book_bytes.size();
 
     std::vector<uint8_t> data(total_size, 0);
     size_t offset = 0;
@@ -213,6 +226,14 @@ std::vector<uint8_t> MetadataStore::Serialize(const WALMetadata& meta) const {
     if (cs_len > 0) {
         std::memcpy(data.data() + offset, conf_state_bytes.data(), cs_len);
         offset += cs_len;
+    }
+
+    uint32_t peer_address_book_len = static_cast<uint32_t>(peer_address_book_bytes.size());
+    std::memcpy(data.data() + offset, &peer_address_book_len, sizeof(peer_address_book_len));
+    offset += sizeof(peer_address_book_len);
+    if (peer_address_book_len > 0) {
+        std::memcpy(data.data() + offset, peer_address_book_bytes.data(), peer_address_book_len);
+        offset += peer_address_book_len;
     }
 
     // Compute CRC over everything after the CRC field
@@ -313,6 +334,43 @@ Result<WALMetadata> MetadataStore::Deserialize(const std::vector<uint8_t>& data)
         }
     } catch (...) {
         return RaftError(StorageErrorCode::ConfStateParseError);
+    }
+
+    if (offset < data.size()) {
+        uint32_t peer_address_book_len;
+        if (data.size() - offset < sizeof(peer_address_book_len)) {
+            return RaftError(StorageErrorCode::MetadataFileTooSmall);
+        }
+        std::memcpy(&peer_address_book_len, data.data() + offset, sizeof(peer_address_book_len));
+        offset += sizeof(peer_address_book_len);
+
+        if (data.size() - offset < peer_address_book_len) {
+            return RaftError(StorageErrorCode::MetadataFileTooSmall);
+        }
+
+        try {
+            if (peer_address_book_len > 0) {
+                auto peer_address_book = capnp_util::fromBytes<msg::PeerAddressBook>(
+                    nonstd::span<const uint8_t>(data.data() + offset, peer_address_book_len)
+                );
+                auto peers = capnp_util::reader<msg::PeerAddressBook>(peer_address_book).getPeers();
+                meta.peer_addresses.reserve(peers.size());
+                for (auto peer : peers) {
+                    auto addr = peer.getAddr();
+                    meta.peer_addresses.push_back(PeerAddress{
+                        peer.getNodeId(),
+                        std::string(addr.cStr(), addr.size()),
+                    });
+                }
+                offset += peer_address_book_len;
+            }
+        } catch (...) {
+            return RaftError(StorageErrorCode::PeerAddressBookParseError);
+        }
+
+        if (offset != data.size()) {
+            return RaftError(StorageErrorCode::MetadataFileTooSmall);
+        }
     }
 
     if (!meta.hard_state) {

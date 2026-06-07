@@ -20,6 +20,7 @@
 #include <nonstd/span.hpp>
 #include <opentelemetry/trace/span.h>
 
+#include "metadata_change.h"
 #include "raftpp.capnp.h"
 #include "raftpp/core/capnp_util.h"
 #include "raftpp/core/raft_config.h"
@@ -44,6 +45,23 @@ namespace raftpp::raftor {
 namespace {
 constexpr auto kLogSizeCheckMinInterval = std::chrono::seconds{1};
 constexpr auto kSnapshotRetryMinInterval = std::chrono::seconds{1};
+
+template <typename ListReader>
+bool ContainsNodeId(ListReader nodes, uint64_t node_id) {
+    for (auto id : nodes) {
+        if (id == node_id) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool ConfStateContainsNode(msg::ConfState::Reader conf_state, uint64_t node_id) {
+    return ContainsNodeId(conf_state.getVoters(), node_id) ||
+        ContainsNodeId(conf_state.getLearners(), node_id) ||
+        ContainsNodeId(conf_state.getVotersOutgoing(), node_id) ||
+        ContainsNodeId(conf_state.getLearnersNext(), node_id);
+}
 
 class TempFileSnapshotWriter final : public SnapshotWriter {
   public:
@@ -196,6 +214,7 @@ class RaftorImpl : public Raftor {
     // Cluster management
     Result<void> AddNode(uint64_t id, const std::string& addr) override;
     Result<void> RemoveNode(uint64_t id) override;
+    Result<void> UpdateNodeAddress(uint64_t id, const std::string& addr) override;
     void TransferLeader(uint64_t target_id) override;
     Result<void> Campaign() override;
 
@@ -285,7 +304,7 @@ RaftorImpl::RaftorImpl(
 
     // Create ReadyProcessor
     ready_processor_ = std::make_unique<ReadyProcessor>(
-        *raw_node_, storage_, *state_machine_, *transport_, proposal_tracker_,
+        *raw_node_, storage_, *state_machine_, *transport_, proposal_tracker_, config_.node_id,
         config_.enable_entry_checksum, initial_applied_index
     );
 
@@ -297,9 +316,9 @@ RaftorImpl::RaftorImpl(
         OnPeerError(peer_id, std::move(error));
     });
 
-    // Add initial peers to transport
-    for (const auto& peer : config_.initial_peers) {
-        if (peer.id != config_.node_id) {
+    // Restore transport peers from the persisted Raftor address book.
+    for (const auto& peer : storage_->GetPeerAddresses()) {
+        if (peer.id != config_.node_id && !peer.addr.empty()) {
             transport_->AddPeer(peer.id, peer.addr);
         }
     }
@@ -842,9 +861,6 @@ Result<void> RaftorImpl::AddNode(uint64_t id, const std::string& addr) {
         return result.error();
     }
 
-    // Add to transport immediately (will be used once connected)
-    transport_->AddPeer(id, addr);
-
     return {};
 }
 
@@ -863,6 +879,42 @@ Result<void> RaftorImpl::RemoveNode(uint64_t id) {
     telemetry::RecordErrorIf(span.span(), result);
     if (!result) {
         RAFTPP_LOG_ERROR("Remove node {} failed: {}", id, result.error().ToString());
+    }
+    return result;
+}
+
+Result<void> RaftorImpl::UpdateNodeAddress(uint64_t id, const std::string& addr) {
+    telemetry::ScopedSpan span("raftor.peer_address.update", config_.node_id);
+    span.span()->SetAttribute("raft.peer_id", static_cast<int64_t>(id));
+    span.span()->SetAttribute("raft.peer.addr_bytes", static_cast<int64_t>(addr.size()));
+
+    if (id == 0) {
+        return nonstd::make_unexpected(RaftError(ConfigErrorCode::InvalidNodeId));
+    }
+    if (addr.empty()) {
+        return nonstd::make_unexpected(RaftError(InvalidConfigError("peer address is empty")));
+    }
+    auto initial_state = storage_->InitialState();
+    if (!initial_state) {
+        return initial_state.error();
+    }
+    if (!ConfStateContainsNode(capnp_util::reader<msg::ConfState>(initial_state->conf_state), id)) {
+        return nonstd::make_unexpected(RaftError(InvalidConfigError("peer is not in ConfState")));
+    }
+
+    std::string ctx = std::string(kMetadataProposalContextPrefix) + GenerateProposalContext();
+    std::string data = SerializeMetadataChange(MetadataChange{
+        MetadataChangeType::UpsertPeerAddress,
+        id,
+        addr,
+    });
+
+    auto result = raw_node_->Propose(ctx, data);
+    telemetry::RecordErrorIf(span.span(), result);
+    if (!result) {
+        RAFTPP_LOG_ERROR(
+            "Update node {} address failed to propose: {}", id, result.error().ToString()
+        );
     }
     return result;
 }
@@ -1028,19 +1080,21 @@ Result<std::unique_ptr<Raftor>> Raftor::Create(
     if (!storage->IsInitialized()) {
         ConfState conf_state = capnp_util::make<msg::ConfState>();
         auto conf_builder = capnp_util::builder<msg::ConfState>(conf_state);
+        std::vector<wal::PeerAddress> peer_addresses;
 
         if (config.initial_peers.empty()) {
             // Single-node cluster: bootstrap with only this node
             RAFTPP_LOG_INFO("Bootstrapping single-node cluster with node {}", config.node_id);
             auto voters = conf_builder.initVoters(1);
             voters.set(0, config.node_id);
+            peer_addresses.push_back(wal::PeerAddress{config.node_id, config.listen_addr});
         } else {
             // Multi-node cluster: validate and use initial_peers
             bool node_id_found = false;
             for (const auto& peer : config.initial_peers) {
+                peer_addresses.push_back(wal::PeerAddress{peer.id, peer.addr});
                 if (peer.id == config.node_id) {
                     node_id_found = true;
-                    break;
                 }
             }
 
@@ -1059,12 +1113,14 @@ Result<std::unique_ptr<Raftor>> Raftor::Create(
 
         // Persist bootstrap ConfState to WAL
         storage->SetConfState(conf_state);
+        if (auto result = storage->SetPeerAddresses(std::move(peer_addresses)); !result) {
+            return result.error();
+        }
         RAFTPP_LOG_INFO(
             "WAL bootstrap complete: node {} initialized with cluster configuration", config.node_id
         );
     } else {
-        // WAL already initialized - ignore initial_peers and use existing config
-        RAFTPP_LOG_INFO("WAL already initialized, ignoring initial_peers");
+        RAFTPP_LOG_INFO("WAL already initialized, loading peer addresses from WAL");
     }
 
     rpc::TransportConfig transport_config;

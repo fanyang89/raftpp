@@ -174,8 +174,10 @@ jobs:
         uses: codecov/codecov-action@v5
         with:
           files: build/coverage.lcov
+          disable_search: true
           fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
+          use_pypi: true
 
   build-and-test-arm64:
     name: "arm64 / ${{ matrix.compiler }} / ${{ matrix.build_type }}${{ matrix.sanitizer && format(' / {0}', matrix.sanitizer) || '' }}"
