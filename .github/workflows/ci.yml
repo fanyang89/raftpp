@@ -176,6 +176,7 @@ jobs:
           files: build/coverage.lcov
           fail_ci_if_error: true
           token: ${{ secrets.CODECOV_TOKEN }}
+          use_pypi: true
 
   build-and-test-arm64:
     name: "arm64 / ${{ matrix.compiler }} / ${{ matrix.build_type }}${{ matrix.sanitizer && format(' / {0}', matrix.sanitizer) || '' }}"
