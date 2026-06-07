@@ -50,6 +50,13 @@ cmake --preset=Debug -B build -DRAFTPP_SANITIZE=address
 cmake --preset=Debug -B build -DRAFTPP_SANITIZE=thread
 ```
 
+### Coverage Requirements
+
+- Production code changes must add or update tests for the new behavior, including meaningful error and edge paths.
+- Do not bypass Codecov by lowering thresholds, excluding changed production files, or weakening coverage reporting unless explicitly approved by the maintainer.
+- If Codecov fails, inspect the PR comment and cover the listed missing lines before considering CI fixed.
+- For coverage-sensitive changes, run the CI coverage flow locally or verify the GitHub `Coverage (Clang / llvm-cov)` and Codecov checks after pushing.
+
 ## Architecture
 
 ### Core Layers (`include/raftpp/core/`)

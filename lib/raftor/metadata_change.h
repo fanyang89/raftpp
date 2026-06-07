@@ -59,6 +59,8 @@ inline std::optional<MetadataChange> ParseMetadataChange(std::string_view data) 
                 change.addr.assign(addr.cStr(), addr.size());
                 return change;
             }
+            case msg::RaftorMetadataChange::REMOVE_PEER_ADDRESS:
+                return std::nullopt;
         }
     } catch (...) {
         return std::nullopt;
