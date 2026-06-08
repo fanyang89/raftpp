@@ -63,6 +63,109 @@ bool ConfStateContainsNode(msg::ConfState::Reader conf_state, uint64_t node_id) 
         ContainsNodeId(conf_state.getLearnersNext(), node_id);
 }
 
+bool HasVoters(const ConfState& conf_state) {
+    return capnp_util::reader<msg::ConfState>(conf_state).getVoters().size() > 0;
+}
+
+std::vector<wal::PeerAddress> BuildBootstrapPeerAddresses(const RaftorConfig& config) {
+    std::vector<wal::PeerAddress> peer_addresses;
+
+    if (config.initial_peers.empty()) {
+        peer_addresses.push_back(wal::PeerAddress{config.node_id, config.listen_addr});
+        return peer_addresses;
+    }
+
+    peer_addresses.reserve(config.initial_peers.size());
+    for (const auto& peer : config.initial_peers) {
+        peer_addresses.push_back(wal::PeerAddress{peer.id, peer.addr});
+    }
+    return peer_addresses;
+}
+
+Result<ConfState> BuildBootstrapConfState(const RaftorConfig& config) {
+    ConfState conf_state = capnp_util::make<msg::ConfState>();
+    auto conf_builder = capnp_util::builder<msg::ConfState>(conf_state);
+
+    if (config.initial_peers.empty()) {
+        RAFTPP_LOG_INFO("Bootstrapping single-node cluster with node {}", config.node_id);
+        auto voters = conf_builder.initVoters(1);
+        voters.set(0, config.node_id);
+        return conf_state;
+    }
+
+    bool node_id_found = false;
+    for (const auto& peer : config.initial_peers) {
+        if (peer.id == config.node_id) {
+            node_id_found = true;
+            break;
+        }
+    }
+
+    if (!node_id_found) {
+        return nonstd::make_unexpected(RaftError(ConfigErrorCode::NodeIdNotInInitialPeers));
+    }
+
+    RAFTPP_LOG_INFO("Bootstrapping cluster with {} initial peers", config.initial_peers.size());
+    auto voters = conf_builder.initVoters(config.initial_peers.size());
+    for (size_t i = 0; i < config.initial_peers.size(); ++i) {
+        voters.set(i, config.initial_peers[i].id);
+    }
+    return conf_state;
+}
+
+Result<void> BootstrapStorageIfNeeded(const RaftorConfig& config, WritableStorage& storage) {
+    auto state_result = storage.InitialState();
+    if (!state_result) {
+        return state_result.error();
+    }
+
+    if (HasVoters(state_result->conf_state)) {
+        RAFTPP_LOG_INFO("Storage already initialized, ignoring initial_peers");
+        return {};
+    }
+
+    auto conf_state = BuildBootstrapConfState(config);
+    if (!conf_state) {
+        return conf_state.error();
+    }
+
+    if (auto result = storage.SetConfState(*conf_state); !result) {
+        return result.error();
+    }
+    RAFTPP_LOG_INFO(
+        "Storage bootstrap complete: node {} initialized with cluster configuration", config.node_id
+    );
+    return {};
+}
+
+Result<void> BootstrapWalStorageIfNeeded(const RaftorConfig& config, wal::WALStorage& storage) {
+    auto state_result = storage.InitialState();
+    if (!state_result) {
+        return state_result.error();
+    }
+
+    if (HasVoters(state_result->conf_state)) {
+        RAFTPP_LOG_INFO("WAL already initialized, loading peer addresses from WAL");
+        return {};
+    }
+
+    auto conf_state = BuildBootstrapConfState(config);
+    if (!conf_state) {
+        return conf_state.error();
+    }
+
+    if (auto result = storage.SetConfState(*conf_state); !result) {
+        return result.error();
+    }
+    if (auto result = storage.SetPeerAddresses(BuildBootstrapPeerAddresses(config)); !result) {
+        return result.error();
+    }
+    RAFTPP_LOG_INFO(
+        "WAL bootstrap complete: node {} initialized with cluster configuration", config.node_id
+    );
+    return {};
+}
+
 class TempFileSnapshotWriter final : public SnapshotWriter {
   public:
     explicit TempFileSnapshotWriter(std::FILE* file) : file_(file) {}
@@ -123,20 +226,23 @@ Result<void> LoadSnapshotDataFromFile(
 }
 
 Result<uint64_t> RestoreLocalSnapshot(
-    wal::WALStorage& storage, StateMachine& state_machine, uint64_t node_id
+    WritableStorage& storage, StateMachine& state_machine, uint64_t node_id
 ) {
-    const uint64_t snapshot_index = storage.SnapshotIndex();
-    if (snapshot_index == 0) {
-        return 0;
-    }
-
-    auto snapshot = storage.GetSnapshot(0, node_id);
+    auto snapshot = storage.LocalSnapshot();
     if (!snapshot) {
         return snapshot.error();
     }
 
-    auto snap_reader = capnp_util::reader<msg::Snapshot>(*snapshot);
+    if (!snapshot->has_value()) {
+        return 0;
+    }
+
+    auto snap_reader = capnp_util::reader<msg::Snapshot>(**snapshot);
     auto snap_meta = snap_reader.getMetadata();
+    if (snap_meta.getIndex() == 0) {
+        return 0;
+    }
+
     auto metadata = CloneSnapshotMetadata(snap_meta);
     SnapshotDataReader reader(snap_reader.getData());
     if (auto result = state_machine.RestoreSnapshot(metadata, reader); !result) {
@@ -190,7 +296,7 @@ class RaftorImpl : public Raftor {
   public:
     RaftorImpl(
         const RaftorConfig& config, std::unique_ptr<StateMachine> state_machine,
-        std::shared_ptr<wal::WALStorage> storage, std::unique_ptr<rpc::Transport> transport,
+        std::shared_ptr<WritableStorage> storage, std::unique_ptr<rpc::Transport> transport,
         uint64_t initial_applied_index
     );
 
@@ -247,7 +353,7 @@ class RaftorImpl : public Raftor {
     );
     void RefreshStatus();
     void InitializeSnapshotState();
-    [[nodiscard]] uint64_t GetWalDirSizeBytes() const;
+    [[nodiscard]] uint64_t GetLogSizeBytes() const;
     void ProcessRaftWork();
     void EnterTerminalState(const RaftError& error);
     void FailQueuedRequests(const RaftError& error);
@@ -256,7 +362,7 @@ class RaftorImpl : public Raftor {
 
     RaftorConfig config_;
     std::unique_ptr<StateMachine> state_machine_;
-    std::shared_ptr<wal::WALStorage> storage_;
+    std::shared_ptr<WritableStorage> storage_;
     std::unique_ptr<rpc::Transport> transport_;
     std::unique_ptr<RawNode> raw_node_;
     std::unique_ptr<ReadyProcessor> ready_processor_;
@@ -290,7 +396,7 @@ class RaftorImpl : public Raftor {
 
 RaftorImpl::RaftorImpl(
     const RaftorConfig& config, std::unique_ptr<StateMachine> state_machine,
-    std::shared_ptr<wal::WALStorage> storage, std::unique_ptr<rpc::Transport> transport,
+    std::shared_ptr<WritableStorage> storage, std::unique_ptr<rpc::Transport> transport,
     uint64_t initial_applied_index
 )
     : config_(config),
@@ -302,10 +408,12 @@ RaftorImpl::RaftorImpl(
     raft_config.applied = initial_applied_index;
     raw_node_ = std::make_unique<RawNode>(raft_config, storage_);
 
+    auto wal_storage = std::dynamic_pointer_cast<wal::WALStorage>(storage_);
+
     // Create ReadyProcessor
     ready_processor_ = std::make_unique<ReadyProcessor>(
-        *raw_node_, storage_, *state_machine_, *transport_, proposal_tracker_, config_.node_id,
-        config_.enable_entry_checksum, initial_applied_index
+        *raw_node_, storage_, wal_storage, *state_machine_, *transport_, proposal_tracker_,
+        config_.node_id, config_.enable_entry_checksum, initial_applied_index
     );
 
     RefreshStatus();
@@ -316,10 +424,18 @@ RaftorImpl::RaftorImpl(
         OnPeerError(peer_id, std::move(error));
     });
 
-    // Restore transport peers from the persisted Raftor address book.
-    for (const auto& peer : storage_->GetPeerAddresses()) {
-        if (peer.id != config_.node_id && !peer.addr.empty()) {
-            transport_->AddPeer(peer.id, peer.addr);
+    if (wal_storage) {
+        // Restore transport peers from the persisted Raftor address book.
+        for (const auto& peer : wal_storage->GetPeerAddresses()) {
+            if (peer.id != config_.node_id && !peer.addr.empty()) {
+                transport_->AddPeer(peer.id, peer.addr);
+            }
+        }
+    } else {
+        for (const auto& peer : config_.initial_peers) {
+            if (peer.id != config_.node_id && !peer.addr.empty()) {
+                transport_->AddPeer(peer.id, peer.addr);
+            }
         }
     }
 }
@@ -463,7 +579,7 @@ void RaftorImpl::InitializeSnapshotState() {
     last_snapshot_attempt_index_ = 0;
 }
 
-uint64_t RaftorImpl::GetWalDirSizeBytes() const {
+uint64_t RaftorImpl::GetLogSizeBytes() const {
     return storage_ ? storage_->LogSizeBytes() : 0;
 }
 
@@ -537,8 +653,8 @@ void RaftorImpl::MaybeAutoSnapshot() {
     } else if (config_.snapshot_log_size_bytes > 0) {
         if (now - last_log_size_check_ >= kLogSizeCheckMinInterval) {
             last_log_size_check_ = now;
-            const uint64_t wal_size = GetWalDirSizeBytes();
-            if (wal_size >= config_.snapshot_log_size_bytes) {
+            const uint64_t log_size = GetLogSizeBytes();
+            if (log_size >= config_.snapshot_log_size_bytes) {
                 should_snapshot = true;
                 reason = "log_size";
             }
@@ -1076,51 +1192,8 @@ Result<std::unique_ptr<Raftor>> Raftor::Create(
 
     auto storage = std::move(*storage_result);
 
-    // Bootstrap if WAL is uninitialized
-    if (!storage->IsInitialized()) {
-        ConfState conf_state = capnp_util::make<msg::ConfState>();
-        auto conf_builder = capnp_util::builder<msg::ConfState>(conf_state);
-        std::vector<wal::PeerAddress> peer_addresses;
-
-        if (config.initial_peers.empty()) {
-            // Single-node cluster: bootstrap with only this node
-            RAFTPP_LOG_INFO("Bootstrapping single-node cluster with node {}", config.node_id);
-            auto voters = conf_builder.initVoters(1);
-            voters.set(0, config.node_id);
-            peer_addresses.push_back(wal::PeerAddress{config.node_id, config.listen_addr});
-        } else {
-            // Multi-node cluster: validate and use initial_peers
-            bool node_id_found = false;
-            for (const auto& peer : config.initial_peers) {
-                peer_addresses.push_back(wal::PeerAddress{peer.id, peer.addr});
-                if (peer.id == config.node_id) {
-                    node_id_found = true;
-                }
-            }
-
-            if (!node_id_found) {
-                return nonstd::make_unexpected(RaftError(ConfigErrorCode::NodeIdNotInInitialPeers));
-            }
-
-            RAFTPP_LOG_INFO(
-                "Bootstrapping cluster with {} initial peers", config.initial_peers.size()
-            );
-            auto voters = conf_builder.initVoters(config.initial_peers.size());
-            for (size_t i = 0; i < config.initial_peers.size(); ++i) {
-                voters.set(i, config.initial_peers[i].id);
-            }
-        }
-
-        // Persist bootstrap ConfState to WAL
-        storage->SetConfState(conf_state);
-        if (auto result = storage->SetPeerAddresses(std::move(peer_addresses)); !result) {
-            return result.error();
-        }
-        RAFTPP_LOG_INFO(
-            "WAL bootstrap complete: node {} initialized with cluster configuration", config.node_id
-        );
-    } else {
-        RAFTPP_LOG_INFO("WAL already initialized, loading peer addresses from WAL");
+    if (auto result = BootstrapWalStorageIfNeeded(config, *storage); !result) {
+        return result.error();
     }
 
     rpc::TransportConfig transport_config;
@@ -1144,27 +1217,28 @@ Result<std::unique_ptr<Raftor>> Raftor::Create(
 
 Result<std::unique_ptr<Raftor>> Raftor::Create(
     const RaftorConfig& config, std::unique_ptr<StateMachine> state_machine,
-    std::shared_ptr<Storage> storage, std::unique_ptr<rpc::Transport> transport
+    std::shared_ptr<WritableStorage> storage, std::unique_ptr<rpc::Transport> transport
 ) {
     // Validate config
     if (auto result = config.Validate(); !result) {
         return result.error();
     }
 
-    // Cast to WALStorage if possible
-    auto wal_storage = std::dynamic_pointer_cast<wal::WALStorage>(storage);
-    if (!wal_storage) {
+    if (!storage) {
         return nonstd::make_unexpected(RaftError(RaftErrorCode::IncompatibleStorage));
     }
 
-    auto restored_applied_index =
-        RestoreLocalSnapshot(*wal_storage, *state_machine, config.node_id);
+    if (auto result = BootstrapStorageIfNeeded(config, *storage); !result) {
+        return result.error();
+    }
+
+    auto restored_applied_index = RestoreLocalSnapshot(*storage, *state_machine, config.node_id);
     if (!restored_applied_index) {
         return restored_applied_index.error();
     }
 
     return std::make_unique<RaftorImpl>(
-        config, std::move(state_machine), std::move(wal_storage), std::move(transport),
+        config, std::move(state_machine), std::move(storage), std::move(transport),
         *restored_applied_index
     );
 }

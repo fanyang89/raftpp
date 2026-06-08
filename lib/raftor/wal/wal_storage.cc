@@ -116,13 +116,15 @@ Result<Snapshot> WALStorage::GetSnapshot(uint64_t request_index, uint64_t /*to*/
     return CloneSnapshot(snapshot_);
 }
 
-void WALStorage::SetHardState(HardState&& hs) {
+Result<void> WALStorage::SetHardState(HardState&& hs) {
     std::lock_guard lock(mutex_);
 
-    auto result = wal_->SaveHardState(hs);
+    auto result = wal_->SaveHardState(std::move(hs));
     if (!result) {
         RAFTPP_LOG_ERROR("failed to save hard state: {}", result.error().ToString());
+        return result.error();
     }
+    return {};
 }
 
 Result<void> WALStorage::Append(const std::vector<Entry>& entries) {
@@ -160,13 +162,15 @@ Result<void> WALStorage::ApplySnapshot(const Snapshot& snapshot) {
     return result;
 }
 
-void WALStorage::SetConfState(const ConfState& conf_state) {
+Result<void> WALStorage::SetConfState(const ConfState& conf_state) {
     std::lock_guard lock(mutex_);
 
     auto result = wal_->SaveConfState(conf_state);
     if (!result) {
         RAFTPP_LOG_ERROR("failed to save conf state: {}", result.error().ToString());
+        return result.error();
     }
+    return {};
 }
 
 std::vector<PeerAddress> WALStorage::GetPeerAddresses() const {
@@ -196,6 +200,17 @@ Result<void> WALStorage::Sync() {
     auto result = wal_->Sync();
     telemetry::RecordErrorIf(span.span(), result);
     return result;
+}
+
+Result<std::optional<Snapshot>> WALStorage::LocalSnapshot() {
+    std::lock_guard lock(mutex_);
+
+    auto snap_meta = capnp_util::reader<msg::Snapshot>(snapshot_).getMetadata();
+    if (snap_meta.getIndex() == 0) {
+        return std::nullopt;
+    }
+
+    return std::optional<Snapshot>{CloneSnapshot(snapshot_)};
 }
 
 uint64_t WALStorage::LogSizeBytes() const {

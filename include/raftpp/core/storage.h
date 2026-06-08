@@ -88,4 +88,19 @@ class Storage {
     [[nodiscard]] virtual Result<Snapshot> GetSnapshot(uint64_t request_index, uint64_t to) = 0;
 };
 
+class WritableStorage : public Storage {
+  public:
+    ~WritableStorage() override = default;
+
+    [[nodiscard]] virtual Result<void> Append(const std::vector<Entry>& entries) = 0;
+    [[nodiscard]] virtual Result<void> SetHardState(HardState&& hs) = 0;
+    [[nodiscard]] virtual Result<void> SetConfState(const ConfState& conf_state) = 0;
+    [[nodiscard]] virtual Result<void> ApplySnapshot(const Snapshot& snapshot) = 0;
+    [[nodiscard]] virtual Result<void> Sync() = 0;
+
+    [[nodiscard]] virtual Result<std::optional<Snapshot>> LocalSnapshot() { return std::nullopt; }
+
+    [[nodiscard]] virtual uint64_t LogSizeBytes() const { return 0; }
+};
+
 }  // namespace raftpp

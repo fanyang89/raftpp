@@ -13,6 +13,7 @@
 #include "raftpp/core/capnp_util.h"
 #include "raftpp/core/raw_node.h"
 #include "raftpp/core/read_only.h"
+#include "raftpp/core/storage.h"
 #include "raftpp/logging.h"
 #include "raftpp/raftor/entry_checksum.h"
 #include "raftpp/raftor/proposal_tracker.h"
@@ -22,8 +23,6 @@
 #include "transport.h"
 
 namespace raftpp::raftor {
-
-using namespace wal;
 
 namespace {
 
@@ -67,12 +66,14 @@ Result<void> VerifyEntryChecksum(
 }  // namespace
 
 ReadyProcessor::ReadyProcessor(
-    RawNode& raw_node, std::shared_ptr<wal::WALStorage> storage, StateMachine& state_machine,
+    RawNode& raw_node, std::shared_ptr<WritableStorage> storage,
+    std::shared_ptr<wal::WALStorage> wal_storage, StateMachine& state_machine,
     rpc::Transport& transport, ProposalTracker& proposal_tracker, uint64_t node_id,
     bool checksum_enabled, uint64_t initial_applied_index
 )
     : raw_node_(raw_node),
       storage_(std::move(storage)),
+      wal_storage_(std::move(wal_storage)),
       state_machine_(state_machine),
       transport_(transport),
       proposal_tracker_(proposal_tracker),
@@ -127,7 +128,7 @@ Result<bool> ReadyProcessor::Process() {
         return result.error();
     }
 
-    // 1. Persist entries to WAL
+    // 1. Persist entries to stable storage
     if (auto result = PersistEntries(rd); !result) {
         telemetry::RecordErrorIf(span.span(), result);
         return result.error();
@@ -226,8 +227,11 @@ Result<void> ReadyProcessor::PersistHardState(const Ready& rd) {
     span.span()->SetAttribute("raft.term", static_cast<int64_t>(hs_reader.getTerm()));
     span.span()->SetAttribute("raft.commit", static_cast<int64_t>(hs_reader.getCommit()));
 
-    // SetHardState doesn't return error in current implementation
-    storage_->SetHardState(CloneHardState(*rd.hs));
+    if (auto result = storage_->SetHardState(CloneHardState(*rd.hs)); !result) {
+        RAFTPP_LOG_ERROR("Failed to persist hard state: {}", result.error().ToString());
+        telemetry::RecordErrorIf(span.span(), result);
+        return nonstd::make_unexpected(RaftError(RaftErrorCode::ProposalDropped));
+    }
 
     // Sync if required
     if (rd.must_sync) {
@@ -372,7 +376,9 @@ Result<void> ReadyProcessor::ApplyEntry(const Entry& entry) {
         if (!result) {
             return result.error();
         }
-        storage_->SetConfState(*result);
+        if (auto conf_result = storage_->SetConfState(*result); !conf_result) {
+            return conf_result.error();
+        }
 
         // Update transport peers based on conf change
         auto cc_reader = capnp_util::reader<msg::ConfChangeV2>(cc);
@@ -389,9 +395,12 @@ Result<void> ReadyProcessor::ApplyEntry(const Entry& entry) {
                 if (addr.empty()) {
                     RAFTPP_LOG_INFO("Node {} added to configuration", change.getNodeId());
                 } else {
-                    if (auto peer_result = storage_->UpsertPeerAddress(change.getNodeId(), addr);
-                        !peer_result) {
-                        return peer_result.error();
+                    if (wal_storage_) {
+                        if (auto peer_result =
+                                wal_storage_->UpsertPeerAddress(change.getNodeId(), addr);
+                            !peer_result) {
+                            return peer_result.error();
+                        }
                     }
                     if (change.getNodeId() != node_id_) {
                         transport_.AddPeer(change.getNodeId(), addr);
@@ -401,9 +410,11 @@ Result<void> ReadyProcessor::ApplyEntry(const Entry& entry) {
                     );
                 }
             } else if (change.getChangeType() == ConfChangeType::REMOVE_NODE) {
-                if (auto peer_result = storage_->RemovePeerAddress(change.getNodeId());
-                    !peer_result) {
-                    return peer_result.error();
+                if (wal_storage_) {
+                    if (auto peer_result = wal_storage_->RemovePeerAddress(change.getNodeId());
+                        !peer_result) {
+                        return peer_result.error();
+                    }
                 }
                 transport_.RemovePeer(change.getNodeId());
                 RAFTPP_LOG_INFO("Node {} removed from configuration", change.getNodeId());
@@ -436,9 +447,12 @@ Result<void> ReadyProcessor::ApplyEntry(const Entry& entry) {
         }
 
         if (change->type == MetadataChangeType::UpsertPeerAddress) {
-            if (auto peer_result = storage_->UpsertPeerAddress(change->node_id, change->addr);
-                !peer_result) {
-                return peer_result.error();
+            if (wal_storage_) {
+                if (auto peer_result =
+                        wal_storage_->UpsertPeerAddress(change->node_id, change->addr);
+                    !peer_result) {
+                    return peer_result.error();
+                }
             }
             if (change->node_id == node_id_ || change->addr.empty()) {
                 transport_.RemovePeer(change->node_id);

@@ -22,9 +22,11 @@
 
 #include "../lib/raftor/metadata_change.h"
 #include "raftpp/core/capnp_util.h"
+#include "raftpp/core/memory_storage.h"
 #include "raftpp/core/types.h"
 #include "raftpp/logging.h"
 #include "raftpp/raftor/raftor_config.h"
+#include "raftpp/raftor/rpc/noop_transport.h"
 #include "raftpp/raftor/rpc/transport.h"
 #include "raftpp/raftor/state_machine.h"
 #include "raftpp/raftor/wal/wal_config.h"
@@ -222,6 +224,84 @@ class RecordingTransport final : public rpc::Transport {
     std::vector<uint64_t> removed_peers_;
     rpc::MessageCallback message_callback_;
     rpc::ErrorCallback error_callback_;
+};
+
+class FaultyStorage final : public WritableStorage {
+  public:
+    [[nodiscard]] Result<RaftState> InitialState() override {
+        if (fail_initial_state) {
+            return RaftError(StorageErrorCode::Unavailable);
+        }
+        return storage_->InitialState();
+    }
+
+    [[nodiscard]] Result<std::vector<Entry>> Entries(
+        uint64_t low, uint64_t high, std::optional<uint64_t> max_size, GetEntriesContext context
+    ) override {
+        return storage_->Entries(low, high, max_size, context);
+    }
+
+    [[nodiscard]] Result<uint64_t> Term(uint64_t idx) override { return storage_->Term(idx); }
+
+    [[nodiscard]] Result<uint64_t> FirstIndex() override { return storage_->FirstIndex(); }
+
+    [[nodiscard]] Result<uint64_t> LastIndex() override { return storage_->LastIndex(); }
+
+    [[nodiscard]] Result<Snapshot> GetSnapshot(uint64_t request_index, uint64_t to) override {
+        return storage_->GetSnapshot(request_index, to);
+    }
+
+    [[nodiscard]] Result<void> Append(const std::vector<Entry>& entries) override {
+        return storage_->Append(entries);
+    }
+
+    [[nodiscard]] Result<void> SetHardState(HardState&& hs) override {
+        if (fail_set_hard_state) {
+            return RaftError(StorageErrorCode::Unavailable);
+        }
+        return storage_->SetHardState(std::move(hs));
+    }
+
+    [[nodiscard]] Result<void> SetConfState(const ConfState& conf_state) override {
+        if (fail_set_conf_state) {
+            return RaftError(StorageErrorCode::Unavailable);
+        }
+        return storage_->SetConfState(conf_state);
+    }
+
+    [[nodiscard]] Result<void> ApplySnapshot(const Snapshot& snapshot) override {
+        return storage_->ApplySnapshot(snapshot);
+    }
+
+    [[nodiscard]] Result<void> Sync() override {
+        if (fail_sync) {
+            return RaftError(StorageErrorCode::Unavailable);
+        }
+        return storage_->Sync();
+    }
+
+    [[nodiscard]] Result<std::optional<Snapshot>> LocalSnapshot() override {
+        if (fail_local_snapshot) {
+            return RaftError(StorageErrorCode::Unavailable);
+        }
+        if (!local_snapshot) {
+            return std::nullopt;
+        }
+        return std::optional<Snapshot>{CloneSnapshot(*local_snapshot)};
+    }
+
+    [[nodiscard]] uint64_t LogSizeBytes() const override { return log_size_bytes; }
+
+    bool fail_initial_state = false;
+    bool fail_set_hard_state = false;
+    bool fail_set_conf_state = false;
+    bool fail_sync = false;
+    bool fail_local_snapshot = false;
+    uint64_t log_size_bytes = 0;
+    std::optional<Snapshot> local_snapshot;
+
+  private:
+    std::shared_ptr<MemoryStorage> storage_ = std::make_shared<MemoryStorage>();
 };
 
 struct TestNode {
@@ -531,7 +611,7 @@ TEST_CASE("update_node_address_validates_request") {
     auto conf_builder = capnp_util::builder<msg::ConfState>(conf_state);
     auto voters = conf_builder.initVoters(1);
     voters.set(0, 1);
-    storage->SetConfState(conf_state);
+    REQUIRE(storage->SetConfState(conf_state));
     REQUIRE(storage->SetPeerAddresses({wal::PeerAddress{1, "127.0.0.1:19401"}}).has_value());
 
     RaftorConfig config;
@@ -571,7 +651,7 @@ TEST_CASE("raftor_restores_transport_peers_from_wal_address_book") {
     auto voters = conf_builder.initVoters(2);
     voters.set(0, 1);
     voters.set(1, 2);
-    storage->SetConfState(conf_state);
+    REQUIRE(storage->SetConfState(conf_state));
     REQUIRE(storage
                 ->SetPeerAddresses({
                     wal::PeerAddress{1, "127.0.0.1:19201"},
@@ -621,7 +701,7 @@ TEST_CASE("update_node_address_commits_to_wal_metadata") {
     auto conf_builder = capnp_util::builder<msg::ConfState>(conf_state);
     auto voters = conf_builder.initVoters(1);
     voters.set(0, 1);
-    storage->SetConfState(conf_state);
+    REQUIRE(storage->SetConfState(conf_state));
     REQUIRE(storage->SetPeerAddresses({wal::PeerAddress{1, "127.0.0.1:19301"}}).has_value());
 
     RaftorConfig config;
@@ -690,7 +770,7 @@ TEST_CASE("add_node_commits_peer_address_to_wal_metadata") {
     auto conf_builder = capnp_util::builder<msg::ConfState>(conf_state);
     auto voters = conf_builder.initVoters(1);
     voters.set(0, 1);
-    storage->SetConfState(conf_state);
+    REQUIRE(storage->SetConfState(conf_state));
     REQUIRE(storage->SetPeerAddresses({wal::PeerAddress{1, "127.0.0.1:19501"}}).has_value());
 
     RaftorConfig config;
@@ -737,6 +817,292 @@ TEST_CASE("add_node_commits_peer_address_to_wal_metadata") {
     REQUIRE(transport_peers.size() == 1);
     CHECK(transport_peers[0].id == 2);
     CHECK(transport_peers[0].addr == "127.0.0.1:19502");
+}
+
+TEST_CASE("custom_writable_storage_create_accepts_memory_storage") {
+    TestNode node;
+    const auto pid = static_cast<uint64_t>(::getpid());
+    node.temp_dir = std::filesystem::temp_directory_path() /
+        ("raftpp_custom_storage_test_" + std::to_string(pid));
+    std::error_code ec;
+    std::filesystem::remove_all(node.temp_dir, ec);
+    std::filesystem::create_directories(node.temp_dir);
+    node.temp_dir_cleanup = std::make_unique<TempDirCleanup>(node.temp_dir);
+
+    node.config.node_id = 1;
+    node.config.transport_kind = TransportKind::Noop;
+    node.config.data_dir = node.temp_dir;
+    node.config.election_tick = 5;
+    node.config.heartbeat_tick = 1;
+
+    auto storage = std::make_shared<MemoryStorage>();
+    rpc::TransportConfig transport_config;
+    transport_config.node_id = node.config.node_id;
+    auto transport = std::make_unique<rpc::NoopTransport>(transport_config);
+
+    auto state_machine = std::make_unique<MockStateMachine>();
+    auto raftor_result =
+        Raftor::Create(node.config, std::move(state_machine), storage, std::move(transport));
+    REQUIRE(raftor_result.has_value());
+
+    auto state = storage->InitialState();
+    REQUIRE(state.has_value());
+    auto conf_reader = capnp_util::reader<msg::ConfState>(state->conf_state);
+    REQUIRE(conf_reader.getVoters().size() == 1);
+    CHECK(conf_reader.getVoters()[0] == 1);
+}
+
+TEST_CASE("custom_writable_storage_create_does_not_restore_synthetic_snapshot") {
+    TestNode node;
+    const auto pid = static_cast<uint64_t>(::getpid());
+    node.temp_dir = std::filesystem::temp_directory_path() /
+        ("raftpp_custom_storage_restart_test_" + std::to_string(pid));
+    std::error_code ec;
+    std::filesystem::remove_all(node.temp_dir, ec);
+    std::filesystem::create_directories(node.temp_dir);
+    node.temp_dir_cleanup = std::make_unique<TempDirCleanup>(node.temp_dir);
+
+    node.config.node_id = 1;
+    node.config.transport_kind = TransportKind::Noop;
+    node.config.data_dir = node.temp_dir;
+    node.config.election_tick = 5;
+    node.config.heartbeat_tick = 1;
+
+    auto storage = std::make_shared<MemoryStorage>();
+
+    ConfState conf_state = capnp_util::make<msg::ConfState>();
+    auto conf_builder = capnp_util::builder<msg::ConfState>(conf_state);
+    auto voters = conf_builder.initVoters(1);
+    voters.set(0, 1);
+    REQUIRE(storage->SetConfState(conf_state));
+
+    Entry entry = capnp_util::make<msg::Entry>();
+    auto entry_builder = capnp_util::builder<msg::Entry>(entry);
+    entry_builder.setIndex(1);
+    entry_builder.setTerm(1);
+    std::vector<Entry> entries;
+    entries.push_back(std::move(entry));
+    REQUIRE(storage->Append(entries));
+
+    HardState hard_state = capnp_util::make<msg::HardState>();
+    auto hs_builder = capnp_util::builder<msg::HardState>(hard_state);
+    hs_builder.setTerm(1);
+    hs_builder.setCommit(1);
+    REQUIRE(storage->SetHardState(std::move(hard_state)));
+
+    rpc::TransportConfig transport_config;
+    transport_config.node_id = node.config.node_id;
+    auto transport = std::make_unique<rpc::NoopTransport>(transport_config);
+
+    auto state_machine = std::make_unique<MockStateMachine>();
+    auto* state_machine_ptr = state_machine.get();
+    auto raftor_result =
+        Raftor::Create(node.config, std::move(state_machine), storage, std::move(transport));
+    REQUIRE(raftor_result.has_value());
+    CHECK(state_machine_ptr->RestoreCount() == 0);
+}
+
+TEST_CASE("custom_writable_storage_create_surfaces_storage_errors") {
+    const auto pid = static_cast<uint64_t>(::getpid());
+    auto temp_dir = std::filesystem::temp_directory_path() /
+        ("raftpp_custom_storage_errors_" + std::to_string(pid));
+    std::error_code ec;
+    std::filesystem::remove_all(temp_dir, ec);
+    std::filesystem::create_directories(temp_dir);
+    TempDirCleanup cleanup(temp_dir);
+
+    RaftorConfig config;
+    config.node_id = 1;
+    config.transport_kind = TransportKind::Noop;
+    config.data_dir = temp_dir;
+
+    {
+        auto storage = std::make_shared<FaultyStorage>();
+        storage->fail_initial_state = true;
+        auto result = Raftor::Create(
+            config, std::make_unique<MockStateMachine>(), storage,
+            std::make_unique<RecordingTransport>()
+        );
+        CHECK(!result.has_value());
+    }
+
+    {
+        auto storage = std::make_shared<FaultyStorage>();
+        storage->fail_set_conf_state = true;
+        auto result = Raftor::Create(
+            config, std::make_unique<MockStateMachine>(), storage,
+            std::make_unique<RecordingTransport>()
+        );
+        CHECK(!result.has_value());
+    }
+
+    {
+        auto storage = std::make_shared<FaultyStorage>();
+        storage->fail_local_snapshot = true;
+        auto result = Raftor::Create(
+            config, std::make_unique<MockStateMachine>(), storage,
+            std::make_unique<RecordingTransport>()
+        );
+        CHECK(!result.has_value());
+    }
+
+    {
+        auto storage = std::make_shared<FaultyStorage>();
+        Snapshot snapshot = capnp_util::make<msg::Snapshot>();
+        auto snapshot_builder = capnp_util::builder<msg::Snapshot>(snapshot);
+        snapshot_builder.initMetadata().setIndex(0);
+        storage->local_snapshot = std::move(snapshot);
+
+        auto state_machine = std::make_unique<MockStateMachine>();
+        auto* state_machine_ptr = state_machine.get();
+        auto result = Raftor::Create(
+            config, std::move(state_machine), storage, std::make_unique<RecordingTransport>()
+        );
+        REQUIRE(result.has_value());
+        CHECK(state_machine_ptr->RestoreCount() == 0);
+    }
+
+    {
+        auto storage = std::make_shared<FaultyStorage>();
+        RaftorConfig missing_self = config;
+        missing_self.initial_peers = {PeerConfig{2, "127.0.0.1:19602"}};
+        auto result = Raftor::Create(
+            missing_self, std::make_unique<MockStateMachine>(), storage,
+            std::make_unique<RecordingTransport>()
+        );
+        CHECK(!result.has_value());
+    }
+}
+
+TEST_CASE("default_wal_create_surfaces_bootstrap_errors") {
+    const auto pid = static_cast<uint64_t>(::getpid());
+    auto temp_dir = std::filesystem::temp_directory_path() /
+        ("raftpp_wal_bootstrap_errors_" + std::to_string(pid));
+    std::error_code ec;
+    std::filesystem::remove_all(temp_dir, ec);
+    std::filesystem::create_directories(temp_dir);
+    TempDirCleanup cleanup(temp_dir);
+
+    RaftorConfig config;
+    config.node_id = 1;
+    config.transport_kind = TransportKind::Noop;
+    config.data_dir = temp_dir;
+    config.initial_peers = {PeerConfig{2, "127.0.0.1:19612"}};
+
+    auto result = Raftor::Create(config, std::make_unique<MockStateMachine>());
+    CHECK(!result.has_value());
+}
+
+TEST_CASE("custom_writable_storage_restores_initial_transport_peers") {
+    const auto pid = static_cast<uint64_t>(::getpid());
+    auto temp_dir = std::filesystem::temp_directory_path() /
+        ("raftpp_custom_storage_peers_" + std::to_string(pid));
+    std::error_code ec;
+    std::filesystem::remove_all(temp_dir, ec);
+    std::filesystem::create_directories(temp_dir);
+    TempDirCleanup cleanup(temp_dir);
+
+    RaftorConfig config;
+    config.node_id = 1;
+    config.transport_kind = TransportKind::Noop;
+    config.data_dir = temp_dir;
+    config.initial_peers = {
+        PeerConfig{1, "127.0.0.1:19621"},
+        PeerConfig{2, "127.0.0.1:19622"},
+    };
+
+    auto storage = std::make_shared<FaultyStorage>();
+    auto transport = std::make_unique<RecordingTransport>();
+    auto* recording_transport = transport.get();
+    auto result =
+        Raftor::Create(config, std::make_unique<MockStateMachine>(), storage, std::move(transport));
+
+    REQUIRE(result.has_value());
+    auto peers = recording_transport->Peers();
+    REQUIRE(peers.size() == 1);
+    CHECK(peers[0].id == 2);
+    CHECK(peers[0].addr == "127.0.0.1:19622");
+}
+
+TEST_CASE("memory_storage_default_writable_storage_methods") {
+    std::shared_ptr<WritableStorage> storage = std::make_shared<MemoryStorage>();
+
+    CHECK(storage->Sync().has_value());
+    CHECK(storage->LogSizeBytes() == 0);
+}
+
+TEST_CASE("ready_processor_surfaces_storage_persistence_errors") {
+    const auto pid = static_cast<uint64_t>(::getpid());
+    auto temp_dir = std::filesystem::temp_directory_path() /
+        ("raftpp_ready_storage_errors_" + std::to_string(pid));
+    std::error_code ec;
+    std::filesystem::remove_all(temp_dir, ec);
+    std::filesystem::create_directories(temp_dir);
+    TempDirCleanup cleanup(temp_dir);
+
+    auto make_config = [&](std::string_view suffix) {
+        RaftorConfig config;
+        config.node_id = 1;
+        config.transport_kind = TransportKind::Noop;
+        config.data_dir = temp_dir / std::string(suffix);
+        config.election_tick = 5;
+        config.heartbeat_tick = 1;
+        config.tick_interval = 1ms;
+        return config;
+    };
+
+    {
+        auto storage = std::make_shared<FaultyStorage>();
+        auto result = Raftor::Create(
+            make_config("hard_state"), std::make_unique<MockStateMachine>(), storage,
+            std::make_unique<RecordingTransport>()
+        );
+        REQUIRE(result.has_value());
+        auto raftor = std::move(*result);
+        REQUIRE(raftor->Start());
+        storage->fail_set_hard_state = true;
+        REQUIRE(raftor->Campaign());
+        raftor->Poll(1ms);
+    }
+
+    {
+        auto storage = std::make_shared<FaultyStorage>();
+        auto result = Raftor::Create(
+            make_config("sync"), std::make_unique<MockStateMachine>(), storage,
+            std::make_unique<RecordingTransport>()
+        );
+        REQUIRE(result.has_value());
+        auto raftor = std::move(*result);
+        REQUIRE(raftor->Start());
+        storage->fail_sync = true;
+        REQUIRE(raftor->Campaign());
+        raftor->Poll(1ms);
+    }
+
+    {
+        auto storage = std::make_shared<FaultyStorage>();
+        auto result = Raftor::Create(
+            make_config("conf_state"), std::make_unique<MockStateMachine>(), storage,
+            std::make_unique<RecordingTransport>()
+        );
+        REQUIRE(result.has_value());
+        auto raftor = std::move(*result);
+        REQUIRE(raftor->Start());
+        REQUIRE(raftor->Campaign());
+
+        auto deadline = std::chrono::steady_clock::now() + 1s;
+        while (!raftor->IsLeader() && std::chrono::steady_clock::now() < deadline) {
+            raftor->Poll(1ms);
+        }
+        REQUIRE(raftor->IsLeader());
+
+        storage->fail_set_conf_state = true;
+        REQUIRE(raftor->AddNode(2, "127.0.0.1:19632"));
+        deadline = std::chrono::steady_clock::now() + 1s;
+        while (std::chrono::steady_clock::now() < deadline) {
+            raftor->Poll(1ms);
+        }
+    }
 }
 
 TEST_CASE("local_snapshot_restored_on_restart") {

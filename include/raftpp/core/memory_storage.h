@@ -41,7 +41,7 @@ class MemoryStorageCore {
     std::optional<GetEntriesContext> get_entries_context_;
 };
 
-class MemoryStorage final : public Storage {
+class MemoryStorage final : public WritableStorage {
   public:
     ~MemoryStorage() override;
     [[nodiscard]] Result<RaftState> InitialState() override;
@@ -57,14 +57,16 @@ class MemoryStorage final : public Storage {
     void SetEntries(const std::vector<Entry>& entries);
     [[nodiscard]] Result<void> Compact(uint64_t idx);
     void SetRaftState(const RaftState& raft_state);
-    void SetConfState(const ConfState& conf_state);
+    [[nodiscard]] Result<void> SetConfState(const ConfState& conf_state) override;
+    [[nodiscard]] Result<void> SetHardState(HardState&& hs) override;
     void TriggerSnapshotUnavailable();
     void TriggerLogUnavailable(bool enable);
     [[nodiscard]] std::optional<GetEntriesContext> TakeGetEntriesContext();
-    [[nodiscard]] Result<void> ApplySnapshot(const Snapshot& snapshot);
+    [[nodiscard]] Result<void> ApplySnapshot(const Snapshot& snapshot) override;
     [[nodiscard]] std::vector<Entry> AllEntries();
-    [[nodiscard]] Result<void> Append(const std::vector<Entry>& ents);
+    [[nodiscard]] Result<void> Append(const std::vector<Entry>& ents) override;
     [[nodiscard]] Result<void> MayAppend(const std::vector<Entry>& entries);
+    [[nodiscard]] Result<void> Sync() override;
 
   private:
     std::mutex mutex_;
