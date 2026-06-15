@@ -178,6 +178,9 @@ Result<void> SegmentManager::RemoveSegment(uint64_t segment_id) {
 
     // Remove from map
     segments_.erase(it);
+    if (current_segment_id_ == segment_id) {
+        current_segment_id_ = segments_.empty() ? 0 : segments_.rbegin()->first;
+    }
 
     // Delete the file
     std::error_code ec;

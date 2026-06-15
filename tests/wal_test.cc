@@ -1260,6 +1260,77 @@ TEST_SUITE("wal") {
         }
     }
 
+    TEST_CASE("wal: conflict rewrite survives reopen") {
+        TempDir temp_dir;
+
+        WALConfig config;
+        config.dir = temp_dir.path();
+        config.sync_on_write = true;
+
+        {
+            auto wal = WAL::Open(config);
+            REQUIRE(wal.has_value());
+
+            std::vector<Entry> old_entries;
+            for (uint64_t i = 1; i <= 5; ++i) {
+                old_entries.push_back(MakeWalEntry(i, 1, "old"));
+            }
+            REQUIRE((*wal)->Append(old_entries));
+
+            std::vector<Entry> replacement_entries;
+            for (uint64_t i = 3; i <= 6; ++i) {
+                replacement_entries.push_back(MakeWalEntry(i, 2, "new"));
+            }
+            REQUIRE((*wal)->Append(replacement_entries));
+
+            CHECK((*wal)->LastIndex() == 6);
+            auto term = (*wal)->Term(3);
+            REQUIRE(term.has_value());
+            CHECK(*term == 2);
+        }
+
+        auto wal = WAL::Open(config);
+        REQUIRE(wal.has_value());
+
+        CHECK((*wal)->FirstIndex() == 1);
+        CHECK((*wal)->LastIndex() == 6);
+
+        auto term = (*wal)->Term(1);
+        REQUIRE(term.has_value());
+        CHECK(*term == 1);
+        term = (*wal)->Term(2);
+        REQUIRE(term.has_value());
+        CHECK(*term == 1);
+        term = (*wal)->Term(3);
+        REQUIRE(term.has_value());
+        CHECK(*term == 2);
+        term = (*wal)->Term(6);
+        REQUIRE(term.has_value());
+        CHECK(*term == 2);
+
+        auto read_result = (*wal)->ReadEntries(1, 7, std::nullopt);
+        REQUIRE(read_result.has_value());
+        REQUIRE(read_result->size() == 6);
+        for (size_t i = 0; i < read_result->size(); ++i) {
+            auto reader = capnp_util::reader<msg::Entry>((*read_result)[i]);
+            const uint64_t index = static_cast<uint64_t>(i + 1);
+            CHECK(reader.getIndex() == index);
+            if (index <= 2) {
+                CHECK(reader.getTerm() == 1);
+                auto data = reader.getData();
+                CHECK(
+                    std::string(reinterpret_cast<const char*>(data.begin()), data.size()) == "old"
+                );
+            } else {
+                CHECK(reader.getTerm() == 2);
+                auto data = reader.getData();
+                CHECK(
+                    std::string(reinterpret_cast<const char*>(data.begin()), data.size()) == "new"
+                );
+            }
+        }
+    }
+
     TEST_CASE("wal: term monotonicity") {
         TempDir temp_dir;
 

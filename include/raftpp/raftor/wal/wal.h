@@ -143,6 +143,7 @@ class WAL {
 
     [[nodiscard]] Result<Segment*> GetCurrentSegmentForAppend(uint64_t first_index_hint);
     [[nodiscard]] Result<void> MaybeRollSegmentForAppend(uint64_t first_index, Segment*& segment);
+    [[nodiscard]] Result<void> TruncateSuffixFrom(uint64_t index);
 
     // Internal helpers (no locking, must be called with lock held)
     [[nodiscard]] uint64_t LastIndexUnlocked() const;

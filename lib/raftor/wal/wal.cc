@@ -287,7 +287,7 @@ Result<void> WAL::Recover() {
                     "failed to replay segment {}: {}", seg_info.segment_id,
                     result.error().ToString()
                 );
-                // Continue with partial recovery
+                return result.error();
             }
         }
     }
@@ -392,6 +392,14 @@ Result<void> WAL::ReplaySegment(Segment* segment) {
                 auto entry_reader = capnp_util::reader<msg::Entry>(entry);
                 // Only add entries >= first_index (entries before may have been compacted)
                 if (entry_reader.getIndex() >= first_index_) {
+                    const uint64_t expected_index =
+                        index_.empty() ? first_index_ : index_.last_index() + 1;
+                    if (entry_reader.getIndex() != expected_index) {
+                        return RaftError(FatalError{fmt::format(
+                            "WAL recovery found non-continuous entry: expected {}, got {}",
+                            expected_index, entry_reader.getIndex()
+                        )});
+                    }
                     index_.Insert(
                         entry_reader.getIndex(), segment->segment_id(), offset, total_size,
                         entry_reader.getTerm()
@@ -425,6 +433,15 @@ Result<void> WAL::ReplaySegment(Segment* segment) {
 
                         auto entry_reader = capnp_util::reader<msg::Entry>(entry);
                         if (entry_reader.getIndex() >= first_index_) {
+                            const uint64_t expected_index =
+                                index_.empty() ? first_index_ : index_.last_index() + 1;
+                            if (entry_reader.getIndex() != expected_index) {
+                                return RaftError(FatalError{fmt::format(
+                                    "WAL recovery found non-continuous batch entry: expected {}, "
+                                    "got {}",
+                                    expected_index, entry_reader.getIndex()
+                                )});
+                            }
                             // For batch, we store the batch offset but track individual entries
                             index_.Insert(
                                 entry_reader.getIndex(), segment->segment_id(), offset, total_size,
@@ -481,8 +498,9 @@ Result<void> WAL::Append(nonstd::span<const Entry> entries) {
         // Handle truncation case - entries may be replacing existing ones
         if (first_entry_reader.getIndex() < expected_index &&
             first_entry_reader.getIndex() >= first_index_) {
-            // Truncate the index
-            index_.TruncateFrom(first_entry_reader.getIndex());
+            if (auto result = TruncateSuffixFrom(first_entry_reader.getIndex()); !result) {
+                return result.error();
+            }
         } else if (first_entry_reader.getIndex() != expected_index) {
             return RaftError(FatalError{fmt::format(
                 "non-continuous entries: expected {}, got {}", expected_index,
@@ -598,6 +616,41 @@ Result<Segment*> WAL::GetCurrentSegmentForAppend(uint64_t first_index_hint) {
     }
 
     return segment;
+}
+
+Result<void> WAL::TruncateSuffixFrom(uint64_t index) {
+    auto entry_info = index_.Lookup(index);
+    if (!entry_info) {
+        return RaftError(
+            FatalError{fmt::format("cannot truncate WAL suffix at missing index {}", index)}
+        );
+    }
+
+    Segment* segment = segment_manager_->GetSegmentForIndex(index);
+    if (segment == nullptr || segment->segment_id() != entry_info->segment_id) {
+        return RaftError(FatalError{
+            fmt::format("cannot truncate WAL suffix at index {}: segment not found", index)
+        });
+    }
+
+    if (auto result = segment->Truncate(entry_info->offset); !result) {
+        return result.error();
+    }
+    if (auto result = segment->Sync(); !result) {
+        return result.error();
+    }
+
+    for (const auto& info : segment_manager_->ListSegments()) {
+        if (info.segment_id <= segment->segment_id()) {
+            continue;
+        }
+        if (auto result = segment_manager_->RemoveSegment(info.segment_id); !result) {
+            return result.error();
+        }
+    }
+
+    index_.TruncateFrom(index);
+    return {};
 }
 
 Result<void> WAL::MaybeRollSegmentForAppend(uint64_t first_index, Segment*& segment) {
