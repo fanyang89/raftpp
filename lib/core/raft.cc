@@ -1099,9 +1099,20 @@ Result<void> Raft::StepLeader(const Message& m) {
                 return RaftError(RaftErrorCode::ProposalDropped);
             }
 
+            std::optional<size_t> conf_change_position;
             for (size_t i = 0; i < entries.size(); i++) {
                 auto ent = entries[i];
                 if (ent.getEntryType() == EntryType::ENTRY_CONF_CHANGE_V2) {
+                    if (HasPendingConf()) {
+                        RAFTPP_LOG_WARN("proposed ConfChangeV2 while another is pending; dropping");
+                        return RaftError(RaftErrorCode::ProposalDropped);
+                    }
+                    if (conf_change_position.has_value()) {
+                        RAFTPP_LOG_WARN("proposed multiple ConfChangeV2 entries; dropping");
+                        return RaftError(RaftErrorCode::ProposalDropped);
+                    }
+                    conf_change_position = i;
+
                     auto data = ent.getData();
                     if (data.size() == 0) {
                         RAFTPP_LOG_WARN("proposed ConfChangeV2 has no data; dropping");
@@ -1130,6 +1141,7 @@ Result<void> Raft::StepLeader(const Message& m) {
             }
 
             {
+                const uint64_t old_last_index = raft_log_.LastIndex();
                 std::vector<Entry> entries_vec;
                 entries_vec.reserve(entries.size());
                 for (const auto& e : entries) {
@@ -1145,6 +1157,9 @@ Result<void> Raft::StepLeader(const Message& m) {
                 }
                 if (!AppendEntry(std::move(entries_vec))) {
                     return RaftError(RaftErrorCode::ProposalDropped);
+                }
+                if (conf_change_position.has_value()) {
+                    pending_conf_index_ = old_last_index + *conf_change_position + 1;
                 }
             }
             BroadcastAppend();
@@ -1709,19 +1724,20 @@ Result<ConfState> Raft::ApplyConfChange(const ConfChangeV2& cc) {
         }
     }
 
-    if (r) {
-        const auto& cfg = r->first;
-        const auto& changes = r->second;
-        RAFTPP_LOG_INFO("ApplyConfChange: success, num_changes={}", changes.size());
-        for (const auto& [id, change_type] : changes) {
-            RAFTPP_LOG_INFO(
-                "  change: id={}, type={}", id, change_type == MapChangeType::Add ? "Add" : "Remove"
-            );
-        }
-        progress_tracker_.ApplyConf(cfg, changes, raft_log_.LastIndex());
-    } else {
+    if (!r) {
         RAFTPP_LOG_ERROR("ApplyConfChange: failed, error={}", r.error().ToString());
+        return r.error();
     }
+
+    const auto& cfg = r->first;
+    const auto& changes = r->second;
+    RAFTPP_LOG_INFO("ApplyConfChange: success, num_changes={}", changes.size());
+    for (const auto& [id, change_type] : changes) {
+        RAFTPP_LOG_INFO(
+            "  change: id={}, type={}", id, change_type == MapChangeType::Add ? "Add" : "Remove"
+        );
+    }
+    progress_tracker_.ApplyConf(cfg, changes, raft_log_.LastIndex());
 
     return PostConfChange();
 }

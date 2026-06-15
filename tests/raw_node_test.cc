@@ -42,6 +42,47 @@ std::vector<Entry> MakeEntryVec(Entry&& entry) {
     return v;
 }
 
+void CampaignSingleNodeLeader(RawNode& raw_node, const std::shared_ptr<MemoryStorage>& storage) {
+    raw_node.Campaign().value();
+    while (true) {
+        auto rd = raw_node.GetReady();
+        storage->Append(rd.entries).value();
+        const bool is_leader = rd.ss.has_value() && rd.ss->leader_id == raw_node.GetStatus().id;
+        std::ignore = raw_node.Advance(rd);
+        raw_node.AdvanceApply();
+        if (is_leader) {
+            break;
+        }
+    }
+}
+
+void ApplyCommittedConfChanges(RawNode& raw_node, const std::vector<Entry>& committed_entries) {
+    for (const auto& entry : committed_entries) {
+        if (capnp_util::reader<msg::Entry>(entry).getEntryType() ==
+            EntryType::ENTRY_CONF_CHANGE_V2) {
+            raw_node.ApplyConfChange(ParseConfChangeV2FromEntry(entry)).value();
+        }
+    }
+}
+
+void AdvanceReadyAndApply(RawNode& raw_node, const std::shared_ptr<MemoryStorage>& storage) {
+    auto rd = raw_node.GetReady();
+    storage->Append(rd.entries).value();
+    ApplyCommittedConfChanges(raw_node, rd.light.committed_entries);
+    auto light_rd = raw_node.Advance(rd);
+    ApplyCommittedConfChanges(raw_node, light_rd.committed_entries);
+    raw_node.AdvanceApply();
+}
+
+void SetConfChangeEntry(msg::Entry::Builder entry_builder, const ConfChangeV2& cc) {
+    entry_builder.setEntryType(EntryType::ENTRY_CONF_CHANGE_V2);
+    const std::string serialized = capnp_util::toString(cc);
+    entry_builder.setData(
+        kj::arrayPtr(reinterpret_cast<const kj::byte*>(serialized.data()), serialized.size())
+    );
+    raftor::SetEntryChecksum(entry_builder);
+}
+
 }  // namespace
 
 TEST_SUITE_BEGIN("raw_node");
@@ -1009,6 +1050,59 @@ TEST_CASE("raw_node: propose and conf change - simple add node") {
     );
     CHECK_EQ(DataToString(capnp_util::reader<msg::Entry>(entries[1]).getData()), ccdata);
     CHECK(ConfStateEquals(cs.value(), MakeConfState({1, 2})));
+}
+
+TEST_CASE("raw_node: reject second pending conf change") {
+    auto storage = std::make_shared<MemoryStorage>();
+    storage->ApplySnapshot(NewSnapshot(1, 1, {1})).value();
+
+    RawNode raw_node = NewRawNode(1, {}, 10, 1, storage);
+    CampaignSingleNodeLeader(raw_node, storage);
+
+    auto first_cc = MakeAddNodeCC(2);
+    auto second_cc = MakeAddNodeCC(3);
+
+    REQUIRE(raw_node.ProposeConfChange("", first_cc));
+    auto second_result = raw_node.ProposeConfChange("", second_cc);
+    REQUIRE_FALSE(second_result);
+    CHECK(second_result.error() == RaftErrorCode::ProposalDropped);
+
+    while (raw_node.HasReady()) {
+        AdvanceReadyAndApply(raw_node, storage);
+    }
+
+    CHECK(raw_node.ProposeConfChange("", second_cc));
+}
+
+TEST_CASE("raw_node: reject batched conf changes") {
+    auto storage = std::make_shared<MemoryStorage>();
+    storage->ApplySnapshot(NewSnapshot(1, 1, {1})).value();
+
+    RawNode raw_node = NewRawNode(1, {}, 10, 1, storage);
+    CampaignSingleNodeLeader(raw_node, storage);
+
+    Message proposal = capnp_util::make<msg::Message>();
+    auto proposal_builder = capnp_util::builder<msg::Message>(proposal);
+    proposal_builder.setMsgType(MessageType::MSG_PROPOSE);
+    proposal_builder.setFrom(1);
+    auto entries = proposal_builder.initEntries(2);
+    SetConfChangeEntry(entries[0], MakeAddNodeCC(2));
+    SetConfChangeEntry(entries[1], MakeAddNodeCC(3));
+
+    auto result = raw_node.Step(std::move(proposal));
+    REQUIRE_FALSE(result);
+    CHECK(result.error() == RaftErrorCode::ProposalDropped);
+}
+
+TEST_CASE("raw_node: apply conf change propagates changer error") {
+    auto storage = std::make_shared<MemoryStorage>();
+    storage->ApplySnapshot(NewSnapshot(1, 1, {1})).value();
+
+    RawNode raw_node = NewRawNode(1, {}, 10, 1, storage);
+    auto result = raw_node.ApplyConfChange(MakeRemoveNodeCC(1));
+
+    REQUIRE_FALSE(result);
+    CHECK(raw_node.raft().progress_tracker().conf().voters.incoming().count(1) == 1);
 }
 
 /// Test configuration change mechanism - add learner node.
