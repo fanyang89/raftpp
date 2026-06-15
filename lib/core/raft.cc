@@ -678,7 +678,21 @@ bool Raft::Restore(const Snapshot& snapshot) {
         return false;
     }
 
-    std::ignore = raft_log_.Restore(snapshot);
+    auto restored_tracker = ProgressTracker(config_.max_inflight_messages);
+    auto conf_state = CloneConfState(cs);
+    if (const auto r = raftpp::Restore(restored_tracker, snap_meta.getIndex() + 1, conf_state);
+        !r) {
+        RAFTPP_LOG_WARN("failed to restore tracker from snapshot: {}", r.error().ToString());
+        return false;
+    }
+
+    if (const auto r = raft_log_.Restore(snapshot); !r) {
+        RAFTPP_LOG_WARN("failed to restore raft log from snapshot: {}", r.error().ToString());
+        return false;
+    }
+
+    progress_tracker_ = std::move(restored_tracker);
+    std::ignore = PostConfChange();
 
     pending_request_snapshot_ = kInvalidIndex;
 

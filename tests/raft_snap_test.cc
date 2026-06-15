@@ -166,6 +166,58 @@ TEST_CASE("snapshot abort") {
     CHECK_EQ(pr.next_idx(), 12);
 }
 
+TEST_CASE("restore snapshot updates tracker configuration") {
+    auto storage = std::make_shared<MemoryStorage>();
+    auto r = NewTestRaft(1, {1, 2, 3}, 10, 1, storage);
+
+    auto restore_result = r->Restore(NewSnapshot(11, 11, {1, 4, 5}));
+    REQUIRE(restore_result);
+
+    const auto& tracker = r->progress_tracker();
+    const auto& voters = tracker.conf().voters.incoming();
+
+    CHECK(voters.count(1) == 1);
+    CHECK(voters.count(4) == 1);
+    CHECK(voters.count(5) == 1);
+    CHECK(voters.count(2) == 0);
+    CHECK(voters.count(3) == 0);
+    CHECK(tracker.conf().voters.outgoing().empty());
+
+    CHECK(tracker.progress_map().count(1) == 1);
+    CHECK(tracker.progress_map().count(4) == 1);
+    CHECK(tracker.progress_map().count(5) == 1);
+    CHECK(tracker.progress_map().count(2) == 0);
+    CHECK(tracker.progress_map().count(3) == 0);
+    REQUIRE(tracker.progress_map().count(4) == 1);
+    REQUIRE(tracker.progress_map().count(5) == 1);
+    CHECK(tracker.progress_map().at(4).next_idx() == 12);
+    CHECK(tracker.progress_map().at(5).next_idx() == 12);
+}
+
+TEST_CASE("restore snapshot updates tracker learners") {
+    auto storage = std::make_shared<MemoryStorage>();
+    auto r = NewTestRaft(1, {1, 2, 3}, 10, 1, storage);
+    auto snapshot = NewSnapshot(11, 11, {1, 4});
+    auto conf_state = MakeConfState({1, 4}, {5});
+    capnp_util::builder<msg::Snapshot>(snapshot).getMetadata().setConfState(
+        capnp_util::reader<msg::ConfState>(conf_state)
+    );
+
+    auto restore_result = r->Restore(snapshot);
+    REQUIRE(restore_result);
+
+    const auto& tracker = r->progress_tracker();
+    const auto& voters = tracker.conf().voters.incoming();
+
+    CHECK(voters.count(1) == 1);
+    CHECK(voters.count(4) == 1);
+    CHECK(voters.count(5) == 0);
+    CHECK(tracker.conf().learners.count(5) == 1);
+    CHECK(tracker.progress_map().count(5) == 1);
+    REQUIRE(tracker.progress_map().count(5) == 1);
+    CHECK(tracker.progress_map().at(5).next_idx() == 12);
+}
+
 // Initialized storage should be at term 1 instead of 0. Otherwise the case will fail.
 TEST_CASE("snapshot with min term") {
     auto do_test = [](bool pre_vote) {
