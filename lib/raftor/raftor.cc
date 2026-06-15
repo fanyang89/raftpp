@@ -728,7 +728,7 @@ void RaftorImpl::ProcessProposalQueue() {
 
 void RaftorImpl::ProcessReadIndexQueue() {
     while (auto item = read_index_queue_.TryPop()) {
-        auto ctx = std::move(item->ctx);
+        const auto user_ctx_size = item->ctx.size();
         auto callback = std::move(item->callback);
         const auto timeout = item->timeout.value_or(config_.read_index_timeout);
 
@@ -739,8 +739,11 @@ void RaftorImpl::ProcessReadIndexQueue() {
             continue;
         }
 
+        const std::string ctx = GenerateProposalContext();
+
         telemetry::ScopedSpan span("raftor.read_index.process", config_.node_id);
-        span.span()->SetAttribute("raft.read.ctx_bytes", static_cast<int64_t>(ctx.size()));
+        span.span()->SetAttribute("raft.read.ctx_bytes", static_cast<int64_t>(user_ctx_size));
+        span.span()->SetAttribute("raft.read.internal_ctx", ctx);
         span.span()->SetAttribute("raft.read.timeout_ms", static_cast<int64_t>(timeout.count()));
 
         // Track the read

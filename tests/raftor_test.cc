@@ -751,6 +751,89 @@ TEST_CASE("update_node_address_commits_to_wal_metadata") {
     CHECK(removed_peers.back() == 1);
 }
 
+TEST_CASE("duplicate read index contexts both complete") {
+    const auto pid = static_cast<uint64_t>(::getpid());
+    auto temp_dir = std::filesystem::temp_directory_path() /
+        ("raftpp_duplicate_read_index_" + std::to_string(pid));
+    std::error_code ec;
+    std::filesystem::remove_all(temp_dir, ec);
+    std::filesystem::create_directories(temp_dir);
+    TempDirCleanup cleanup(temp_dir);
+
+    auto listen_addr = "127.0.0.1:" + std::to_string(PortAllocator::GetNextPort());
+    RaftorConfig config;
+    config.node_id = 1;
+    config.listen_addr = listen_addr;
+    config.data_dir = temp_dir;
+    config.election_tick = 5;
+    config.heartbeat_tick = 1;
+    config.tick_interval = 1ms;
+    config.initial_peers = {PeerConfig{1, listen_addr}};
+
+    auto storage = std::make_shared<MemoryStorage>();
+    auto transport = std::make_unique<RecordingTransport>();
+    auto state_machine = std::make_unique<MockStateMachine>();
+    auto raftor_result =
+        Raftor::Create(config, std::move(state_machine), storage, std::move(transport));
+    REQUIRE(raftor_result.has_value());
+    auto raftor = std::move(*raftor_result);
+
+    REQUIRE(raftor->Start());
+    REQUIRE(raftor->Campaign());
+
+    auto deadline = std::chrono::steady_clock::now() + 1s;
+    while (!raftor->IsLeader() && std::chrono::steady_clock::now() < deadline) {
+        raftor->Poll(1ms);
+    }
+    REQUIRE(raftor->IsLeader());
+
+    std::promise<Result<std::string>> proposal_promise;
+    auto proposal_future = proposal_promise.get_future();
+    raftor->Propose("readindex_warmup", [&proposal_promise](Result<std::string> result) {
+        proposal_promise.set_value(std::move(result));
+    });
+
+    deadline = std::chrono::steady_clock::now() + 1s;
+    while (proposal_future.wait_for(0ms) != std::future_status::ready &&
+           std::chrono::steady_clock::now() < deadline) {
+        raftor->Poll(1ms);
+    }
+    REQUIRE(proposal_future.wait_for(0ms) == std::future_status::ready);
+    REQUIRE(proposal_future.get().has_value());
+
+    auto read_promise1 = std::make_shared<std::promise<Result<void>>>();
+    auto read_promise2 = std::make_shared<std::promise<Result<void>>>();
+    auto read_future1 = read_promise1->get_future();
+    auto read_future2 = read_promise2->get_future();
+    auto completed1 = std::make_shared<std::atomic<bool>>(false);
+    auto completed2 = std::make_shared<std::atomic<bool>>(false);
+
+    raftor->ReadIndex("same-context", [read_promise1, completed1](Result<void> result) {
+        if (!completed1->exchange(true)) {
+            read_promise1->set_value(std::move(result));
+        }
+    });
+    raftor->ReadIndex("same-context", [read_promise2, completed2](Result<void> result) {
+        if (!completed2->exchange(true)) {
+            read_promise2->set_value(std::move(result));
+        }
+    });
+
+    deadline = std::chrono::steady_clock::now() + 1s;
+    while ((read_future1.wait_for(0ms) != std::future_status::ready ||
+            read_future2.wait_for(0ms) != std::future_status::ready) &&
+           std::chrono::steady_clock::now() < deadline) {
+        raftor->Poll(1ms);
+    }
+
+    REQUIRE(read_future1.wait_for(0ms) == std::future_status::ready);
+    REQUIRE(read_future2.wait_for(0ms) == std::future_status::ready);
+    CHECK(read_future1.get().has_value());
+    CHECK(read_future2.get().has_value());
+    CHECK(completed1->load());
+    CHECK(completed2->load());
+}
+
 TEST_CASE("add_node_commits_peer_address_to_wal_metadata") {
     const auto pid = static_cast<uint64_t>(::getpid());
     auto temp_dir = std::filesystem::temp_directory_path() /

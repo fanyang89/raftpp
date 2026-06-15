@@ -6,6 +6,8 @@
 
 #include <nonstd/expected.hpp>
 
+#include "raftpp/core/assert.h"
+
 namespace raftpp::raftor {
 
 // === ProposalTracker ===
@@ -86,7 +88,8 @@ void ProposalTracker::TrackRead(
     const std::string& ctx, ReadIndexCallback callback, std::chrono::milliseconds timeout
 ) {
     std::lock_guard lock(mutex_);
-    reads_[ctx] = PendingRead{std::move(callback), DeadlineFromTimeout(timeout)};
+    ASSERT(reads_.count(ctx) == 0, "read index context {} is already pending", ctx);
+    reads_.emplace(ctx, PendingRead{std::move(callback), DeadlineFromTimeout(timeout)});
 }
 
 void ProposalTracker::CompleteRead(const std::string& ctx) {
