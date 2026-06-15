@@ -274,6 +274,59 @@ TEST_CASE("raw_node: async entry fetching") {
     std::ignore = raw_node.AdvanceAppend(rd);
 }
 
+TEST_CASE("raw_node: async persist ready preserves future records") {
+    auto storage = std::make_shared<MemoryStorage>();
+
+    Config config = DefaultConfig();
+    config.id = 1;
+    config.election_tick = 10;
+    config.heartbeat_tick = 1;
+
+    ConfState conf_state = capnp_util::make<msg::ConfState>();
+    auto conf_builder = capnp_util::builder<msg::ConfState>(conf_state);
+    auto voters_builder = conf_builder.initVoters(1);
+    voters_builder.set(0, 1);
+    HardState hard_state = capnp_util::make<msg::HardState>();
+    capnp_util::builder<msg::HardState>(hard_state).setCommit(0);
+    storage->SetRaftState(MakeRaftState(hard_state, conf_state));
+
+    RawNode raw_node(config, storage);
+    raw_node.raft().BecomeCandidate();
+    raw_node.raft().BecomeLeader();
+
+    auto rd1 = raw_node.GetReady();
+    REQUIRE(rd1.entries.size() == 1);
+    const auto rd1_number = rd1.number;
+    const auto rd1_index = capnp_util::reader<msg::Entry>(rd1.entries.back()).getIndex();
+    storage->Append(rd1.entries).value();
+    raw_node.AdvanceAppendAsync(rd1);
+
+    raw_node.Propose("", "one").value();
+    auto rd2 = raw_node.GetReady();
+    REQUIRE(rd2.entries.size() == 1);
+    const auto rd2_number = rd2.number;
+    const auto rd2_index = capnp_util::reader<msg::Entry>(rd2.entries.back()).getIndex();
+    storage->Append(rd2.entries).value();
+    raw_node.AdvanceAppendAsync(rd2);
+
+    raw_node.Propose("", "two").value();
+    auto rd3 = raw_node.GetReady();
+    REQUIRE(rd3.entries.size() == 1);
+    const auto rd3_number = rd3.number;
+    const auto rd3_index = capnp_util::reader<msg::Entry>(rd3.entries.back()).getIndex();
+    storage->Append(rd3.entries).value();
+    raw_node.AdvanceAppendAsync(rd3);
+
+    raw_node.OnPersistReady(rd1_number);
+    CHECK(raw_node.raft().raft_log().persisted() == rd1_index);
+
+    raw_node.OnPersistReady(rd2_number);
+    CHECK(raw_node.raft().raft_log().persisted() == rd2_index);
+
+    raw_node.OnPersistReady(rd3_number);
+    CHECK(raw_node.raft().raft_log().persisted() == rd3_index);
+}
+
 TEST_CASE("raw_node: batched append preserves entry checksums") {
     auto storage = std::make_shared<MemoryStorage>();
 

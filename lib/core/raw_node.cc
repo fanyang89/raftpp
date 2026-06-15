@@ -237,11 +237,11 @@ void RawNode::OnPersistReady(uint64_t number) {
 
     while (!records_.empty()) {
         const auto record = records_.front();
-        records_.pop_front();
-
         if (record.number > number) {
             break;
         }
+
+        records_.pop_front();
 
         if (const auto snapshot = record.snapshot) {
             snap_index = snapshot->first;
