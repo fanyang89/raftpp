@@ -61,6 +61,26 @@ Result<void> MemoryStorageCore::ApplySnapshot(const Snapshot& snapshot) {
     return {};
 }
 
+Result<void> MemoryStorageCore::ApplyLocalSnapshot(const Snapshot& snapshot) {
+    auto snapshot_reader = capnp_util::reader<msg::Snapshot>(snapshot);
+    auto meta = snapshot_reader.getMetadata();
+    const uint64_t index = meta.getIndex();
+    if (first_index() > index) {
+        return RaftError(StorageErrorCode::SnapshotOutOfDate);
+    }
+
+    snapshot_metadata_ = CloneSnapshotMetadata(meta);
+
+    auto hard_state_builder = capnp_util::builder<msg::HardState>(raft_state_.hard_state);
+    hard_state_builder.setTerm(std::max(hard_state_builder.getTerm(), meta.getTerm()));
+    if (hard_state_builder.getCommit() < index) {
+        hard_state_builder.setCommit(index);
+    }
+    raft_state_.conf_state = CloneConfState(meta.getConfState());
+
+    return Compact(index + 1);
+}
+
 Result<void> MemoryStorageCore::Compact(uint64_t compact_index) {
     if (compact_index <= first_index()) {
         return {};
@@ -271,6 +291,11 @@ std::optional<GetEntriesContext> MemoryStorage::TakeGetEntriesContext() {
 Result<void> MemoryStorage::ApplySnapshot(const Snapshot& snapshot) {
     std::lock_guard lock(mutex_);
     return core_.ApplySnapshot(snapshot);
+}
+
+Result<void> MemoryStorage::ApplyLocalSnapshot(const Snapshot& snapshot) {
+    std::lock_guard lock(mutex_);
+    return core_.ApplyLocalSnapshot(snapshot);
 }
 
 std::vector<Entry> MemoryStorage::AllEntries() {

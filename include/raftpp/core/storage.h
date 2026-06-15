@@ -96,6 +96,11 @@ class WritableStorage : public Storage {
     [[nodiscard]] virtual Result<void> SetHardState(HardState&& hs) = 0;
     [[nodiscard]] virtual Result<void> SetConfState(const ConfState& conf_state) = 0;
     [[nodiscard]] virtual Result<void> ApplySnapshot(const Snapshot& snapshot) = 0;
+
+    [[nodiscard]] virtual Result<void> ApplyLocalSnapshot(const Snapshot& snapshot) {
+        return ApplySnapshot(snapshot);
+    }
+
     [[nodiscard]] virtual Result<void> Sync() = 0;
 
     [[nodiscard]] virtual Result<std::optional<Snapshot>> LocalSnapshot() { return std::nullopt; }

@@ -1078,6 +1078,88 @@ Result<void> WAL::ApplySnapshot(const Snapshot& snapshot) {
     return {};
 }
 
+Result<void> WAL::ApplyLocalSnapshot(const Snapshot& snapshot) {
+    std::unique_lock lock(mutex_);
+
+    auto snap_reader = capnp_util::reader<msg::Snapshot>(snapshot);
+    const auto& meta = snap_reader.getMetadata();
+
+    if (meta.getIndex() <= snapshot_index_) {
+        return RaftError(StorageErrorCode::SnapshotOutOfDate);
+    }
+
+    const uint64_t new_snapshot_index = meta.getIndex();
+    const uint64_t last_idx = LastIndexUnlocked();
+    if (new_snapshot_index > last_idx) {
+        return RaftError(FatalError{
+            fmt::format("local snapshot index {} > last index {}", new_snapshot_index, last_idx)
+        });
+    }
+
+    auto snapshot_result = PersistSnapshotFile(*env_, config_.dir, snapshot);
+    if (!snapshot_result) {
+        return snapshot_result.error();
+    }
+
+    const uint64_t new_snapshot_term = meta.getTerm();
+    auto new_conf_state = CloneConfState(meta.getConfState());
+    auto new_hard_state = CloneHardState(hard_state_);
+    auto hs_builder = capnp_util::builder<msg::HardState>(new_hard_state);
+    hs_builder.setTerm(std::max(hs_builder.getTerm(), new_snapshot_term));
+    if (hs_builder.getCommit() < new_snapshot_index) {
+        hs_builder.setCommit(new_snapshot_index);
+    }
+
+    WALMetadata wal_meta;
+    wal_meta.hard_state = CloneHardState(new_hard_state);
+    wal_meta.conf_state = CloneConfState(new_conf_state);
+    wal_meta.peer_addresses = peer_addresses_;
+    wal_meta.first_index = new_snapshot_index + 1;
+    wal_meta.snapshot_index = new_snapshot_index;
+    wal_meta.snapshot_term = new_snapshot_term;
+    auto save_result = metadata_store_->Save(wal_meta);
+    if (!save_result) {
+        return save_result.error();
+    }
+
+    snapshot_index_ = new_snapshot_index;
+    snapshot_term_ = new_snapshot_term;
+    hard_state_ = std::move(new_hard_state);
+    conf_state_ = std::move(new_conf_state);
+    first_index_ = snapshot_index_ + 1;
+    index_.TruncateBefore(first_index_);
+    index_.SetFirstIndex(first_index_);
+
+    std::vector<uint64_t> segments_to_remove;
+    for (const auto& [seg_id, segment] : segment_manager_->segments()) {
+        bool has_entries = false;
+        for (uint64_t idx = first_index_; idx <= last_idx; ++idx) {
+            auto entry_info = index_.Lookup(idx);
+            if (entry_info && entry_info->segment_id == seg_id) {
+                has_entries = true;
+                break;
+            }
+        }
+        if (!has_entries) {
+            segments_to_remove.push_back(seg_id);
+        }
+    }
+
+    for (uint64_t seg_id : segments_to_remove) {
+        auto remove_result = segment_manager_->RemoveSegment(seg_id);
+        if (!remove_result) {
+            RAFTPP_LOG_WARN(
+                "failed to remove compacted segment {} after local snapshot: {}", seg_id,
+                remove_result.error().ToString()
+            );
+        }
+    }
+
+    RAFTPP_LOG_INFO("applied local snapshot at index={}, term={}", snapshot_index_, snapshot_term_);
+
+    return {};
+}
+
 Result<void> WAL::Sync() {
     std::unique_lock lock(mutex_);
 

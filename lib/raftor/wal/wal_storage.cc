@@ -162,6 +162,23 @@ Result<void> WALStorage::ApplySnapshot(const Snapshot& snapshot) {
     return result;
 }
 
+Result<void> WALStorage::ApplyLocalSnapshot(const Snapshot& snapshot) {
+    std::lock_guard lock(mutex_);
+
+    telemetry::ScopedSpan span("raftor.wal.apply_local_snapshot");
+    auto snap_reader = capnp_util::reader<msg::Snapshot>(snapshot);
+    auto snap_meta = snap_reader.getMetadata();
+    span.span()->SetAttribute("raft.snapshot.index", static_cast<int64_t>(snap_meta.getIndex()));
+    span.span()->SetAttribute("raft.snapshot.term", static_cast<int64_t>(snap_meta.getTerm()));
+
+    auto result = wal_->ApplyLocalSnapshot(snapshot);
+    if (result) {
+        snapshot_ = CloneSnapshot(snapshot);
+    }
+    telemetry::RecordErrorIf(span.span(), result);
+    return result;
+}
+
 Result<void> WALStorage::SetConfState(const ConfState& conf_state) {
     std::lock_guard lock(mutex_);
 

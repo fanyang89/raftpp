@@ -1070,6 +1070,64 @@ TEST_SUITE("wal") {
         CHECK(!term.has_value());
     }
 
+    TEST_CASE("wal: local snapshot preserves suffix after reopen") {
+        TempDir temp_dir;
+
+        WALConfig config;
+        config.dir = temp_dir.path();
+        config.sync_on_write = true;
+
+        {
+            auto wal = WAL::Open(config);
+            REQUIRE(wal.has_value());
+
+            std::vector<Entry> entries;
+            for (uint64_t i = 1; i <= 10; ++i) {
+                entries.push_back(MakeWalEntry(i, 1, "data"));
+            }
+            REQUIRE((*wal)->Append(entries));
+
+            REQUIRE((*wal)->ApplyLocalSnapshot(MakeWalSnapshot(5, 1, {1}, "snapshot")));
+
+            CHECK((*wal)->FirstIndex() == 6);
+            CHECK((*wal)->LastIndex() == 10);
+
+            auto term = (*wal)->Term(4);
+            CHECK(!term.has_value());
+            CHECK(term.error() == StorageErrorCode::Compacted);
+            term = (*wal)->Term(6);
+            REQUIRE(term.has_value());
+            CHECK(*term == 1);
+            term = (*wal)->Term(10);
+            REQUIRE(term.has_value());
+            CHECK(*term == 1);
+        }
+
+        auto wal = WAL::Open(config);
+        REQUIRE(wal.has_value());
+
+        CHECK((*wal)->FirstIndex() == 6);
+        CHECK((*wal)->LastIndex() == 10);
+
+        auto term = (*wal)->Term(4);
+        CHECK(!term.has_value());
+        CHECK(term.error() == StorageErrorCode::Compacted);
+        term = (*wal)->Term(6);
+        REQUIRE(term.has_value());
+        CHECK(*term == 1);
+        term = (*wal)->Term(10);
+        REQUIRE(term.has_value());
+        CHECK(*term == 1);
+
+        auto entries = (*wal)->ReadEntries(6, 11, std::nullopt);
+        REQUIRE(entries.has_value());
+        REQUIRE(entries->size() == 5);
+        for (size_t i = 0; i < entries->size(); ++i) {
+            auto reader = capnp_util::reader<msg::Entry>((*entries)[i]);
+            CHECK(reader.getIndex() == static_cast<uint64_t>(i + 6));
+        }
+    }
+
     TEST_CASE("wal: apply snapshot recovery") {
         TempDir temp_dir;
 
@@ -1550,6 +1608,58 @@ TEST_SUITE("wal") {
         auto first = (*storage)->FirstIndex();
         REQUIRE(first.has_value());
         CHECK(*first == 6);
+    }
+
+    TEST_CASE("wal_storage: local snapshot preserves suffix after reopen") {
+        TempDir temp_dir;
+
+        WALConfig config;
+        config.dir = temp_dir.path();
+        config.sync_on_write = true;
+
+        {
+            auto storage = WALStorage::Open(config);
+            REQUIRE(storage.has_value());
+
+            std::vector<Entry> entries;
+            for (uint64_t i = 1; i <= 10; ++i) {
+                entries.push_back(MakeWalEntry(i, 1, "data"));
+            }
+            REQUIRE((*storage)->Append(entries));
+
+            REQUIRE((*storage)->ApplyLocalSnapshot(MakeWalSnapshot(5, 1, {1}, "snapshot")));
+
+            auto first = (*storage)->FirstIndex();
+            REQUIRE(first.has_value());
+            CHECK(*first == 6);
+            auto last = (*storage)->LastIndex();
+            REQUIRE(last.has_value());
+            CHECK(*last == 10);
+        }
+
+        auto storage = WALStorage::Open(config);
+        REQUIRE(storage.has_value());
+
+        auto first = (*storage)->FirstIndex();
+        REQUIRE(first.has_value());
+        CHECK(*first == 6);
+        auto last = (*storage)->LastIndex();
+        REQUIRE(last.has_value());
+        CHECK(*last == 10);
+
+        auto term = (*storage)->Term(4);
+        CHECK(!term.has_value());
+        CHECK(term.error() == StorageErrorCode::Compacted);
+        term = (*storage)->Term(6);
+        REQUIRE(term.has_value());
+        CHECK(*term == 1);
+        term = (*storage)->Term(10);
+        REQUIRE(term.has_value());
+        CHECK(*term == 1);
+
+        auto entries = (*storage)->Entries(6, 11, std::nullopt, GetEntriesContext::Empty(false));
+        REQUIRE(entries.has_value());
+        REQUIRE(entries->size() == 5);
     }
 
     TEST_CASE("wal_storage: snapshot payload survives reopen") {

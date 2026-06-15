@@ -102,6 +102,9 @@ class WAL {
     // Apply a snapshot
     [[nodiscard]] Result<void> ApplySnapshot(const Snapshot& snapshot);
 
+    // Persist a locally-created snapshot and compact entries through its index.
+    [[nodiscard]] Result<void> ApplyLocalSnapshot(const Snapshot& snapshot);
+
     // Sync all pending writes to disk
     [[nodiscard]] Result<void> Sync();
 

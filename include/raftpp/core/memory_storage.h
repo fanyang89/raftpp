@@ -19,6 +19,7 @@ class MemoryStorageCore {
     void CommitTo(uint64_t index);
     bool HasEntryAt(uint64_t index) const;
     [[nodiscard]] Result<void> ApplySnapshot(const Snapshot& snapshot);
+    [[nodiscard]] Result<void> ApplyLocalSnapshot(const Snapshot& snapshot);
     [[nodiscard]] Result<void> Compact(uint64_t compact_index);
     [[nodiscard]] Result<void> Append(const std::vector<Entry>& ents);
     [[nodiscard]] Result<void> MayAppend(const std::vector<Entry>& ents);
@@ -63,6 +64,7 @@ class MemoryStorage final : public WritableStorage {
     void TriggerLogUnavailable(bool enable);
     [[nodiscard]] std::optional<GetEntriesContext> TakeGetEntriesContext();
     [[nodiscard]] Result<void> ApplySnapshot(const Snapshot& snapshot) override;
+    [[nodiscard]] Result<void> ApplyLocalSnapshot(const Snapshot& snapshot) override;
     [[nodiscard]] std::vector<Entry> AllEntries();
     [[nodiscard]] Result<void> Append(const std::vector<Entry>& ents) override;
     [[nodiscard]] Result<void> MayAppend(const std::vector<Entry>& entries);

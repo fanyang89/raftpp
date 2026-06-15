@@ -56,6 +56,9 @@ class WALStorage final : public WritableStorage {
     // Apply a snapshot
     [[nodiscard]] Result<void> ApplySnapshot(const Snapshot& snapshot) override;
 
+    // Persist a locally-created snapshot while preserving post-snapshot entries.
+    [[nodiscard]] Result<void> ApplyLocalSnapshot(const Snapshot& snapshot) override;
+
     // Set the conf state
     [[nodiscard]] Result<void> SetConfState(const ConfState& conf_state) override;
 

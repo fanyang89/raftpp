@@ -1137,8 +1137,8 @@ Result<void> RaftorImpl::TakeSnapshot() {
     }
     snap_builder.setMetadata(capnp_util::reader<msg::SnapshotMetadata>(*metadata_result));
 
-    // Apply to storage (this will compact the log)
-    if (auto result = storage_->ApplySnapshot(snapshot); !result) {
+    // Persist the local snapshot and compact only entries covered by it.
+    if (auto result = storage_->ApplyLocalSnapshot(snapshot); !result) {
         telemetry::RecordErrorIf(span.span(), result);
         RAFTPP_LOG_ERROR(
             "Snapshot apply failed at index {}: {}", applied_index, result.error().ToString()
