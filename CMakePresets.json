@@ -10,6 +10,13 @@
       }
     },
     {
+      "name": "Debug-Seastar",
+      "inherits": "Debug",
+      "cacheVariables": {
+        "RAFTPP_WITH_SEASTAR": "ON"
+      }
+    },
+    {
       "name": "Release",
       "generator": "Ninja",
       "cacheVariables": {

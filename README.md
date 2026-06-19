@@ -52,6 +52,21 @@ cmake --build build
 ./build/tests/datadriven/data-driven-tests
 ```
 
+### Experimental Seastar Integration
+
+`raftpp` builds and runs without Seastar by default. Optional Seastar build
+support is opt-in with `RAFTPP_WITH_SEASTAR=ON`, for example:
+
+```bash
+cmake --preset=Debug-Seastar -B build-seastar
+```
+
+When enabled, CMake expects an installed Seastar package discoverable via the
+normal package search path, such as `CMAKE_PREFIX_PATH`; Seastar is not fetched
+as part of the default build. The non-Seastar public API remains the
+compatibility baseline, and Seastar integration is experimental until runtime
+and transport support lands.
+
 ### Minimal Example
 
 ```cpp
