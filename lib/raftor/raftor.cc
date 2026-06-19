@@ -38,6 +38,7 @@
 #include "raftpp/raftor/wal/wal_config.h"
 #include "raftpp/raftor/wal/wal_storage.h"
 #include "ready_processor.h"
+#include "runtime.h"
 #include "transport.h"
 
 namespace raftpp::raftor {
@@ -336,7 +337,7 @@ class RaftorImpl : public Raftor {
     bool Tick() override;
 
   private:
-    void EventLoop();
+    bool EventLoopIteration(std::chrono::milliseconds timeout);
     void ProcessProposalQueue();
     void ProcessReadIndexQueue();
     void ProcessTimeouts();
@@ -364,6 +365,7 @@ class RaftorImpl : public Raftor {
     std::unique_ptr<StateMachine> state_machine_;
     std::shared_ptr<WritableStorage> storage_;
     std::unique_ptr<rpc::Transport> transport_;
+    std::unique_ptr<Runtime> runtime_;
     std::unique_ptr<RawNode> raw_node_;
     std::unique_ptr<ReadyProcessor> ready_processor_;
 
@@ -402,7 +404,8 @@ RaftorImpl::RaftorImpl(
     : config_(config),
       state_machine_(std::move(state_machine)),
       storage_(std::move(storage)),
-      transport_(std::move(transport)) {
+      transport_(std::move(transport)),
+      runtime_(MakeRuntime()) {
     // Create RawNode
     auto raft_config = config_.ToRaftConfig();
     raft_config.applied = initial_applied_index;
@@ -470,7 +473,7 @@ Result<void> RaftorImpl::Start() {
     }
 
     running_ = true;
-    last_tick_ = std::chrono::steady_clock::now();
+    last_tick_ = runtime_->Now();
     InitializeSnapshotState();
 
     RAFTPP_LOG_INFO(
@@ -485,7 +488,7 @@ void RaftorImpl::Run() {
         return;
     }
 
-    EventLoop();
+    runtime_->Run([this] { return EventLoopIteration(config_.tick_interval); });
 }
 
 void RaftorImpl::Stop() {
@@ -505,6 +508,7 @@ void RaftorImpl::Stop() {
 
     // Stop transport
     transport_->Stop();
+    runtime_->Wake();
 
     started_ = false;
     RAFTPP_LOG_INFO("Raftor node {} stopped", config_.node_id);
@@ -514,19 +518,20 @@ bool RaftorImpl::IsRunning() const {
     return running_;
 }
 
-void RaftorImpl::EventLoop() {
-    while (running_) {
-        // 1. Poll network with tick interval timeout
-        transport_->Poll(config_.tick_interval);
-
-        // 2. Check tick timer
-        if (ShouldTick()) {
-            std::ignore = raw_node_->Tick();
-            last_tick_ = std::chrono::steady_clock::now();
-        }
-
-        ProcessRaftWork();
+bool RaftorImpl::EventLoopIteration(std::chrono::milliseconds timeout) {
+    if (!running_) {
+        return false;
     }
+
+    transport_->Poll(timeout);
+
+    if (ShouldTick()) {
+        std::ignore = raw_node_->Tick();
+        last_tick_ = runtime_->Now();
+    }
+
+    ProcessRaftWork();
+    return running_;
 }
 
 void RaftorImpl::Poll(std::chrono::milliseconds timeout) {
@@ -534,14 +539,7 @@ void RaftorImpl::Poll(std::chrono::milliseconds timeout) {
         return;
     }
 
-    transport_->Poll(timeout);
-
-    if (ShouldTick()) {
-        std::ignore = raw_node_->Tick();
-        last_tick_ = std::chrono::steady_clock::now();
-    }
-
-    ProcessRaftWork();
+    runtime_->Poll(timeout, [this, timeout] { std::ignore = EventLoopIteration(timeout); });
 }
 
 bool RaftorImpl::Tick() {
@@ -550,19 +548,19 @@ bool RaftorImpl::Tick() {
     }
 
     bool ticked = raw_node_->Tick();
-    last_tick_ = std::chrono::steady_clock::now();
+    last_tick_ = runtime_->Now();
 
     ProcessRaftWork();
     return ticked;
 }
 
 bool RaftorImpl::ShouldTick() {
-    auto now = std::chrono::steady_clock::now();
+    auto now = runtime_->Now();
     return (now - last_tick_) >= config_.tick_interval;
 }
 
 void RaftorImpl::InitializeSnapshotState() {
-    last_snapshot_time_ = std::chrono::steady_clock::now();
+    last_snapshot_time_ = runtime_->Now();
     last_snapshot_attempt_time_ = std::chrono::steady_clock::time_point{};
     last_log_size_check_ = std::chrono::steady_clock::time_point{};
 
@@ -638,7 +636,7 @@ void RaftorImpl::MaybeAutoSnapshot() {
         return;
     }
 
-    const auto now = std::chrono::steady_clock::now();
+    const auto now = runtime_->Now();
     bool should_snapshot = false;
     const char* reason = nullptr;
 
@@ -781,6 +779,7 @@ void RaftorImpl::EnqueueProposal(
     }
 
     proposal_queue_.Push(std::move(data), std::move(wrapped_callback), timeout);
+    runtime_->Wake();
 }
 
 void RaftorImpl::EnqueueReadIndex(
@@ -804,6 +803,7 @@ void RaftorImpl::EnqueueReadIndex(
     }
 
     read_index_queue_.Push(std::move(ctx), std::move(wrapped_callback), timeout);
+    runtime_->Wake();
 }
 
 void RaftorImpl::FailQueuedRequests(const RaftError& error) {
@@ -847,6 +847,7 @@ void RaftorImpl::EnterTerminalState(const RaftError& error) {
 
     running_ = false;
     started_ = false;
+    runtime_->Wake();
 
     FailQueuedRequests(error);
     proposal_tracker_.FailAll(error);
@@ -859,7 +860,7 @@ void RaftorImpl::EnterTerminalState(const RaftError& error) {
 }
 
 void RaftorImpl::ProcessTimeouts() {
-    proposal_tracker_.ExpireTimeouts(std::chrono::steady_clock::now());
+    proposal_tracker_.ExpireTimeouts(runtime_->Now());
 }
 
 void RaftorImpl::OnMessage(Message msg) {
@@ -1149,7 +1150,7 @@ Result<void> RaftorImpl::TakeSnapshot() {
         return result;
     }
 
-    last_snapshot_time_ = std::chrono::steady_clock::now();
+    last_snapshot_time_ = runtime_->Now();
     last_snapshot_attempt_index_ = applied_index;
     return {};
 }

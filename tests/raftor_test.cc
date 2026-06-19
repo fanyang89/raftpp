@@ -21,6 +21,7 @@
 #include <nonstd/span.hpp>
 
 #include "../lib/raftor/metadata_change.h"
+#include "../lib/raftor/runtime.h"
 #include "raftpp/core/capnp_util.h"
 #include "raftpp/core/memory_storage.h"
 #include "raftpp/core/types.h"
@@ -304,6 +305,48 @@ class FaultyStorage final : public WritableStorage {
     std::shared_ptr<MemoryStorage> storage_ = std::make_shared<MemoryStorage>();
 };
 
+class ManualRuntime final : public Runtime {
+  public:
+    Clock::time_point Now() const override { return now_; }
+
+    void Run(const LoopCallback& callback) override {
+        run_count++;
+        while (callback()) {}
+    }
+
+    void Poll(std::chrono::milliseconds timeout, const Callback& callback) override {
+        poll_count++;
+        last_poll_timeout = timeout;
+        callback();
+    }
+
+    void Wake() override { wake_count++; }
+
+    void Advance(std::chrono::milliseconds duration) { now_ += duration; }
+
+    int run_count = 0;
+    int poll_count = 0;
+    int wake_count = 0;
+    std::chrono::milliseconds last_poll_timeout{0};
+
+  private:
+    Clock::time_point now_ = Clock::now();
+};
+
+class RuntimeFactoryGuard {
+  public:
+    explicit RuntimeFactoryGuard(RuntimeFactory factory)
+        : previous_(SetRuntimeFactoryForTesting(std::move(factory))) {}
+
+    RuntimeFactoryGuard(const RuntimeFactoryGuard&) = delete;
+    RuntimeFactoryGuard& operator=(const RuntimeFactoryGuard&) = delete;
+
+    ~RuntimeFactoryGuard() { SetRuntimeFactoryForTesting(std::move(previous_)); }
+
+  private:
+    RuntimeFactory previous_;
+};
+
 struct TestNode {
     std::unique_ptr<Raftor> raftor;
     RaftorConfig config;
@@ -420,6 +463,116 @@ uint64_t GetLeaderId(const std::vector<std::unique_ptr<Raftor>>& raftors) {
 }
 
 }  // namespace
+
+TEST_SUITE_BEGIN("raftor_runtime");
+
+TEST_CASE("manual runtime poll drives single node proposal") {
+    ManualRuntime* runtime = nullptr;
+    RuntimeFactoryGuard guard([&runtime] {
+        auto manual_runtime = std::make_unique<ManualRuntime>();
+        runtime = manual_runtime.get();
+        return manual_runtime;
+    });
+
+    RaftorConfig config;
+    config.node_id = 1;
+    config.transport_kind = TransportKind::Noop;
+    config.data_dir = std::filesystem::temp_directory_path() / "raftpp_runtime_poll_test";
+    config.election_tick = 3;
+    config.heartbeat_tick = 1;
+    config.tick_interval = 10ms;
+    std::error_code ec;
+    std::filesystem::remove_all(config.data_dir, ec);
+    TempDirCleanup cleanup(config.data_dir);
+
+    auto state_machine = std::make_unique<MockStateMachine>();
+    auto* state_machine_ptr = state_machine.get();
+    auto storage = std::make_shared<MemoryStorage>();
+    rpc::TransportConfig transport_config;
+    transport_config.node_id = config.node_id;
+    auto transport = std::make_unique<rpc::NoopTransport>(transport_config);
+
+    auto raftor_result =
+        Raftor::Create(config, std::move(state_machine), std::move(storage), std::move(transport));
+    REQUIRE(raftor_result.has_value());
+    auto raftor = std::move(*raftor_result);
+    REQUIRE(runtime != nullptr);
+
+    REQUIRE(raftor->Start().has_value());
+    REQUIRE(raftor->Campaign().has_value());
+    runtime->Advance(10ms);
+    raftor->Poll(5ms);
+    CHECK(runtime->poll_count == 1);
+    CHECK(runtime->last_poll_timeout == 5ms);
+
+    std::promise<Result<std::string>> proposal_result;
+    auto proposal_future = proposal_result.get_future();
+    raftor->Propose("runtime proposal", [&proposal_result](Result<std::string> result) {
+        proposal_result.set_value(std::move(result));
+    });
+    CHECK(runtime->wake_count >= 1);
+
+    for (int i = 0; i < 5 && proposal_future.wait_for(0ms) != std::future_status::ready; ++i) {
+        runtime->Advance(10ms);
+        raftor->Poll(1ms);
+    }
+
+    REQUIRE(proposal_future.wait_for(0ms) == std::future_status::ready);
+    CHECK(proposal_future.get().has_value());
+    CHECK(state_machine_ptr->ApplyCount() >= 1);
+
+    raftor->Stop();
+}
+
+TEST_CASE("manual runtime observes wake and stop fails queued proposal") {
+    ManualRuntime* runtime = nullptr;
+    RuntimeFactoryGuard guard([&runtime] {
+        auto manual_runtime = std::make_unique<ManualRuntime>();
+        runtime = manual_runtime.get();
+        return manual_runtime;
+    });
+
+    RaftorConfig config;
+    config.node_id = 1;
+    config.transport_kind = TransportKind::Noop;
+    config.data_dir = std::filesystem::temp_directory_path() / "raftpp_runtime_stop_test";
+    config.election_tick = 3;
+    config.heartbeat_tick = 1;
+    config.tick_interval = 10ms;
+    std::error_code ec;
+    std::filesystem::remove_all(config.data_dir, ec);
+    TempDirCleanup cleanup(config.data_dir);
+
+    auto storage = std::make_shared<MemoryStorage>();
+    rpc::TransportConfig transport_config;
+    transport_config.node_id = config.node_id;
+    auto transport = std::make_unique<rpc::NoopTransport>(transport_config);
+    auto raftor_result = Raftor::Create(
+        config, std::make_unique<MockStateMachine>(), std::move(storage), std::move(transport)
+    );
+    REQUIRE(raftor_result.has_value());
+    auto raftor = std::move(*raftor_result);
+    REQUIRE(runtime != nullptr);
+
+    REQUIRE(raftor->Start().has_value());
+
+    std::promise<Result<std::string>> proposal_result;
+    auto proposal_future = proposal_result.get_future();
+    raftor->Propose("queued proposal", [&proposal_result](Result<std::string> result) {
+        proposal_result.set_value(std::move(result));
+    });
+    CHECK(runtime->wake_count == 1);
+
+    raftor->Stop();
+
+    REQUIRE(proposal_future.wait_for(0ms) == std::future_status::ready);
+    auto result = proposal_future.get();
+    CHECK(!result.has_value());
+    CHECK(result.error() == RaftErrorCode::ShuttingDown);
+    CHECK(runtime->wake_count >= 2);
+}
+
+TEST_SUITE_END();
 
 TEST_SUITE_BEGIN("raftor_bootstrap");
 
