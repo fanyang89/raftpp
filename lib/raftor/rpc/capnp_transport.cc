@@ -5,6 +5,7 @@
 
 #include <chrono>
 #include <exception>
+#include <limits>
 #include <memory>
 #include <thread>
 #include <unordered_map>
@@ -76,6 +77,41 @@ struct RpcClient {
     std::string addr;
 };
 
+struct PeerRetryState {
+    size_t attempts = 0;
+    std::chrono::steady_clock::time_point next_attempt{};
+};
+
+struct RpcLoopFaultInjector {
+    std::atomic<int> throw_after_start{0};
+};
+
+RpcLoopFaultInjector& FaultInjector() {
+    static RpcLoopFaultInjector injector;
+    return injector;
+}
+
+std::chrono::milliseconds PositiveReconnectInterval(std::chrono::milliseconds interval) {
+    if (interval <= std::chrono::milliseconds::zero()) {
+        return std::chrono::milliseconds(1);
+    }
+    return interval;
+}
+
+std::chrono::milliseconds ReconnectDelay(std::chrono::milliseconds base_interval, size_t attempts) {
+    constexpr int kMaxReconnectMultiplier = 16;
+    const int shift = static_cast<int>(
+        std::min(attempts, static_cast<size_t>(std::numeric_limits<int>::digits - 1))
+    );
+    const int multiplier = std::min(1 << shift, kMaxReconnectMultiplier);
+    return PositiveReconnectInterval(base_interval) * multiplier;
+}
+
+void MarkStopped(std::atomic<bool>& running, std::atomic<bool>& stopped) {
+    running.store(false, std::memory_order_release);
+    stopped.store(true, std::memory_order_release);
+}
+
 }  // namespace
 
 CapnpTransport::CapnpTransport(TransportConfig config) : config_(std::move(config)) {}
@@ -125,11 +161,14 @@ void CapnpTransport::Stop() {
     telemetry::ScopedSpan span("raftor.transport.stop", config_.node_id);
 
     if (!running_ || stopped_) {
+        if (rpc_thread_.joinable() && rpc_thread_.get_id() != std::this_thread::get_id()) {
+            rpc_thread_.join();
+        }
         return;
     }
 
-    stopped_ = true;
-    running_ = false;
+    stopped_.store(true, std::memory_order_release);
+    running_.store(false, std::memory_order_release);
 
     if (rpc_thread_.joinable() && rpc_thread_.get_id() != std::this_thread::get_id()) {
         rpc_thread_.join();
@@ -250,6 +289,7 @@ void CapnpTransport::Run() {
 
 void CapnpTransport::RpcLoop(std::promise<Result<void>> start_promise) {
     bool started = false;
+    const auto reconnect_interval = PositiveReconnectInterval(config_.reconnect_interval);
     auto set_start = [&](Result<void> result) {
         if (!started) {
             started = true;
@@ -277,6 +317,7 @@ void CapnpTransport::RpcLoop(std::promise<Result<void>> start_promise) {
         auto last_backpressure_log = std::chrono::steady_clock::time_point::min();
 
         std::unordered_map<uint64_t, std::unique_ptr<RpcClient>> clients;
+        std::unordered_map<uint64_t, PeerRetryState> retry_states;
 
         set_start({});
 
@@ -293,6 +334,7 @@ void CapnpTransport::RpcLoop(std::promise<Result<void>> start_promise) {
             }
             for (uint64_t peer_id : stale_clients) {
                 clients.erase(peer_id);
+                retry_states.erase(peer_id);
             }
             std::queue<OutgoingBatch> outgoing;
             uint64_t backpressure_peer = 0;
@@ -340,9 +382,25 @@ void CapnpTransport::RpcLoop(std::promise<Result<void>> start_promise) {
                 auto client_it = clients.find(batch.peer_id);
                 if (client_it != clients.end() && client_it->second->addr != addr) {
                     clients.erase(client_it);
+                    retry_states.erase(batch.peer_id);
                     client_it = clients.end();
                 }
                 if (client_it == clients.end()) {
+                    auto now = std::chrono::steady_clock::now();
+                    auto& retry_state = retry_states[batch.peer_id];
+                    if (retry_state.next_attempt > now) {
+                        EnqueueError(
+                            batch.peer_id,
+                            fmt::format(
+                                "RPC reconnect to {} delayed for {}ms", batch.peer_id,
+                                std::chrono::duration_cast<std::chrono::milliseconds>(
+                                    retry_state.next_attempt - now
+                                )
+                                    .count()
+                            )
+                        );
+                        continue;
+                    }
                     try {
                         auto client = std::make_unique<::capnp::EzRpcClient>(addr, 0);
                         auto cap = client->getMain<raftpp::capnp::RaftTransport>();
@@ -354,7 +412,11 @@ void CapnpTransport::RpcLoop(std::promise<Result<void>> start_promise) {
                                             )
                                         )
                                         .first;
+                        retry_states.erase(batch.peer_id);
                     } catch (const kj::Exception& e) {
+                        ++retry_state.attempts;
+                        retry_state.next_attempt =
+                            now + ReconnectDelay(reconnect_interval, retry_state.attempts - 1);
                         RAFTPP_LOG_ERROR(
                             "Failed to create RPC client for peer {} at {}: {}", batch.peer_id,
                             addr, e.getDescription().cStr()
@@ -378,8 +440,8 @@ void CapnpTransport::RpcLoop(std::promise<Result<void>> start_promise) {
                                 --inflight_send_tasks;
                             }
                         })
-                        .catch_([&clients, this, peer_id = batch.peer_id,
-                                 &inflight_send_tasks](kj::Exception&& e) {
+                        .catch_([&clients, this, peer_id = batch.peer_id, &inflight_send_tasks,
+                                 &retry_states, reconnect_interval](kj::Exception&& e) {
                             if (inflight_send_tasks > 0) {
                                 --inflight_send_tasks;
                             }
@@ -387,9 +449,16 @@ void CapnpTransport::RpcLoop(std::promise<Result<void>> start_promise) {
                                 "RPC send to {} failed: {}", peer_id, e.getDescription().cStr()
                             );
                             clients.erase(peer_id);
+                            auto& retry_state = retry_states[peer_id];
+                            retry_state.next_attempt =
+                                std::chrono::steady_clock::now() + reconnect_interval;
                             EnqueueError(peer_id, e.getDescription().cStr());
                         });
                 send_tasks.add(kj::mv(send_promise));
+            }
+
+            if (FaultInjector().throw_after_start.exchange(0, std::memory_order_acq_rel) != 0) {
+                KJ_FAIL_REQUIRE("injected post-start RPC loop failure");
             }
 
             // Avoid driving the event loop once shutdown has been requested.
@@ -418,13 +487,22 @@ void CapnpTransport::RpcLoop(std::promise<Result<void>> start_promise) {
         set_start(nonstd::make_unexpected(RaftError(RpcErrorCode::BindFailed)));
         RAFTPP_LOG_ERROR("Cap'n Proto RPC loop failed: {}", e.getDescription().cStr());
         EnqueueError(0, e.getDescription().cStr());
+        MarkStopped(running_, stopped_);
     } catch (const std::exception& e) {
         set_start(nonstd::make_unexpected(RaftError(RpcErrorCode::BindFailed)));
         RAFTPP_LOG_ERROR("Cap'n Proto RPC loop failed: {}", e.what());
+        EnqueueError(0, e.what());
+        MarkStopped(running_, stopped_);
     } catch (...) {
         set_start(nonstd::make_unexpected(RaftError(RpcErrorCode::BindFailed)));
         RAFTPP_LOG_ERROR("Cap'n Proto RPC loop failed: unknown error");
+        EnqueueError(0, "unknown error");
+        MarkStopped(running_, stopped_);
     }
+}
+
+void CapnpTransportInjectPostStartLoopFailureForTest() {
+    FaultInjector().throw_after_start.store(1, std::memory_order_release);
 }
 
 void CapnpTransport::EnqueueMessage(Message message) {

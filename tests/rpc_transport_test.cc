@@ -28,6 +28,12 @@ using namespace raftpp;
 using namespace raftor::rpc;
 using namespace std::chrono_literals;
 
+namespace raftpp::raftor::rpc {
+
+void CapnpTransportInjectPostStartLoopFailureForTest();
+
+}  // namespace raftpp::raftor::rpc
+
 // =============================================================================
 // Test Utilities
 // =============================================================================
@@ -505,6 +511,71 @@ TEST_SUITE("rpc::capnp") {
         auto elapsed = std::chrono::steady_clock::now() - start;
 
         CHECK(elapsed < 500ms);
+    }
+
+    TEST_CASE("capnp_reconnect_interval_delays_retries" * doctest::timeout(5)) {
+        auto port = PortAllocator::GetNextPort();
+        auto unreachable_port = PortAllocator::GetNextPort();
+
+        TransportConfig config{fmt::format("127.0.0.1:{}", port), 1};
+        config.reconnect_interval = 200ms;
+
+        CapnpTransport transport(config);
+        ErrorCollector errors;
+        transport.SetErrorCallback([&](uint64_t peer_id, std::string err) {
+            errors.OnError(peer_id, std::move(err));
+        });
+        REQUIRE(transport.Start().has_value());
+
+        transport.AddPeer(2, fmt::format("127.0.0.1:{}", unreachable_port));
+
+        auto msg = MakeMessage(1, 2);
+        transport.Send(nonstd::span(&msg, 1));
+        REQUIRE(WaitFor(transport, [&] { return errors.Count() >= 1; }, 1s));
+
+        errors.Clear();
+        auto delayed_msg = MakeMessage(1, 2);
+        transport.Send(nonstd::span(&delayed_msg, 1));
+
+        REQUIRE(WaitFor(transport, [&] { return errors.Count() >= 1; }, 1s));
+        auto retry_errors = errors.GetErrors();
+        REQUIRE(retry_errors.size() >= 1);
+        CHECK(retry_errors.front().first == 2);
+        CHECK(retry_errors.front().second.find("delayed") != std::string::npos);
+
+        transport.Stop();
+    }
+
+    TEST_CASE("capnp_post_start_loop_failure_stops_transport" * doctest::timeout(5)) {
+        auto port = PortAllocator::GetNextPort();
+        TransportConfig config{fmt::format("127.0.0.1:{}", port), 1};
+
+        CapnpTransport transport(config);
+        ErrorCollector errors;
+        transport.SetErrorCallback([&](uint64_t peer_id, std::string err) {
+            errors.OnError(peer_id, std::move(err));
+        });
+
+        CapnpTransportInjectPostStartLoopFailureForTest();
+        REQUIRE(transport.Start().has_value());
+
+        CHECK(WaitFor(transport, [&] { return errors.Count() >= 1; }, 1s));
+
+        auto run_started = std::chrono::steady_clock::now();
+        transport.Run();
+        auto elapsed = std::chrono::steady_clock::now() - run_started;
+
+        CHECK(elapsed < 100ms);
+
+        auto loop_errors = errors.GetErrors();
+        REQUIRE(loop_errors.size() >= 1);
+        CHECK(loop_errors.front().first == 0);
+        CHECK(
+            loop_errors.front().second.find("injected post-start RPC loop failure") !=
+            std::string::npos
+        );
+
+        transport.Stop();
     }
 
     TEST_CASE("capnp_outgoing_queue_overflow_reports_error" * doctest::timeout(5)) {

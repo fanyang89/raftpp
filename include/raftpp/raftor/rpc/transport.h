@@ -21,7 +21,11 @@ struct TransportConfig {
     /// Maximum framed message size in bytes (including transport framing).
     size_t max_message_size = 64 * 1024 * 1024;
 
-    /// Timeout for establishing connections
+    /// Timeout for establishing connections.
+    ///
+    /// CapnpTransport currently relies on Cap'n Proto EzRpcClient, which does
+    /// not expose a separate connection handshake to time out without replacing
+    /// the transport stack. Request failures are still reported asynchronously.
     std::chrono::milliseconds connect_timeout{5000};
 
     /// Base interval for reconnection attempts
