@@ -26,6 +26,10 @@ struct TransportConfig {
     /// CapnpTransport currently relies on Cap'n Proto EzRpcClient, which does
     /// not expose a separate connection handshake to time out without replacing
     /// the transport stack. Request failures are still reported asynchronously.
+    [[deprecated(
+        "CapnpTransport does not honor connect_timeout; request failures are reported "
+        "asynchronously"
+    )]]
     std::chrono::milliseconds connect_timeout{5000};
 
     /// Base interval for reconnection attempts
